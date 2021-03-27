@@ -1,0 +1,8 @@
+﻿// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "DreamType.h"
+
+DEFINE_LOG_CATEGORY(LogDream)
+
+FSurfaceImpactEffect FSurfaceImpactEffect::EmptySurfaceImpactEffect;
