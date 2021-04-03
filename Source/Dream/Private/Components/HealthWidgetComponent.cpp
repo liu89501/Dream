@@ -5,7 +5,7 @@
 
 #include "HealthUIInterface.h"
 
-void UHealthWidgetComponent::UpdateStatus(float HealthPercentage, float ShieldPercentage)
+void UHealthWidgetComponent::UpdateStatus(float HealthPercentage, float ShieldPercentage) const
 {
     IHealthUIInterface::Execute_UpdateUI(GetUserWidgetObject(), HealthPercentage, ShieldPercentage);
 }

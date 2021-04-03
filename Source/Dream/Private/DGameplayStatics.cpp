@@ -94,6 +94,20 @@ bool UDGameplayStatics::ContainsActionKey(APlayerController* PlayerController, F
 	return bResult;
 }
 
+FName UDGameplayStatics::GetInputActionKeyName(APlayerController* PlayerController, FName ActionName)
+{
+	if (PlayerController)
+	{
+		TArray<FInputActionKeyMapping> ActionKeyMapping = PlayerController->PlayerInput->GetKeysForAction(ActionName);
+		if (ActionKeyMapping.IsValidIndex(0))
+		{
+			return ActionKeyMapping[0].Key.GetFName();
+		}
+	}
+
+	return NAME_None;
+}
+
 bool UDGameplayStatics::SetFocus(UWidget* Widget)
 {
 	if (!Widget)
@@ -365,4 +379,57 @@ void UDGameplayStatics::ReturnToMainMenuWithTextReason(APlayerController* Player
 	{
 		PlayerCtrl->ClientReturnToMainMenuWithTextReason(Reason);
     }
+}
+
+void UDGameplayStatics::CalculateFBDirection(const FVector& Velocity, const FRotator& BaseRotation, float& Angle, bool& bIsBackward)
+{
+	bIsBackward = false;
+	Angle = 0.f;
+	
+	if (!Velocity.IsNearlyZero())
+	{
+		FMatrix RotMatrix = FRotationMatrix(BaseRotation);
+		FVector ForwardVector = RotMatrix.GetScaledAxis(EAxis::X);
+		FVector RightVector = RotMatrix.GetScaledAxis(EAxis::Y);
+		FVector NormalizedVel = Velocity.GetSafeNormal2D();
+
+		// get a cos(alpha) of forward vector vs velocity
+		float ForwardCosAngle = FVector::DotProduct(ForwardVector, NormalizedVel);
+		// now get the alpha and convert to degree
+		float ForwardDeltaDegree = FMath::RadiansToDegrees(FMath::Acos(ForwardCosAngle));
+
+		// depending on where right vector is, flip it
+		float RightCosAngle = FVector::DotProduct(RightVector, NormalizedVel);
+
+		//DREAM_NLOG(Error, TEXT("ForwardCosAngle: %f"), ForwardCosAngle)
+		//DREAM_NLOG(Error, TEXT("RightCosAngle: %f"), RightCosAngle)
+
+		ForwardCosAngle = FMath::IsNearlyZero(ForwardCosAngle, 0.001f) ? 0.f : ForwardCosAngle;
+		RightCosAngle = FMath::IsNearlyZero(RightCosAngle, 0.001f) ? 0.f : RightCosAngle;
+
+		bIsBackward = ForwardCosAngle < 0;
+		bool bIsLeft = RightCosAngle < 0;
+		
+		if (bIsBackward)
+		{
+			ForwardDeltaDegree = 180.f - ForwardDeltaDegree;
+		}
+
+		if (bIsBackward)
+		{
+			if (!bIsLeft)
+			{
+				ForwardDeltaDegree *= -1;
+			}
+		}
+		else
+		{
+			if (bIsLeft)
+			{
+				ForwardDeltaDegree *= -1;
+			}
+		}
+
+		Angle = ForwardDeltaDegree * 2;
+	}
 }

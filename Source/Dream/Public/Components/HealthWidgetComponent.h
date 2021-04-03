@@ -17,5 +17,5 @@ class DREAM_API UHealthWidgetComponent : public UScalableWidgetComponent
 
 public:
 
-    void UpdateStatus(float HealthPercentage, float ShieldPercentage);
+    void UpdateStatus(float HealthPercentage, float ShieldPercentage) const;
 };

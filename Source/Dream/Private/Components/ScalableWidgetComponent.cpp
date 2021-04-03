@@ -23,7 +23,7 @@ void UScalableWidgetComponent::TickComponent(float DeltaTime, ELevelTick TickTyp
 
     if (UUserWidget* UserWidget = GetUserWidgetObject())
     {
-        if (ACharacter* PlayerCharacter = UGameplayStatics::GetPlayerCharacter(this, 0))
+        if (ACharacter* PlayerCharacter = Cast<ACharacter>(GetOwner()))
         {
             float Distance = (GetOwner()->GetActorLocation() - PlayerCharacter->GetActorLocation()).Size();
             float ScaleValue = UKismetMathLibrary::MapRangeClamped(Distance, DistanceA, DistanceB, ScaleA, ScaleB);

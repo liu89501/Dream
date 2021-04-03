@@ -28,17 +28,30 @@ namespace EWeaponAnimGroup
 	enum Type
 	{
 		NONE,
-	    M4,
-	    M2000,
-	    AK110,
-		ARRU,
-		ARUS,
-	    GrenadeLauncher,
-	    FragmentGrenade,
-		Shotguns
-	};
+        M4,
+        M2000,
+        AK110,
+        ARRU,
+        ARUS,
+        GrenadeLauncher,
+        FragmentGrenade,
+        Shotguns
+    };
 }
 
+UENUM(BlueprintType)
+namespace EWidgetOrder
+{
+	enum Type
+	{
+		None = 0,
+		PlayerCtrl = 1,
+		Player = 2,
+		
+		WeaponUI = 3,
+		InteractiveUI = 4
+	};
+}
 
 UENUM(BlueprintType)
 enum class EPropsQuality : uint8
@@ -74,14 +87,6 @@ enum class ETeamName : uint8
 	None,
 	One_Team,
 	Two_Team
-};
-
-UENUM(BlueprintType)
-enum class EPawnStatus : uint8
-{
-	Relax,
-	Combat,
-	Control
 };
 
 UENUM(BlueprintType)

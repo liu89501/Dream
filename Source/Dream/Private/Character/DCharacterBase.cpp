@@ -39,7 +39,6 @@ FDamageResult ADCharacterBase::CalculationDamage(float Damage, AActor* DamageCau
 void ADCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-    DOREPLIFETIME(ADCharacterBase, PawnStatus);
 }
 
 float ADCharacterBase::GetHealth() const

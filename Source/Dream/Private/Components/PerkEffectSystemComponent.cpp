@@ -92,6 +92,11 @@ void UPerkEffectSystemComponent::ApplyPerks(const TArray<TSubclassOf<UDreamGamep
 	ActivationTimeFrame(ETimeFrame::Immediately);
 }
 
+void UPerkEffectSystemComponent::ClearPerks()
+{
+	AppliedPerks.Reset();
+}
+
 
 // Called when the game starts
 void UPerkEffectSystemComponent::BeginPlay()

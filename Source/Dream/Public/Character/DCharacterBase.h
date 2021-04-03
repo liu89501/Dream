@@ -51,35 +51,32 @@ public:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
     class UMiniMapDataComponent* MiniMapData;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Shooter)
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = CharacterBase)
     FGenericTeamId TeamID;
 
-    UPROPERTY(BlueprintReadWrite, Replicated, Category = Shooter)
-    EPawnStatus PawnStatus;
-
     // 死亡动画
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Shooter)
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CharacterBase)
     UAnimMontage* PawnDeathMontage;
 
-    UPROPERTY(BlueprintReadOnly, Category = Shooter)
+    UPROPERTY(BlueprintReadOnly, Category = CharacterBase)
     class UDreamAttributeSet* AttributeSet;
 
-    UPROPERTY(EditAnywhere, Category = Shooter)
+    UPROPERTY(EditAnywhere, Category = CharacterBase)
     TMap<FName, float> WeakPoint;
 
     
     
-    UFUNCTION(BlueprintCallable, Category="Shooter|Attributes")
+    UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
     float GetHealth() const;
-    UFUNCTION(BlueprintCallable, Category="Shooter|Attributes")
+    UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
     float GetMaxHealth() const;
-    UFUNCTION(BlueprintCallable, Category="Shooter|Attributes")
+    UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
     float GetShield() const;
-    UFUNCTION(BlueprintCallable, Category="Shooter|Attributes")
+    UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
     float GetMaxShield() const;
-    UFUNCTION(BlueprintCallable, Category="Shooter|Attributes")
+    UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
     float GetCriticalRate() const;
-    UFUNCTION(BlueprintCallable, Category="Shooter|Attributes")
+    UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
     float GetCriticalDamage() const;
 
 
@@ -122,12 +119,12 @@ protected:
 
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-    UFUNCTION(BlueprintCallable, Category = Shooter)
+    UFUNCTION(BlueprintCallable, Category = CharacterBase)
     float GetHealthPercent() const;
 
-    UFUNCTION(BlueprintCallable, Category = Shooter)
+    UFUNCTION(BlueprintCallable, Category = CharacterBase)
     float GetShieldPercent() const;
 
-    UFUNCTION(BlueprintImplementableEvent, Category = Shooter, meta = (DisplayName = "OnHealthChanged", ScriptName = "OnHealthChanged"))
+    UFUNCTION(BlueprintImplementableEvent, Category = CharacterBase, meta = (DisplayName = "OnHealthChanged", ScriptName = "OnHealthChanged"))
     void BP_OnHealthChanged();
 };

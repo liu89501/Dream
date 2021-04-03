@@ -27,6 +27,8 @@ public:
 
 	void ApplyPerks(const TArray<TSubclassOf<UDreamGameplayPerk>>& Perks);
 
+	void ClearPerks();
+
 protected:
 	// Called when the game starts
 	virtual void BeginPlay() override;

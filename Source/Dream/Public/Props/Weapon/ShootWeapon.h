@@ -164,14 +164,6 @@ struct TStructOpsTypeTraits<FBulletHitInfoHandle> : public TStructOpsTypeTraitsB
     };
 };
 
-struct FNumberComparator
-{
-	FORCEINLINE bool operator()(const uint8& A, const uint8& B) const
-	{
-		return A < B;
-	}
-};
-
 struct FBulletHitInfoStructContainer
 {
 
@@ -182,7 +174,6 @@ public:
 		ScriptStructCache.Add(0, FBulletHitInfo::StaticStruct());
 		ScriptStructCache.Add(1, FBulletHitInfo_SingleBullet::StaticStruct());
 		ScriptStructCache.Add(2, FBulletHitInfo_MultiBullet::StaticStruct());
-		ScriptStructCache.KeySort(FNumberComparator());
     }
 
 	UScriptStruct* GetScriptStruct(uint8 ID) const
@@ -265,6 +256,24 @@ struct FWeaponAttribute
 	TArray<TSubclassOf<UDreamGameplayPerk>> WeaponPerks;
 };
 
+USTRUCT(BlueprintType)
+struct FWeaponAnimAdjustData
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FVector RHandIKEffectorLocation;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FVector RHandIKJointTargetLocation;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FTransform LeftHandIKEffectorTransform;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FRotator LHandRotation;
+};
+
 UCLASS(Abstract)
 class DREAM_API AShootWeapon : public AActor, public IPropsInterface
 {
@@ -314,6 +323,9 @@ public:
 	FTransform FABRIKEffectorTransform;
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Weapon|Anim", meta = (EditCondition = "bUseFABRIK"))
 	FTransform FABRIKEffectorTransformIdle;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere)
+	FWeaponAnimAdjustData AnimAdjust;
 	
 	/** 武器属性 */
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
@@ -333,6 +345,8 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
 	FTransform WeaponSocketOffset;
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
+	FTransform WeaponRelaxSocketOffset;
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
 	FTransform LeftSocketOffset;
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)

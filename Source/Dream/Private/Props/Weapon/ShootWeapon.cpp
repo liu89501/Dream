@@ -464,7 +464,8 @@ void AShootWeapon::SpawnAmmo(const FBulletHitInfoHandle& HitInfo)
     {
         if (ADCharacterPlayer* Shooter = GetOwningShooter())
         {
-            Shooter->PlayMontage(Shooter->GetCurrentActionMontage()->ShootAnim, ShootAnim);
+            const FMontageSet* MontageSet = Shooter->GetCurrentActionMontage();
+            Shooter->PlayMontage(MontageSet->ShootAnim, ShootAnim);
         }
 
         // 枪口的世界位置

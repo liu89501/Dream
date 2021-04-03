@@ -1,5 +1,6 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
+// ReSharper disable All
 #pragma once
 
 #include "CoreMinimal.h"
@@ -9,6 +10,9 @@
 #include "DPlayerController.h"
 #include "GameFramework/Character.h"
 #include "DCharacterPlayer.generated.h"
+
+class AShootWeapon;
+class UDModuleBase;
 
 
 USTRUCT(BlueprintType)
@@ -53,171 +57,185 @@ public:
 	class UPerkEffectSystemComponent* PerkEffectSystem;
 
 	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Shooter)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CharacterPlayer)
 	float BaseTurnRate;
 	/** Base look up/down rate, in deg/sec. Other scaling may affect final rate. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Shooter)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CharacterPlayer)
 	float BaseLookUpRate;
 	
 	/* 瞄准时摄像机弹簧臂得偏移量 */
-	UPROPERTY(EditAnywhere, Category = Shooter)
+	UPROPERTY(EditAnywhere, Category = CharacterPlayer)
 	FVector CameraArmOffset;
-	UPROPERTY(EditAnywhere, Category = Shooter)
+	UPROPERTY(EditAnywhere, Category = CharacterPlayer)
 	FVector CameraArmAimOffset;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Shooter)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = CharacterPlayer)
 	float SprintSpeed;
-	UPROPERTY(BlueprintReadWrite, Category = Shooter)
+	UPROPERTY(BlueprintReadWrite, Category = CharacterPlayer)
 	float NormalSpeed;
 
-	UPROPERTY(BlueprintReadWrite, Category = "Shooter")
+	UPROPERTY(BlueprintReadWrite, Category = "CharacterPlayer")
 	bool bAimed;
-	UPROPERTY(BlueprintReadWrite, Category = "Shooter")
+	UPROPERTY(BlueprintReadWrite, Category = "CharacterPlayer")
 	bool bSprinted;
-	UPROPERTY(BlueprintReadWrite, Category = "Shooter")
+	UPROPERTY(BlueprintReadWrite, Category = "CharacterPlayer")
 	bool bCanTurnPawn;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shooter|Animation")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Animation")
+	UAnimMontage* CombatToRelax;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Animation")
+	float CombatToRelaxAttachWaitTime;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Animation")
+	UAnimMontage* RelaxToCombat;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Animation")
+	float RelaxToCombatAttachWaitTime;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Animation")
 	TMap<TEnumAsByte<EWeaponAnimGroup::Type>, FMontageSet> WeaponMontage;
 
-	UPROPERTY(EditAnywhere, Category = "Shooter|UI")
+	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|UI")
 	TSubclassOf<class UPlayerHUD> PlayerHUDClass;
 
-	UPROPERTY(EditAnywhere, Category = "Shooter|UI")
+	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|UI")
 	TSubclassOf<class UDamageWidgetComponent> DamageWidgetClass;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shooter|Weapon")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Weapon")
 	FName WeaponSocketName;
-	UPROPERTY(EditAnywhere, Category = "Shooter|Weapon")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Weapon")
+	FName WeaponRelaxSocketName;
+	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|Weapon")
 	FName LeftShoulderSocketName;
-	UPROPERTY(EditAnywhere, Category = "Shooter|Weapon")
+	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|Weapon")
 	FName RightShoulderSocketName;
 
-	UPROPERTY(EditAnywhere, Category = "Shooter|Weapon")
+	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|Weapon")
 	float OutOfCombatTime;
 
 	/**
 	 * 雷达扫描半径， 用于显示小地图相关的东西
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shooter|MiniMap")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|MiniMap")
 	float RadarScanRadius;
 	/**
 	 * 雷达扫描间隔
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shooter|MiniMap")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|MiniMap")
 	float ScanInterval;
 	/**
 	 * 雷达扫描半径， 用于显示小地图相关的东西
 	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Shooter|MiniMap")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|MiniMap")
 	TArray<TEnumAsByte<EObjectTypeQuery>> ScanObjectTypes;
 
 #if WITH_EDITOR
 
-	UPROPERTY(EditAnywhere, Category = Shooter)
+	UPROPERTY(EditAnywhere, Category = CharacterPlayer)
 	UDataTable* TestInitAttributes;
 	
 #endif
 
 public:
 
-	UFUNCTION(BlueprintCallable, Category = "Shooter")
-	class AShootWeapon* GetActiveWeapon() const;
+	UFUNCTION(BlueprintCallable, Category = "CharacterPlayer")
+	AShootWeapon* GetActiveWeapon() const;
 
-	UFUNCTION(BlueprintCallable, Category = "Shooter")
+	UFUNCTION(BlueprintCallable, Category = "CharacterPlayer")
 	float PlayMontage(UAnimMontage* PawnAnim, UAnimMontage* WeaponAnim);
 
-	UFUNCTION(BlueprintCallable, Category = "Shooter")
+	UFUNCTION(BlueprintCallable, Category = "CharacterPlayer")
 	class ADPlayerController* GetPlayerController() const;
 
-	UFUNCTION(BlueprintImplementableEvent, BlueprintAuthorityOnly, meta = (ScriptName="OnServerDeath", DisplayName="OnServerDeath"), Category = "Shooter")
+	UFUNCTION(BlueprintImplementableEvent, BlueprintAuthorityOnly, meta = (ScriptName="OnServerDeath", DisplayName="OnServerDeath"), Category = "CharacterPlayer")
 	void BP_OnServerDeath(const AActor* Causer);
 
-	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName="OnDeath", DisplayName="OnDeath"), Category = "Shooter")
+	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName="OnDeath", DisplayName="OnDeath"), Category = "CharacterPlayer")
 	void BP_OnDeath();
 
-	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName = "OnToggleWeaponAim", DisplayName = "OnToggleWeaponAim"), Category = "Shooter")
+	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName = "OnToggleWeaponAim", DisplayName = "OnToggleWeaponAim"), Category = "CharacterPlayer")
 	void BP_OnToggleWeaponAim(bool bNewAimed);
 
-	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName="OnRepPlayerState", DisplayName="OnRepPlayerState"), Category = "Shooter")
+	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName="OnRepPlayerState", DisplayName="OnRepPlayerState"), Category = "CharacterPlayer")
 	void BP_OnRepPlayerState();
 
-	/*
+	/*/*
 		武器变更事件
-	*/
-	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName = "OnActiveWeaponChanged", DisplayName = "OnActiveWeaponChanged"), Category = "Shooter")
-	void BP_OnActiveWeaponChanged();
+	#1#
+	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName = "OnActiveWeaponChanged", DisplayName = "OnActiveWeaponChanged"), Category = "CharacterPlayer")
+	void BP_OnActiveWeaponChanged();*/
 
 	/* 客户端开始重生 */
-	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName = "OnStartResurrection", DisplayName = "OnStartResurrection"), Category = "Shooter")
+	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName = "OnStartResurrection", DisplayName = "OnStartResurrection"), Category = "CharacterPlayer")
 	void BP_OnStartResurrection(int32 ResurrectionTime);
 
-	UFUNCTION(BlueprintCallable, Category = "Shooter")
+	UFUNCTION(BlueprintCallable, Category = "CharacterPlayer")
 	void SetPlayerHUDVisible(bool bVisible);
 
 	UFUNCTION(server, reliable)
-	void ServerSetPawnStatus(EPawnStatus NewPawnStatus);
+	void ServerSetCombatStatus(bool bNewCombatStatus);
 
-	UFUNCTION(BlueprintCallable, Category = Shooter)
+	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	FRotator GetRemoteControllerRotation() const;
 
-	UFUNCTION(BlueprintImplementableEvent, Category = Shooter)
+	UFUNCTION(BlueprintImplementableEvent, Category = CharacterPlayer)
 	void BP_OnHitTargetActor(float MakeDamage);
 
-	UFUNCTION(BlueprintCallable, Category = Shooter)
+	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	bool PickUpMagazine(EAmmoType AmmoType);
 
-	UFUNCTION(BlueprintCallable, Category = Shooter)
+	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	bool CanShoot() const;
 
-	UFUNCTION(BlueprintCallable, Category = Shooter)
+	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	bool CanReload() const;
 
-	UFUNCTION(BlueprintCallable, Category = Shooter)
+	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	bool CanEquip() const;
 
-	UFUNCTION(BlueprintCallable, Category = Shooter)
+	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	bool CanAim() const;
 
-	UFUNCTION(BlueprintCallable, Category = Shooter)
+	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	int32 GetWeaponAmmunition() const;
 
-	UFUNCTION(BlueprintCallable, Category = Shooter)
-	void SetInventoryWeapon(int32 Index, /*int32 WeaponAttackPower,*/ TSubclassOf<class AShootWeapon> NewWeaponClass);
+	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
+	void SetInventoryWeapon(int32 Index, /*int32 WeaponAttackPower,*/ TSubclassOf<AShootWeapon> NewWeaponClass);
 
-	UFUNCTION(BlueprintCallable, Category = Shooter)
+	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	const TArray<TSubclassOf<AShootWeapon>>& GetLocalEquippedWeaponClass() const;
 
-	UFUNCTION(BlueprintCallable, Category = Shooter)
-	void EquippedGear(TSubclassOf<class AGearBase> GearClass);
+	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
+	void EquippedModule(int32 Index, TSubclassOf<UDModuleBase> ModuleClass);
 
-	UFUNCTION(BlueprintCallable, Category = Shooter)
-	void ClearCombatStatus();
+	/*UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
+	void ClearCombatStatus();*/
 
-	UFUNCTION(BlueprintCallable, Category=Shooter)
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
     void ToggleCrossHairVisible(bool bVisible);
 
-	UFUNCTION(BlueprintCallable, Category=Shooter)
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category=CharacterPlayer)
 	void SwitchWeapon(int32 NewWeaponIndex);
 
-	UFUNCTION(BlueprintCallable, Category=Shooter)
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category=CharacterPlayer)
+	void ToggleActiveWeaponStatus();
+
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	void ActivateCharacterCapture();
-	UFUNCTION(BlueprintCallable, Category=Shooter)
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	void DeactivateCharacterCapture();
-	UFUNCTION(BlueprintCallable, Category=Shooter)
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	void ResetCharacterWeaponCapture();
 
 	/**
 	* 	添加一个永不消失的Sprite(除非手动删除)到小地图中
 	* 	return 添加到数组中的索引
 	*/
-	UFUNCTION(BlueprintCallable, Category="Shooter|MiniMap")
+	UFUNCTION(BlueprintCallable, Category="CharacterPlayer|MiniMap")
 	void AddInfiniteActors(const TArray<AActor*>& TargetActors);
-	UFUNCTION(BlueprintCallable, Category="Shooter|MiniMap")
+	UFUNCTION(BlueprintCallable, Category="CharacterPlayer|MiniMap")
 	void AddInfiniteActor(AActor* TargetActor);
-	UFUNCTION(BlueprintCallable, Category="Shooter|MiniMap")
+	UFUNCTION(BlueprintCallable, Category="CharacterPlayer|MiniMap")
 	void RemoveInfiniteActor(AActor* TargetActor);
-	UFUNCTION(BlueprintCallable, Category="Shooter|MiniMap")
+	UFUNCTION(BlueprintCallable, Category="CharacterPlayer|MiniMap")
 	void ClearInfiniteActors();
 
 	/**
@@ -226,32 +244,34 @@ public:
 	 * @param bCritical 此次伤害是否暴击
 	 * @param bIsHealthSteal 表示这个伤害是否是玩家造成的生命偷取
 	 */
-	UFUNCTION(BlueprintCallable, Category=Shooter)
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	void SpawnDamageWidget(const FVector& Location, float DamageValue, bool bCritical, bool bIsHealthSteal);
 
-	UFUNCTION(BlueprintCallable, Category=Shooter)
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	void ShowHitEnemyTips(bool bEnemyDeath);
 
 public:
 
 	void SetActiveWeapon(AShootWeapon* NewWeapon);
 
-	void SetPawnStatus(EPawnStatus NewPawnStatus);
+	void SetCombatStatus(bool bNewCombatStatus);
 
 	bool GetMiniMapTips(TArray<FMiniMapData>& Data);
-	void DoAddMiniMapTips(TArray<FMiniMapData>& Data, const TArray<AActor*>& ScanActors);
 
 	const FMontageSet* GetCurrentActionMontage() const;
 
 	FName GetWeaponSlotNameFromIndex(int32 WeaponSlotIndex) const
 	{
-		return WeaponSlotIndex == 0 ? WeaponSocketName : WeaponSlotIndex == 1 ? LeftShoulderSocketName : RightShoulderSocketName;
+		return WeaponSlotIndex == 0 ? WeaponRelaxSocketName : WeaponSlotIndex == 1 ? LeftShoulderSocketName : RightShoulderSocketName;
 	}
 
 protected:
 
 	UFUNCTION()
-	void OnReq_ActiveWeapon();
+	void OnRep_CombatStatus();
+
+	UFUNCTION()
+	void OnRep_ActiveWeapon();
 
 	/** 开火 */
 	void StartFire();
@@ -277,17 +297,16 @@ protected:
 	void MulticastEquipWeapon();
 
 	UFUNCTION(Server, Reliable)
-	void ServerSetInventoryWeapon(int32 Index, TSubclassOf<class AShootWeapon> NewWeaponClass);
-	
-	UFUNCTION(Client, Reliable)
-    void ClientSetLocalEquippedWeaponClass(int32 Index, UClass* WeaponClass);
+	void ServerSetInventoryWeapon(int32 Index, TSubclassOf<AShootWeapon> NewWeaponClass);
 	
 	UFUNCTION(Server, Reliable)
-	void ServerEquippedGear(TSubclassOf<class AGearBase> GearClass);
+	void ServerEquippedModule(int32 Index, TSubclassOf<UDModuleBase> ModuleClass);
 
 	/** 瞄准 */
 	void StartAim();
 	void StopAim();
+
+	void SwitchCombat();
 
 	/** 冲刺 */
 	void ToggleSprint();
@@ -359,9 +378,9 @@ protected:
 	virtual int32 GetPickUpMagazineNumber(EAmmoType AmmoType) const;
 
 	/* 尝试将Pawn状态修改未空闲 */
-	void AttemptSetStatusToRelax();
+	/*void AttemptSetStatusToRelax();
 
-	void ModStatusToRelax();
+	void ModStatusToRelax();*/
 
 	void InitializeUI();
 
@@ -385,12 +404,14 @@ protected:
 	virtual void OnActiveGameplayEffectTimeChange(FActiveGameplayEffectHandle Handle, float NewStartTime, float NewDuration);
 	virtual void OnActiveGameplayEffectRemoved(const FActiveGameplayEffect& Effect);
 
-
 	UPROPERTY(Replicated)
 	FRotator ReplicatedCtrlRotation;
 
-	UPROPERTY(ReplicatedUsing = OnReq_ActiveWeapon)
-	class AShootWeapon* ActiveWeapon;
+	UPROPERTY(ReplicatedUsing = OnRep_ActiveWeapon)
+	AShootWeapon* ActiveWeapon;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_CombatStatus, Category = CharacterPlayer)
+	bool bCombatStatus;
 
 	UPROPERTY()
 	EWeaponStatus WeaponStatus;
@@ -400,6 +421,10 @@ protected:
 	
 	UPROPERTY()
 	TArray<FAbilitySlot> AbilitySlot;
+
+private:
+
+	void DoAddMiniMapTips(TArray<FMiniMapData>& Data, const TArray<AActor*>& ScanActors);
 
 
 private:
@@ -419,19 +444,22 @@ private:
 	UPROPERTY()
 	class UPlayerHUD* PlayerHUD;
 
+	/** 当前正在使用的武器 在 WeaponInventory 的索引 */
 	int32 ActiveWeaponIndex;
 
 	/** 当前玩家已装备的武器 仅服务器有效 */
 	UPROPERTY()
-	TArray<class AShootWeapon*> WeaponInventory;
+	TArray<AShootWeapon*> WeaponInventory;
 
 	/** 当前玩家已装备的武器 只对本地玩家有效 服务器此数组为空 目前只用于UI显示 */
-	TArray<TSubclassOf<class AShootWeapon>> LocalEquippedWeaponClass;
+	TArray<TSubclassOf<AShootWeapon>> LocalEquippedWeaponClass;
 
-	UPROPERTY()
-	TMap<EGearType, class AGearBase*> Gears;
+	/**
+	 * 当前装备的模块
+	 */
+	TArray<TSubclassOf<UDModuleBase>> EquippedModules;
 
-	FTimerHandle Handle_CombatToRelax;
+	FTimerHandle Handle_CombatStatus;
 	FTimerHandle Handle_CanTurn;
 
 	FTimerHandle Handle_RadarScan;
@@ -442,7 +470,7 @@ private:
 	FTimerHandle Handle_Equip;
 
 	/* 记录进入战斗状态的次数 */
-	FThreadSafeCounter CombatStatusCounter;
+	//FThreadSafeCounter CombatStatusCounter;
 	/* 记录开火按键是否按下 */
 	bool bFireButtonDown;
 };
