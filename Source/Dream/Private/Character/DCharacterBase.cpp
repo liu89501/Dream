@@ -8,6 +8,7 @@
 #include "DreamType.h"
 #include "DreamAttributeSet.h"
 #include "DreamGameplayType.h"
+#include "Components/CapsuleComponent.h"
 
 ADCharacterBase::ADCharacterBase()
 {
@@ -71,23 +72,24 @@ float ADCharacterBase::GetCriticalDamage() const
     return AttributeSet->GetCriticalDamage();
 }
 
-void ADCharacterBase::HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle,
-        ADCharacterBase* SourceCharacter, const FGameplayTagContainer& AssetTags)
+void ADCharacterBase::HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle)
 {
-    if (SourceCharacter == nullptr || SourceCharacter->IsPendingKill())
+    ADCharacterBase* LocalInstigator = Cast<ADCharacterBase>(Handle.GetInstigator());
+    
+    if (LocalInstigator == nullptr || LocalInstigator->IsPendingKill())
     {
         return;
     }
 
     const FHitResult* HitResult = Handle.GetHitResult();
-    BP_HandleDamage(DamageDone, HitResult ? *HitResult : FHitResult(), SourceCharacter);
+    BP_HandleDamage(DamageDone, HitResult ? *HitResult : FHitResult(), LocalInstigator);
 
     bool bDeath = GetHealth() == 0;
-    SourceCharacter->HitEnemy(FDamageTargetInfo(DamageDone, bDeath, Handle));
+    LocalInstigator->HitEnemy(FDamageTargetInfo(DamageDone, bDeath, Handle), this);
 
     if (bDeath)
     {
-        OnDeath(SourceCharacter);
+        OnDeath(LocalInstigator);
     }
 }
 
@@ -100,11 +102,18 @@ void ADCharacterBase::HealthChanged(const FOnAttributeChangeData& AttrData)
 {
     BP_OnHealthChanged();
 
-    if (GetLocalRole() != ROLE_Authority)
+    if (GetHealth() == 0)
     {
-        if (PawnDeathMontage && GetHealth() == 0)
+        Tags.Add(DreamActorTagName::Death);
+        
+        //GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
+        GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+        GetMesh()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
+        
+        if (GetLocalRole() != ROLE_Authority)
         {
-            PlayAnimMontage(PawnDeathMontage);
+            GetMesh()->SetAllBodiesSimulatePhysics(true);
+            GetMesh()->SetAllBodiesPhysicsBlendWeight(1.f);
         }
     }
 }

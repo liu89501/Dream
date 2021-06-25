@@ -4,7 +4,7 @@
 #include "DGameplayStatics.h"
 #include "DGE_WeaponBaseDamage.h"
 #include "Engine.h"
-#include "DreamHUD.h"
+#include "DreamType.h"
 #include "Kismet/GameplayStatics.h"
 #include "UnrealNetwork.h"
 #include "NiagaraComponent.h"
@@ -154,19 +154,19 @@ AShootWeapon::AShootWeapon():
     AccuracyThreshold(300.f),
     TraceDistance(20000.f),
     TraceCenterOffset(2.f),
-    MuzzleSocketName(TEXT("Muzzle")),
     MinRecoil(30.f),
     MaxRecoil(90.f),
     RecoveryRecoilDelay(.25f),
     CrossSpreadMatParamName(TEXT("Spread")),
     CameraOffsetScale(FVector2D(0, 1.f)),
+    MuzzleSocketName(TEXT("Muzzle")),
     LastFireTime(0)
 
 {
     WeaponMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("WeaponMesh"));
     RootComponent = WeaponMesh;
 
-    WeaponMesh->SetCollisionResponseToChannel(Collision_ObjectType_Projectile, ECollisionResponse::ECR_Ignore);
+    WeaponMesh->SetCollisionResponseToChannel(Collision_ObjectType_Projectile, ECR_Ignore);
 
     if (IsRunningDedicatedServer())
     {
@@ -223,8 +223,15 @@ void AShootWeapon::BeginPlay()
         }
 
         FRichCurve RichCurve;
-        RichCurve.AddKey(0.f, 0.f);
-        RichCurve.AddKey(AimSpeed, 1.f);
+        FKeyHandle Handle1 = RichCurve.AddKey(0.f, 0.f);
+        FKeyHandle Handle2 = RichCurve.AddKey(AimSpeed * 0.5f, 0.1f);
+        FKeyHandle Handle3 = RichCurve.AddKey(AimSpeed * 0.8f, 0.5f);
+        FKeyHandle Handle4 = RichCurve.AddKey(AimSpeed, 1.f);
+
+        RichCurve.SetKeyTangentMode(Handle1, RCTM_Auto);
+        RichCurve.SetKeyTangentMode(Handle2, RCTM_Auto);
+        RichCurve.SetKeyTangentMode(Handle3, RCTM_Auto);
+        RichCurve.SetKeyTangentMode(Handle4, RCTM_Auto);
 
         AimCurve = NewObject<UCurveFloat>();
         AimCurve->FloatCurve = RichCurve;
@@ -288,11 +295,9 @@ void AShootWeapon::CameraOffsetTimelineTick(float Value) const
 
 void AShootWeapon::AimTimelineTick(float Value) const
 {
-    if (ADCharacterPlayer* Shooter = GetOwningShooter())
-    {
-        Shooter->TPCamera->SetFieldOfView(FMath::Lerp(90.f, AimFOV, Value));
-        Shooter->TPCameraArm->SocketOffset = FMath::Lerp(Shooter->CameraArmOffset, Shooter->CameraArmAimOffset, Value);
-    }
+    ADCharacterPlayer* Shooter = GetOwningShooter();
+    Shooter->SetCameraFieldOfView(FMath::LerpStable(90.f, AimFOV, Value));
+    Shooter->CameraAimTransformLerp(Value);
 }
 
 float AShootWeapon::GetCurrentRecoil() const
@@ -386,7 +391,7 @@ void AShootWeapon::HandleLineTrace(const FVector& ViewLoc, const FRotator& ViewR
                                      ECollisionChannel::ECC_Visibility,
                                      FCollisionShape::MakeSphere(TraceCenterOffset), QueryParams);*/
 
-    GetWorld()->LineTraceSingleByChannel(OutHit, ViewLoc, TraceEnd, ECollisionChannel::ECC_Visibility, QueryParams);
+    GetWorld()->LineTraceSingleByChannel(OutHit, ViewLoc, TraceEnd, ECC_Visibility, QueryParams);
 
     OutHit.TraceStart = WeaponMesh->GetSocketLocation(MuzzleSocketName);
     
@@ -397,43 +402,38 @@ void AShootWeapon::HandleLineTrace(const FVector& ViewLoc, const FRotator& ViewR
     }
 }
 
-FPropsInfo AShootWeapon::GetPropsInfo_Implementation() const
-{
-    return WeaponInfo;
-}
-
 void AShootWeapon::ApplyRadialDamage(const FRadialDamageProjectileInfo& Radial)
 {
     if (GetLocalRole() != ROLE_Authority)
     {
-        ServerApplyRadialDamage(Radial);
+        return;
     }
-    else
+
+    FCollisionQueryParams QueryParams;
+    QueryParams.AddIgnoredActor(GetOwner());
+    QueryParams.bReturnPhysicalMaterial = true;
+
+    TArray<FHitResult> Hits;
+    GetWorld()->SweepMultiByChannel(Hits, Radial.Origin, Radial.Origin, FQuat::Identity,
+                                    ECC_Visibility, FCollisionShape::MakeSphere(Radial.DamageRadius), QueryParams);
+
+    /*FRadialDamageEvent DmgEvent;
+    DmgEvent.Origin = Radial.Origin;
+    DmgEvent.Params = FRadialDamageParams(DNUMBER_ONE, DNUMBER_ONE, Radial.DamageRadius, Radial.DamageRadius, DNUMBER_ZERO);*/
+
+    for (FArrayDistinctIterator<FHitResult, FHitResultKeyFuncs> It(Hits); It; ++It)
     {
-        ADCharacterPlayer* Shooter = GetOwningShooter();
-
-        TArray<FHitResult> Hits;
-
-        FCollisionQueryParams QueryParams;
-        QueryParams.AddIgnoredActor(Shooter);
-        QueryParams.bReturnPhysicalMaterial = true;
-
-        GetWorld()->SweepMultiByChannel(Hits, Radial.Origin, Radial.Origin, FQuat::Identity,
-                                        ECollisionChannel::ECC_Visibility,
-                                        FCollisionShape::MakeSphere(Radial.DamageRadius), QueryParams);
-
-        for (FArrayDistinctIterator<FHitResult, FHitResultKeyFuncs> It(Hits); It; ++It)
-        {
-            DoApplyDamageEffect(*It, Radial.Origin);
-        }
+        // 这里主要作用是触发引擎里默认的一些效果。 像是对击中的物体添加一个力
+        //(*It).Actor->TakeDamage(DNUMBER_ONE, DmgEvent, nullptr, GetOwner());
+        
+        DoApplyDamageEffect(*It, Radial.Origin);
     }
 }
 
 void AShootWeapon::GetMuzzlePoint(FVector& Point, FRotator& Direction) const
 {
-    FVector MuzzleLoc = WeaponMesh->GetSocketLocation(MuzzleSocketName);
     Direction = WeaponMesh->GetSocketRotation(MuzzleSocketName);
-    Point = MuzzleLoc + Direction.RotateVector(WeaponMuzzleFX.OffsetLocation);
+    Point = WeaponMesh->GetSocketLocation(MuzzleSocketName) + Direction.RotateVector(MuzzleLocationOffset);
 }
 
 void AShootWeapon::OnAimEnded()
@@ -462,11 +462,7 @@ void AShootWeapon::SpawnAmmo(const FBulletHitInfoHandle& HitInfo)
 
     if (GetLocalRole() != ROLE_Authority)
     {
-        if (ADCharacterPlayer* Shooter = GetOwningShooter())
-        {
-            const FMontageSet* MontageSet = Shooter->GetCurrentActionMontage();
-            Shooter->PlayMontage(MontageSet->ShootAnim, ShootAnim);
-        }
+        GetOwningShooter()->PlayMontage(CharacterAnim.ShootAnim, ShootAnim);
 
         // 枪口的世界位置
         FVector MuzzleLoc;
@@ -474,11 +470,9 @@ void AShootWeapon::SpawnAmmo(const FBulletHitInfoHandle& HitInfo)
 
         GetMuzzlePoint(MuzzleLoc, MuzzleRot);
 
-        UGameplayStatics::SpawnSoundAttached(WeaponMuzzleFX.Sound, WeaponMesh, MuzzleSocketName);
-        UGameplayStatics::SpawnEmitterAttached(WeaponMuzzleFX.Particles, WeaponMesh, MuzzleSocketName,
-                                               WeaponMuzzleFX.OffsetLocation, FRotator::ZeroRotator,
-                                               WeaponMuzzleFX.Size,
-                                               EAttachLocation::KeepRelativeOffset, true, EPSCPoolMethod::AutoRelease);
+        UGameplayStatics::SpawnSoundAtLocation(this, WeaponMuzzleFX.Sound, MuzzleLoc);
+        UGameplayStatics::SpawnEmitterAtLocation(this, WeaponMuzzleFX.Particles, MuzzleLoc, MuzzleRot,
+                                               WeaponMuzzleFX.Size, true, EPSCPoolMethod::AutoRelease);
     }
 }
 
@@ -487,14 +481,26 @@ void AShootWeapon::ServerSpawnAmmo_Implementation(const FBulletHitInfoHandle& Hi
     NetMulticastSpawnAmmo(HitInfo);
 }
 
-void AShootWeapon::ApplyPointDamage(const FHitResult& HitInfo)
+const FPropsInfo& AShootWeapon::GetPropsInfo() const
 {
-    DoApplyDamageEffect(HitInfo, GetOwner()->GetActorLocation());
+    return WeaponInfo;
 }
 
-void AShootWeapon::ServerApplyRadialDamage_Implementation(const FRadialDamageProjectileInfo& Radial)
+const FEquipmentAttributes& AShootWeapon::GetEquipmentAttributes() const
 {
-    ApplyRadialDamage(Radial);
+    return WeaponAttribute;
+}
+
+void AShootWeapon::ApplyPointDamage(const FHitResult& HitInfo)
+{
+    if (GetLocalRole() != ROLE_Authority)
+    {
+        return;
+    }
+
+    //UGameplayStatics::ApplyPointDamage(HitInfo.GetActor(), DNUMBER_ONE, HitInfo.ImpactNormal, HitInfo, nullptr, GetOwner(), nullptr);
+    
+    DoApplyDamageEffect(HitInfo, GetOwner()->GetActorLocation());
 }
 
 void AShootWeapon::NetMulticastSpawnAmmo_Implementation(const FBulletHitInfoHandle& HitInfo)
@@ -509,11 +515,23 @@ void AShootWeapon::NetMulticastSpawnAmmo_Implementation(const FBulletHitInfoHand
 
 void AShootWeapon::DoApplyDamageEffect(const FHitResult& Hit, const FVector& Origin) const
 {
-    if (IAbilitySystemInterface* TargetASI = Cast<IAbilitySystemInterface>(Hit.GetActor()))
+    AActor* HitActor = Hit.GetActor();
+    if (HitActor == nullptr)
+    {
+        return;
+    }
+
+    if (IAbilitySystemInterface* TargetASI = Cast<IAbilitySystemInterface>(HitActor))
     {
         ADCharacterPlayer* OwningShooter = GetOwningShooter();
-        FDreamGameplayEffectContext* EffectContext = UDGameplayStatics::MakeDreamEffectContextHandle(
-            OwningShooter, DamageFalloffCurve, Hit, Origin);
+
+        float DamageFalloff = 1.f;
+        if (DamageFalloffCurve)
+        {
+            DamageFalloff = DamageFalloffCurve->GetFloatValue(FVector::Distance(Origin, Hit.ImpactPoint));
+        }
+        
+        FDreamGameplayEffectContext* EffectContext = UDGameplayStatics::MakeDreamEffectContext(OwningShooter, DamageFalloff, Hit, Origin);
         //EffectContext->AddHitPoint(Hit.ImpactPoint);
 
         FGameplayEffectSpec Spec(GetDefault<UDGE_WeaponBaseDamage>(), FGameplayEffectContextHandle(EffectContext));

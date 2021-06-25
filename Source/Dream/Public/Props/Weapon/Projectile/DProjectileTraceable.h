@@ -38,4 +38,9 @@ public:
     virtual void Tick(float DeltaSeconds) override;
 
     virtual void BeginPlay() override;
+
+private:
+
+	UPROPERTY()
+	AActor* CapturedActor;
 };

@@ -2,81 +2,64 @@
 
 
 #include "PerkEffectSystemComponent.h"
-
-
-
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
-#include "AbilitySystemInterface.h"
 #include "DreamGameplayPerk.h"
+
+FActivationOpportunityParams::FActivationOpportunityParams(AActor* Source, AActor* Target)
+{
+	SourceComponent = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Source);
+	TargetComponent = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target);
+}
 
 // Sets default values for this component's properties
 UPerkEffectSystemComponent::UPerkEffectSystemComponent()
 {
-	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
-	// off to improve performance if you don't need them.
 	PrimaryComponentTick.bCanEverTick = false;
 
-	//SetIsReplicated(true);
-	// ...
+	SetIsReplicated(false);
 }
 
-void UPerkEffectSystemComponent::ActivationTimeFrame(ETimeFrame TimeFrame)
+void UPerkEffectSystemComponent::ActivationOpportunity(EOpportunity Opportunity, const FActivationOpportunityParams& OpportunityParams)
 {
-	if (GetOwnerRole() != ROLE_Authority)
+	/*if (GetOwnerRole() != ROLE_Authority)
 	{
-		ServerActivationTimeFrame(TimeFrame);
 		return;
-	}
+	}*/
+
+	TArray<TMap<EOpportunity, TArray<UDreamGameplayPerk*>>> ValueArray;
+	AppliedPerks.GenerateValueArray(ValueArray);
 	
-	TArray<UDreamGameplayPerk*>* GameplayPerks = AppliedPerks.Find(TimeFrame);
-	if (GameplayPerks == nullptr)
+	for (TPair<EPerkChannel, TMap<EOpportunity, TArray<UDreamGameplayPerk*>>> Pair : AppliedPerks)
 	{
-		return;
-	}
-
-	UAbilitySystemComponent* AbilitySystemComponent = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
-	if (AbilitySystemComponent == nullptr)
-	{
-		DREAM_NLOG(Warning, TEXT("AbilitySystemComponent Invalid"));
-		return;
-	}
-
-	for (UDreamGameplayPerk* Perk : *GameplayPerks)
-	{
-		if (Perk == nullptr)
+		TArray<UDreamGameplayPerk*>* Perks = Pair.Value.Find(Opportunity);
+		if (Perks == nullptr)
 		{
 			continue;
 		}
 
-		FActiveGameplayEffectHandle ActivationPerkEffect = Perk->ActivationPerkEffect(AbilitySystemComponent);
-		if (ActivationPerkEffect.IsValid())
+		for (UDreamGameplayPerk* Perk : *Perks)
 		{
-			ActivatedEffects.Add(ActivationPerkEffect);
+			if (Perk == nullptr)
+			{
+				continue;
+			}
+
+			FActiveGameplayEffectHandle ActivationPerkEffect = Perk->ActivationPerkEffect(OpportunityParams);
+			if (ActivationPerkEffect.IsValid())
+			{
+				ActivatedEffects.FindOrAdd(Pair.Key).Add(ActivationPerkEffect);
+			}
 		}
 	}
 }
 
-void UPerkEffectSystemComponent::ServerActivationTimeFrame_Implementation(ETimeFrame TimeFrame)
+void UPerkEffectSystemComponent::ApplyPerks(const TArray<TSubclassOf<UDreamGameplayPerk>>& Perks, EPerkChannel PerkChannel)
 {
-	ActivationTimeFrame(TimeFrame);
-}
+	ClearPerks(PerkChannel);
 
-void UPerkEffectSystemComponent::ApplyPerks(const TArray<TSubclassOf<UDreamGameplayPerk>>& Perks)
-{
-	AppliedPerks.Reset();
-
-	UAbilitySystemComponent* AbilitySystem = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
-
-	if (ActivatedEffects.Num() > 0)
-	{
-		for (FActiveGameplayEffectHandle Handle : ActivatedEffects)
-		{
-			AbilitySystem->RemoveActiveGameplayEffect(Handle);
-		}
-
-		ActivatedEffects.Reset();
-	}
+	bool bIsAuthority = GetOwnerRole() == ROLE_Authority;
+	bool bIsLocal = GetOwnerRole() == ROLE_AutonomousProxy;
 
 	for (TSubclassOf<UDreamGameplayPerk> Perk : Perks)
 	{
@@ -84,17 +67,41 @@ void UPerkEffectSystemComponent::ApplyPerks(const TArray<TSubclassOf<UDreamGamep
 		{
 			continue;
 		}
-		
+
 		UDreamGameplayPerk* GameplayPerkCDO = Perk->GetDefaultObject<UDreamGameplayPerk>();
-		AppliedPerks.FindOrAdd(GameplayPerkCDO->TimeFrame).Add(GameplayPerkCDO);
+		if ((bIsLocal && GameplayPerkCDO->bLocalRunning) || (bIsAuthority && !GameplayPerkCDO->bLocalRunning))
+		{
+			TMap<EOpportunity, TArray<UDreamGameplayPerk*>>& PerkMap = AppliedPerks.FindOrAdd(PerkChannel);
+			PerkMap.FindOrAdd(GameplayPerkCDO->Opportunity).AddUnique(GameplayPerkCDO);
+		}
 	}
 
-	ActivationTimeFrame(ETimeFrame::Immediately);
+	ActivationOpportunity(EOpportunity::Immediately, FActivationOpportunityParams (GetOwner(), GetOwner()));
 }
 
-void UPerkEffectSystemComponent::ClearPerks()
+void UPerkEffectSystemComponent::ClearPerks(EPerkChannel PerkChannel)
 {
-	AppliedPerks.Reset();
+	if (ActivatedEffects.Num() > 0)
+	{
+		UAbilitySystemComponent* AbilitySystem = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(GetOwner());
+
+		for (TPair<EPerkChannel, TArray<FActiveGameplayEffectHandle>> Effect : ActivatedEffects)
+		{
+			if (Effect.Key == PerkChannel)
+			{
+				for (FActiveGameplayEffectHandle Handle : Effect.Value)
+				{
+					AbilitySystem->RemoveActiveGameplayEffect(Handle);
+				}
+
+				break;
+			}
+		}
+
+		ActivatedEffects.Remove(PerkChannel);
+	}
+	
+	AppliedPerks.Remove(PerkChannel);
 }
 
 

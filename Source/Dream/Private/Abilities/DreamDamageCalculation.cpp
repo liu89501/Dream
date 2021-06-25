@@ -67,8 +67,12 @@ void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustom
 
     float Damage = 0.f;
     ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DreamAttrStatics().DamageDef, EvaluationParameters, Damage);
+    if (Damage == 0.f)
+    {
+        Damage = AttackPower;
+    }
 
-    float DamageDone = FMath::Max(Damage, 1.f) * AttackPower / FMath::Max(DefensePower, 1.f);
+    float DamageDone = Damage / FMath::Max(DefensePower, 1.f);
 
     FDreamGameplayEffectContext* DreamEffectContext = nullptr;
     

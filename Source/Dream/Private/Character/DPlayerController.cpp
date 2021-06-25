@@ -8,17 +8,16 @@
 #include "JsonUtilities.h"
 #include "Async.h"
 #include "DGameplayStatics.h"
+#include "DPlayerCameraManager.h"
 #include "Engine.h"
 #include "UnrealNetwork.h"
-#include "HTTP.h"
 #include "DreamGameInstance.h"
 #include "DreamGameMode.h"
 #include "OnlineSubsystem.h"
 #include "OnlineSubsystemTypes.h"
 #include "OnlineSessionSettings.h"
 #include "Character/DCharacterPlayer.h"
-#include "PlayerDataStoreModule.h"
-#include "PropsInterface.h"
+#include "PlayerDataInterfaceModule.h"
 
 #define LOCTEXT_NAMESPACE "Player.Controller"
 
@@ -29,6 +28,7 @@ ADPlayerController::ADPlayerController()
       , LevelTwoAmmunition(1000)
       , LevelThreeAmmunition(60)
 {
+    PlayerCameraManagerClass = ADPlayerCameraManager::StaticClass();
 }
 
 void ADPlayerController::PostInitializeComponents()
@@ -42,7 +42,7 @@ void ADPlayerController::BeginPlay()
 
     if (IsLocalController())
     {
-        FPlayerDataStore* PDS = FPlayerDataStoreModule::Get();
+        FPlayerDataInterface* PDS = FPlayerDataInterfaceModule::Get();
         
         if (PDS == nullptr)
         {
@@ -108,7 +108,7 @@ void ADPlayerController::PersistenceWeapons(const TArray<TSubclassOf<AShootWeapo
     }
     else if (GetLocalRole() == ROLE_Authority)
     {
-        if (FPlayerDataStore* PDS = FPlayerDataStoreModule::Get())
+        if (FPlayerDataInterface* PDS = FPlayerDataInterfaceModule::Get())
         {
             TArray<FPlayerWeaponAdd> NewWeapons;
             for (TSubclassOf<AShootWeapon> WeaponClass : Weapons)
@@ -135,7 +135,7 @@ const FPlayerInfo& ADPlayerController::GetOnlinePlayerInfo() const
 
 void ADPlayerController::OnGetPlayerInfoComplete(const FPlayerInfo& PlayerInfo, const FString& ErrorMessage)
 {
-    FPlayerDataStoreModule::Get()->OnGetPlayerInfoComplete.RemoveAll(this);
+    FPlayerDataInterfaceModule::Get()->OnGetPlayerInfoComplete.RemoveAll(this);
     
     OnlinePlayerInfo = PlayerInfo;
     
@@ -163,7 +163,7 @@ void ADPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ADPlayerController::TestLoginServer()
 {
-    if (FPlayerDataStore* PDS = FPlayerDataStoreModule::Get())
+    if (FPlayerDataInterface* PDS = FPlayerDataInterfaceModule::Get())
     {
         PDS->Login();
     }
@@ -369,7 +369,7 @@ void ADPlayerController::ExitGame()
 
 void ADPlayerController::BeginGame()
 {
-    FPlayerDataStoreModule::Get()->Login();
+    FPlayerDataInterfaceModule::Get()->Login();
 }
 
 void ADPlayerController::ServerPersistenceWeapons_Implementation(const TArray<TSubclassOf<AShootWeapon>>& Weapons)
@@ -413,9 +413,10 @@ void ADPlayerController::ClientReceiveRewardMessage_Implementation(UClass* Props
 {
     if (PropsClass)
     {
-        if (PropsClass->ImplementsInterface(UPropsInterface::StaticClass()))
+        const FPropsInfo& PropsInfo = UDGameplayStatics::GetPropsInfoFromClass(PropsClass);
+        if (PropsInfo.IsValid())
         {
-            BP_ReceiveRewardMessage(IPropsInterface::Execute_GetPropsInfo(PropsClass->GetDefaultObject()));
+            BP_ReceiveRewardMessage(PropsInfo);
         }
     }
 }

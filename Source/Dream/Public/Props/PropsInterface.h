@@ -3,8 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-
-#include "DreamType.h"
+#include "DPropsType.h"
 #include "UObject/Interface.h"
 #include "PropsInterface.generated.h"
 
@@ -22,9 +21,9 @@ class DREAM_API IPropsInterface
 {
 	GENERATED_BODY()
 
-	// Add interface functions to this class. This is the class that will be inherited to implement this interface.
 public:
 
-	UFUNCTION(BlueprintNativeEvent, Category="Interface|Props")
-	FPropsInfo GetPropsInfo() const;
+	virtual const FPropsInfo& GetPropsInfo() const = 0;
+
+	virtual const FEquipmentAttributes& GetEquipmentAttributes() const = 0;
 };

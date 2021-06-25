@@ -14,10 +14,12 @@ UDreamGameInstance::UDreamGameInstance()
 
 FString UDreamGameInstance::InvalidMap = TEXT("InvalidMap");
 
+FSurfaceImpactEffect EmptySurfaceImpactEffect = FSurfaceImpactEffect();
+
 const FSurfaceImpactEffect& UDreamGameInstance::GetSurfaceImpactEffect(EPhysicalSurface SurfaceType)
 {
 	const FSurfaceImpactEffect* EffectPtr = SurfaceImpactEffects.Find(SurfaceType);
-	return EffectPtr ? *EffectPtr : FSurfaceImpactEffect::EmptySurfaceImpactEffect;
+	return EffectPtr ? *EffectPtr : EmptySurfaceImpactEffect;
 }
 
 const FString& UDreamGameInstance::GetMapFullName(const FName& MapName) const

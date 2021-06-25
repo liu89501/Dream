@@ -1,12 +1,12 @@
 
 #include "K2Node_Login.h"
-#include "DreamAsyncProxy.h"
+#include "PlayerDataInterfaceAsyncProxy.h"
 #include "PDSAsync_Login.h"
 
 UK2Node_Login::UK2Node_Login()
 {
-	ProxyFactoryFunctionName = GET_FUNCTION_NAME_CHECKED(UDreamAsyncProxy, CreatePDSAsyncLogin);
-	ProxyFactoryClass = UDreamAsyncProxy::StaticClass();
+	ProxyFactoryFunctionName = GET_FUNCTION_NAME_CHECKED(UPlayerDataInterfaceAsyncProxy, CreatePDSAsyncLogin);
+	ProxyFactoryClass = UPlayerDataInterfaceAsyncProxy::StaticClass();
 	ProxyClass = UPDSAsync_Login::StaticClass();
 }
 

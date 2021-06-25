@@ -1,12 +1,12 @@
 
 #include "K2Node_GetPlayerInfo.h"
-#include "DreamAsyncProxy.h"
+#include "PlayerDataInterfaceAsyncProxy.h"
 #include "PDSAsync_GetPlayerInfo.h"
 
 UK2Node_GetPlayerInfo::UK2Node_GetPlayerInfo()
 {
-	ProxyFactoryFunctionName = GET_FUNCTION_NAME_CHECKED(UDreamAsyncProxy, CreatePDSAsyncGetPlayerInfo);
-	ProxyFactoryClass = UDreamAsyncProxy::StaticClass();
+	ProxyFactoryFunctionName = GET_FUNCTION_NAME_CHECKED(UPlayerDataInterfaceAsyncProxy, CreatePDSAsyncGetPlayerInfo);
+	ProxyFactoryClass = UPlayerDataInterfaceAsyncProxy::StaticClass();
 	ProxyClass = UPDSAsync_GetPlayerInfo::StaticClass();
 }
 

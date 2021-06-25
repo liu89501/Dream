@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Camera/CameraShake.h"
 #include "DProjectile.generated.h"
 
 /**
@@ -24,7 +25,7 @@ public:
     class UParticleSystemComponent* TrailFX;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Projectile)
-    class UProjectileMovementComponent* Projectile;
+    class UDProjectileComponent* Projectile;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Projectile|Adjustment")
     FVector ParticlesSize;

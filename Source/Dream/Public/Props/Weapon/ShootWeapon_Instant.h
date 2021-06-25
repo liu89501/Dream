@@ -10,11 +10,8 @@ class DREAM_API AShootWeapon_Instant : public AShootWeapon
 
 public:
 
-	UPROPERTY(EditAnywhere, Category = Weapon)
-	class UNiagaraSystem* BulletTrace;
-
-	UPROPERTY(EditAnywhere, Category = Weapon)
-	FName TraceParamName;
+	UPROPERTY(EditAnywhere, Category = "Weapon|VFX")
+	FWeaponTrailVFX TrailVfx;
 	
 public:
 

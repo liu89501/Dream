@@ -1,12 +1,12 @@
 
 #include "K2Node_GetStoreItems.h"
-#include "DreamAsyncProxy.h"
+#include "PlayerDataInterfaceAsyncProxy.h"
 #include "PDSAsync_GetStoreItems.h"
 
 UK2Node_GetStoreItems::UK2Node_GetStoreItems()
 {
-	ProxyFactoryFunctionName = GET_FUNCTION_NAME_CHECKED(UDreamAsyncProxy, CreatePDSAsyncGetStoreItems);
-	ProxyFactoryClass = UDreamAsyncProxy::StaticClass();
+	ProxyFactoryFunctionName = GET_FUNCTION_NAME_CHECKED(UPlayerDataInterfaceAsyncProxy, CreatePDSAsyncGetStoreItems);
+	ProxyFactoryClass = UPlayerDataInterfaceAsyncProxy::StaticClass();
 	ProxyClass = UPDSAsync_GetStoreItems::StaticClass();
 }
 

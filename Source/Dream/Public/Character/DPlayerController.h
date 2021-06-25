@@ -5,9 +5,10 @@
 #include "CoreMinimal.h"
 #include "Sockets.h"
 #include "DreamType.h"
+#include "DPropsType.h"
 #include "SharedPointer.h"
 #include "IPv4Endpoint.h"
-#include "PlayerDataStore.h"
+#include "PlayerDataInterface.h"
 #include "GameFramework/PlayerController.h"
 #include "DPlayerController.generated.h"
 

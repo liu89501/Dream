@@ -3,12 +3,12 @@
 
 #include "K2Node_RunServer.h"
 #include "PDSAsync_RunServer.h"
-#include "DreamAsyncProxy.h"
+#include "PlayerDataInterfaceAsyncProxy.h"
 
 UK2Node_RunServer::UK2Node_RunServer()
 {
-	ProxyFactoryFunctionName = GET_FUNCTION_NAME_CHECKED(UDreamAsyncProxy, CreatePDSAsyncRunServer);
-	ProxyFactoryClass = UDreamAsyncProxy::StaticClass();
+	ProxyFactoryFunctionName = GET_FUNCTION_NAME_CHECKED(UPlayerDataInterfaceAsyncProxy, CreatePDSAsyncRunServer);
+	ProxyFactoryClass = UPlayerDataInterfaceAsyncProxy::StaticClass();
 	ProxyClass = UPDSAsync_RunServer::StaticClass();
 }
 

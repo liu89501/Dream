@@ -9,6 +9,6 @@ public class DreamEditorTarget : TargetRules
 	{
 		Type = TargetType.Editor;
 		bUsesSteam = true;
-		ExtraModuleNames.AddRange(new string[] { "Dream", "PlayerDataStore", "DreamEditor" });
+		ExtraModuleNames.AddRange(new string[] { "Dream", "DreamEditor" });
 	}
 }

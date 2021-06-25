@@ -2,18 +2,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
-
-
-#include "DreamGameplayPerk.h"
 #include "DreamType.h"
+#include "DPropsType.h"
 #include "PropsInterface.h"
 #include "SlateBrush.h"
 #include "GameFramework/Actor.h"
 #include "Sound/SoundCue.h"
-#include "AbilitySystemGlobals.h"
 #include "Components/TimelineComponent.h"
 #include "Projectile/DProjectile.h"
-#include "AbilitySystemGlobals.h"
+#include "GameplayTagContainer.h"
 #include "ShootWeapon.generated.h"
 
 struct FBulletHitInfoStructContainer;
@@ -194,7 +191,7 @@ static const FBulletHitInfoStructContainer& StructContainer()
 }
 
 
-UENUM()
+UENUM(BlueprintType)
 enum class EFireMode : uint8
 {
 	SemiAutomatic UMETA(DisplayName="半自动"),
@@ -212,7 +209,6 @@ public:
 	FWeaponShootMuzzle() :
         Particles(nullptr),
         Sound(nullptr),
-        OffsetLocation(FVector::ZeroVector),
         Size(FVector::OneVector)
 	{
 	};
@@ -222,38 +218,12 @@ public:
 	UPROPERTY(EditAnywhere)
 	class USoundBase* Sound;
 	UPROPERTY(EditAnywhere)
-	FVector OffsetLocation;
-	UPROPERTY(EditAnywhere)
 	FVector Size;
 
 	FORCEINLINE bool IsValid() const
 	{
 		return Particles != nullptr && Sound != nullptr;
 	}
-};
-
-USTRUCT(BlueprintType)
-struct FWeaponAttribute
-{
-	GENERATED_BODY()
-
-	/**
-	 * 攻击力
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=WeaponAttr)
-	int32 AttackPower;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=WeaponAttr)
-	float CriticalDamage;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=WeaponAttr)
-	float CriticalRate;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=WeaponAttr)
-	float HealthSteal;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=WeaponAttr)
-	TArray<TSubclassOf<UDreamGameplayPerk>> WeaponPerks;
 };
 
 USTRUCT(BlueprintType)
@@ -272,6 +242,22 @@ struct FWeaponAnimAdjustData
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FRotator LHandRotation;
+};
+
+USTRUCT(BlueprintType)
+struct DREAM_API FCharacterMontage
+{
+	GENERATED_USTRUCT_BODY()
+
+public:
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	UAnimMontage* ShootAnim;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	UAnimMontage* ReloadAnim;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	UAnimMontage* EquipAnim;
+
 };
 
 UCLASS(Abstract)
@@ -304,6 +290,9 @@ public:
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
 	EFireMode FireMode;
 
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
+	TSubclassOf<class UCameraShakeBase> FireCameraShake;
+
 	/** 每分钟射速 */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Weapon)
 	int32 RateOfFire;
@@ -316,20 +305,9 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Weapon)
 	EAmmoType AmmoType;
 
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Weapon|Anim")
-	bool bUseFABRIK;
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Weapon|Anim", meta = (EditCondition = "bUseFABRIK"))
-	FTransform FABRIKEffectorTransform;
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Weapon|Anim", meta = (EditCondition = "bUseFABRIK"))
-	FTransform FABRIKEffectorTransformIdle;
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	FWeaponAnimAdjustData AnimAdjust;
-	
 	/** 武器属性 */
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
-	FWeaponAttribute WeaponAttribute;
+	FEquipmentAttributes WeaponAttribute;
 	
 	/** 瞄准时的摄像机FOV */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Weapon)
@@ -342,15 +320,16 @@ public:
 	/** 瞄准时的精准度阈值 数值越大越精准 为0时表示完全没有偏移 */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Weapon)
 	float AccuracyThreshold;
-
+	
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
 	FTransform WeaponSocketOffset;
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
-	FTransform WeaponRelaxSocketOffset;
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
+	FTransform WeaponHolsterSocketOffset;
+	
+	/*UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
 	FTransform LeftSocketOffset;
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
-	FTransform RightSocketOffset;
+	FTransform RightSocketOffset;*/
 
 	/** WeaponUI */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Weapon|UI")
@@ -370,9 +349,6 @@ public:
 	/** 开始衰减的距离 */
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
 	UCurveFloat* DamageFalloffCurve;
-
-	UPROPERTY(EditAnywhere, Category = Weapon)
-	FName MuzzleSocketName;
 
 	UPROPERTY( BlueprintReadWrite, EditAnywhere, Category = "Weapon|Recoil" )
 	float MinRecoil;
@@ -401,16 +377,28 @@ public:
 
 
 	/** ================== weapon relevant anim ================== */
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Animation")
+	int32 AnimID;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Animation")
 	UAnimMontage* ShootAnim;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Animation")
 	UAnimMontage* ReloadAnim;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Animation")
+	FCharacterMontage CharacterAnim;
+
+	/*UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "Weapon|Animation")
+	FWeaponAnimAdjustData AnimAdjust;*/
+
 	/** ================== weapon relevant anim ================== */
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Weapon)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|VFX")
 	FWeaponShootMuzzle WeaponMuzzleFX;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Weapon)
-	TEnumAsByte<EWeaponAnimGroup::Type> AnimGroup;
+	
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Weapon|Muzzle")
+	FVector MuzzleLocationOffset;
+	UPROPERTY(EditAnywhere, Category = "Weapon|Muzzle")
+	FName MuzzleSocketName;
 
 	/**
 	 * 造成伤害应用到 FGameplayEffectSpec 中的 DynamicAssetTags
@@ -461,10 +449,13 @@ public:
 	
 	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName = "OnWeaponEnable", DisplayName = "OnWeaponEnable"), Category = "Weapon|Event")
 	void BP_OnWeaponEnable(bool bEnable);
+
+	
 	
 public:
 
-	FPropsInfo GetPropsInfo_Implementation() const override;
+	virtual const FPropsInfo& GetPropsInfo() const override;
+	virtual const FEquipmentAttributes& GetEquipmentAttributes() const override;
 
 	// ServerOnly
 	virtual void ApplyPointDamage(const FHitResult& HitInfo);
@@ -504,9 +495,6 @@ protected:
 
 	void HandleFire();
 	void HandleLineTrace(const FVector& ViewLoc, const FRotator& ViewRot, FHitResult& OutHit) const;
-	
-	UFUNCTION(Reliable, Server)
-	void ServerApplyRadialDamage(const FRadialDamageProjectileInfo& RadialDamage);
 
 	void SpawnAmmo(const FBulletHitInfoHandle& HitInfo);
 	UFUNCTION(Reliable, NetMulticast)
@@ -534,6 +522,11 @@ protected:
 	UFUNCTION()
 	virtual void OnAimEnded();
 
+	virtual void RecoilTimelineTick(float Value);
+	virtual void RecoverTimelineTick(float Value);
+	virtual void CameraOffsetTimelineTick(float Value) const;
+	virtual void AimTimelineTick(float Value) const;
+
 	// 记录默认值
 	int32 DAmmoNum;
 
@@ -542,11 +535,6 @@ private:
 	friend class ADCharacterPlayer;
 	friend class ADProjectile;
 	friend class ADPlayerShooter;
-
-	void RecoilTimelineTick(float Value);
-	void CameraOffsetTimelineTick(float Value) const;
-	void RecoverTimelineTick(float Value);
-	void AimTimelineTick(float Value) const;
 
 	/** 最后一次开火时间点 */
 	float LastFireTime;

@@ -2,6 +2,7 @@
 
 #include "Props/Weapon/ShootWeapon_Projectile.h"
 #include "DCharacterPlayer.h"
+#include "DProjectileComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 
 void AShootWeapon_Projectile::BeginPlay()
@@ -22,16 +23,17 @@ void AShootWeapon_Projectile::HandleSpawnAmmo(const FHitResult& HitResult)
 			SpawnParam.Owner = this;
 			SpawnParam.Instigator = GetOwningShooter();
 
-			ADProjectile* SpawnProjectile = GetWorld()->SpawnActor<ADProjectile>(Projectile, HitResult.TraceStart, ProjectileDir, SpawnParam);
+			GetWorld()->SpawnActor<ADProjectile>(Projectile, HitResult.TraceStart, ProjectileDir, SpawnParam);
 
-			if (HitResult.bBlockingHit)
+			/*if (HitResult.bBlockingHit)
 			{
+				ADProjectile* SpawnProjectile = ;
 				ETeamAttitude::Type Attitude = FGenericTeamId::GetAttitude(GetOwner(), HitResult.GetActor());
 				if (Attitude == ETeamAttitude::Hostile)
 				{
 					SpawnProjectile->Projectile->HomingTargetComponent = HitResult.GetComponent();
 				}
-			}
+			}*/
 		}
 	}
 }

@@ -28,26 +28,27 @@ public:
 	/**
 	 * 物品品级配置项
 	 */
-	UPROPERTY(EditAnywhere, Category = "Settings|Settings")
+	UPROPERTY(EditAnywhere, Category = "Settings")
 	TMap<EPropsQuality, FQualityInfo> QualitySettings;
 	
 	/**
 	 * 加载游戏时显示的界面
 	 */
-	UPROPERTY(EditAnywhere, Category = "Settings|Settings")
+	UPROPERTY(EditAnywhere, Category = "Settings")
 	TSubclassOf<class UUserWidget> LoadingScreenWidgetClass;
 
 	/**
 	 * 	关卡数据
 	 */
-	UPROPERTY(EditAnywhere, Category = "Settings|Settings")
+	UPROPERTY(EditAnywhere, Category = "Settings")
 	UDataTable* Levels;
 
-	UPROPERTY(EditAnywhere, Category = "Settings|Settings")
+	UPROPERTY(EditAnywhere, Category = "Settings")
 	TMap<TEnumAsByte<EPhysicalSurface>, FSurfaceImpactEffect> SurfaceImpactEffects;
-
-
 	
+	UPROPERTY(EditAnywhere, Category = "Settings")
+	FLinearColor ThemeColor;
+
 	const FString& GetMapFullName(const FName& MapName) const;
 
 	const FSurfaceImpactEffect& GetSurfaceImpactEffect(EPhysicalSurface SurfaceType);

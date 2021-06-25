@@ -9,7 +9,7 @@ public class DreamTarget : TargetRules
 	{
 		Type = TargetType.Game;
 		bUsesSteam = true;
-		ExtraModuleNames.AddRange(new string[] { "Dream", "PlayerDataStore" });
+		ExtraModuleNames.AddRange(new string[] { "Dream" });
 	}
 
 }

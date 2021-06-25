@@ -4,13 +4,13 @@
 #include "DreamGameSession.h"
 #include "OnlineSubsystem.h"
 #include "DreamGameMode.h"
-#include "PlayerDataStore.h"
-#include "PlayerDataStoreModule.h"
+#include "PlayerDataInterface.h"
+#include "PlayerDataInterfaceModule.h"
 #include "Interfaces/OnlineSessionInterface.h"
 
 void ADreamGameSession::RegisterServer()
 {
-    if (FPlayerDataStore* PDS = FPlayerDataStoreModule::Get())
+    if (FPlayerDataInterface* PDS = FPlayerDataInterfaceModule::Get())
     {
         int32 Port = GetNetDriver()->GetLocalAddr()->GetPort();
         PDS->RegisterServer(Port, MaxPlayers, GetWorld()->GetMapName());

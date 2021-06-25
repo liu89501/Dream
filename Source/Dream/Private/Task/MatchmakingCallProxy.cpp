@@ -2,8 +2,8 @@
 
 #include "MatchmakingCallProxy.h"
 #include "OnlineSubsystem.h"
-#include "PlayerDataStore.h"
-#include "PlayerDataStoreModule.h"
+#include "PlayerDataInterface.h"
+#include "PlayerDataInterfaceModule.h"
 #include "TimerManager.h"
 #include "DreamGameInstance.h"
 
@@ -96,9 +96,9 @@ void UMatchmakingCallProxy::ClearAllHandle()
 		SessionInt->ClearOnCreateSessionCompleteDelegate_Handle(Handle_CreateSessionComplete);
 	}
 
-	if (FPlayerDataStore* PlayerDataStore = FPlayerDataStoreModule::Get())
+	if (FPlayerDataInterface* PlayerDataInterface = FPlayerDataInterfaceModule::Get())
 	{
-		PlayerDataStore->OnRunServerComplete.Remove(Handle_RunServer);
+		PlayerDataInterface->OnRunServerComplete.Remove(Handle_RunServer);
 	}
 }
 
@@ -228,7 +228,7 @@ void UMatchmakingCallProxy::WaitBeginTick(FNamedOnlineSession* Session)
 
 	if (Session->NumOpenPublicConnections == 0 || BeginWaitTime >= Begin_WaitTime)
 	{
-		if (FPlayerDataStore* PDS = FPlayerDataStoreModule::Get())
+		if (FPlayerDataInterface* PDS = FPlayerDataInterfaceModule::Get())
 		{
 			UDreamGameInstance* GI = World->GetGameInstance<UDreamGameInstance>();
 			Handle_RunServer = PDS->OnRunServerComplete.AddUObject(this, &UMatchmakingCallProxy::OnCreateServerComplete);
@@ -236,7 +236,7 @@ void UMatchmakingCallProxy::WaitBeginTick(FNamedOnlineSession* Session)
 		}
 		else
 		{
-			UE_LOG(LogOnline, Error, TEXT("LaunchDedicatedServer Fail FPlayerDataStoreModule Invalid"));
+			UE_LOG(LogOnline, Error, TEXT("LaunchDedicatedServer Fail FPlayerDataInterfaceModule Invalid"));
 			OnFailure.Broadcast();
 		}
 
@@ -305,7 +305,7 @@ void UMatchmakingCallProxy::JoinLobbyGameServer(const FName& SessionName)
 
 void UMatchmakingCallProxy::OnCreateServerComplete(const FString& ServerAddress, const FString& ErrorMessage)
 {
-	FPlayerDataStoreModule::Get()->OnRunServerComplete.Remove(Handle_RunServer);
+	FPlayerDataInterfaceModule::Get()->OnRunServerComplete.Remove(Handle_RunServer);
 	
 	if (!ErrorMessage.IsEmpty())
 	{

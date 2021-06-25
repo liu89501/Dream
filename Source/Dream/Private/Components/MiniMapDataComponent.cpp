@@ -14,7 +14,7 @@ UMiniMapDataComponent::UMiniMapDataComponent()
 }
 
 
-FMiniMapData UMiniMapDataComponent::CalculationPosition(const FVector& TargetLocation, const FRotator& TargetRotation, float ScanRange)
+FMiniMapData UMiniMapDataComponent::CalculationPosition(const FVector& TargetLocation, const FRotator& TargetRotation, float ScanRange) const
 {
 	FVector Location = GetOwner()->GetActorLocation();
 	float Distance = FVector2D::Distance(FVector2D(TargetLocation), FVector2D(Location));

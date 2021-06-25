@@ -54,16 +54,11 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = CharacterBase)
     FGenericTeamId TeamID;
 
-    // 死亡动画
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CharacterBase)
-    UAnimMontage* PawnDeathMontage;
-
     UPROPERTY(BlueprintReadOnly, Category = CharacterBase)
     class UDreamAttributeSet* AttributeSet;
 
     UPROPERTY(EditAnywhere, Category = CharacterBase)
     TMap<FName, float> WeakPoint;
-
     
     
     UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
@@ -82,8 +77,7 @@ public:
 
     FCharacterDeathSignature OnCharacterDeath;
 
-    virtual void HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle,
-        ADCharacterBase* SourceCharacter, const FGameplayTagContainer& AssetTags);
+    virtual void HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle);
 
     UFUNCTION(BlueprintImplementableEvent, meta = (DisplayName = "OnHandleDamage", ScriptName = "OnHandleDamage"))
     void BP_HandleDamage(float Damage, const FHitResult& HitResult, ADCharacterBase* SourceCharacter);
@@ -107,7 +101,7 @@ protected:
     virtual FGenericTeamId GetGenericTeamId() const override;
 
     /** 击中敌方目标时触发 */
-    virtual void HitEnemy(const FDamageTargetInfo& DamageInfo) {};
+    virtual void HitEnemy(const FDamageTargetInfo& DamageInfo, ADCharacterBase* HitTarget) {};
 
     /** 当血量为0时触发 */
     virtual void OnDeath(const AActor* Causer);

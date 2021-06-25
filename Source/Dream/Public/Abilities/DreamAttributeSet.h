@@ -145,6 +145,7 @@ struct DreamAttributeStatics
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(CriticalRate);
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(CriticalDamage);
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(Health);
+	D_DECLARE_ATTRIBUTE_CAPTUREDEF(MaxHealth);
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(Shield);
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(IncreaseAtkPowPercentage);
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(HealthSteal);
@@ -166,6 +167,7 @@ struct DreamAttributeStatics
 		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, CriticalRate, Source, true);
 		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, CriticalDamage, Source, true);
 		
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, MaxHealth, Source, false);
 		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, Health, Source, false);
 		
 		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, Shield, Source, false);

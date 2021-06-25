@@ -5,22 +5,26 @@
 
 #include "DreamAttributeSet.h"
 
-FGameplayTag UDGE_DamageHealthSteal::HealthStealSetByCallerTag = FGameplayTag::RequestGameplayTag(TEXT("GE.SetByCaller.HealthSteal"));
+FGameplayTag UDGE_DamageHealthSteal::HSHealthSetByCallerTag = FGameplayTag::RequestGameplayTag(TEXT("GE.SetByCaller.HealthSteal.Health"));
+FGameplayTag UDGE_DamageHealthSteal::HSShieldSetByCallerTag = FGameplayTag::RequestGameplayTag(TEXT("GE.SetByCaller.HealthSteal.Shield"));
 
 UDGE_DamageHealthSteal::UDGE_DamageHealthSteal()
 {
-    FGameplayModifierInfo ModifierInfo;
-    ModifierInfo.Attribute = DreamAttrStatics().HealthProperty;
+    FSetByCallerFloat ModifierMagnitudeHealth;
+    ModifierMagnitudeHealth.DataTag = HSHealthSetByCallerTag;
+    FSetByCallerFloat ModifierMagnitudeShield;
+    ModifierMagnitudeShield.DataTag = HSShieldSetByCallerTag;
+    
+    FGameplayModifierInfo ModifierHealth;
+    ModifierHealth.Attribute = DreamAttrStatics().HealthProperty;
+    ModifierHealth.ModifierMagnitude = ModifierMagnitudeHealth;
+    ModifierHealth.ModifierOp = EGameplayModOp::Additive;
 
-    FSetByCallerFloat ModifierMagnitude;
-    ModifierMagnitude.DataTag = HealthStealSetByCallerTag;
-    ModifierInfo.ModifierMagnitude = ModifierMagnitude;
-    ModifierInfo.ModifierOp = EGameplayModOp::Additive;
+    FGameplayModifierInfo ModifierShield;
+    ModifierShield.Attribute = DreamAttrStatics().ShieldProperty;
+    ModifierShield.ModifierMagnitude = ModifierMagnitudeShield;
+    ModifierShield.ModifierOp = EGameplayModOp::Additive;
 
-    /*FGameplayEffectCue Cue;
-    Cue.GameplayCueTags = FGameplayTagContainer(FGameplayTag::RequestGameplayTag(TEXT("GameplayCue.HealthSteal")));
-    Cue.MagnitudeAttribute = DreamAttrStatics().HealthProperty;
-    GameplayCues.Add(Cue);*/
-
-    Modifiers.Add(ModifierInfo);
+    Modifiers.Add(ModifierHealth);
+    Modifiers.Add(ModifierShield);
 }

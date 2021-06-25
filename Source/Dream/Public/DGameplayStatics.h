@@ -3,10 +3,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
-
-#include "DAIModuleComponent.h"
+#include "DPropsType.h"
 #include "DreamType.h"
-#include "GameplayTagContainer.h"
+#include "GameplayEffectTypes.h"
+#include "GameplayAbilityTypes.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
 #include "DGameplayStatics.generated.h"
@@ -24,13 +24,24 @@ class DREAM_API UDGameplayStatics : public UBlueprintFunctionLibrary
 public:
 
 	UFUNCTION(BlueprintPure, Category = DreamStatics)
-	static TSubclassOf<class AShootWeapon> LoadWeaponClass(FString QualifiedName);
+	static UClass* LoadUClass(FString QualifiedName);
 
 	UFUNCTION(BlueprintPure, Category = DreamStatics)
 	static FString GetClassPathName(TSubclassOf<UObject> ObjectClass);
 
-	UFUNCTION(BlueprintCallable, Category = DreamStatics)
-	static bool GetClassPropsInfo(const FString& ClassString, FPropsInfo& PropsInfo);
+	UFUNCTION(BlueprintPure, Category = DreamStatics)
+	static const FPropsInfo& GetPropsInfoFromClassName(const FString& ClassString);
+	/** 通过UClass获取道具信息 */
+	UFUNCTION(BlueprintPure, Category = DreamStatics)
+    static const FPropsInfo& GetPropsInfoFromClass(UClass* PropsClass);
+	
+	UFUNCTION(BlueprintPure, Category = DreamStatics)
+	static const FEquipmentAttributes& GetEquipmentAttributesFromClassName(const FString& ClassString);
+	UFUNCTION(BlueprintPure, Category = DreamStatics)
+	static const FEquipmentAttributes& GetEquipmentAttributesFromClass(UClass* PropsClass);
+
+	UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject"), Category = DreamStatics)
+	static FLinearColor GetGameThemeColor(UObject* WorldContextObject);
 
 	UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject"), Category = DreamStatics)
 	static bool GetQualityInfo(UObject* WorldContextObject, EPropsQuality Quality, FQualityInfo& QualityInfo);
@@ -44,15 +55,29 @@ public:
 	UFUNCTION(BlueprintPure, Category = DreamStatics)
 	static FName GetInputActionKeyName(APlayerController* PlayerController, FName ActionName);
 
-	UFUNCTION(BlueprintCallable, Category = DreamStatics)
-	static bool SetFocus(class UWidget* Widget);
-
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = DreamStatics)
 	static void ServerTravel(UObject* WorldContextObject, const FString& URL, bool bAbsolute);
 
 	/* DATE 转换为 文本 */
 	UFUNCTION(BlueprintPure, Category = DreamStatics)
 	static FText ToTimeText(int32 TotalSeconds);
+
+	/**
+	* 获取默认的重力值
+	*/
+	UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject"), Category = DreamStatics)
+    static float GetDefaultGravityZ(UObject* WorldContextObject);
+
+	UFUNCTION(BlueprintCallable, meta=(WorldContext="WorldContextObject"), Category = DreamStatics)
+    static void AddIconToPlayerMinimap(UObject* WorldContextObject, AActor* Actor);
+	
+	UFUNCTION(BlueprintCallable, meta=(WorldContext="WorldContextObject"), Category = DreamStatics)
+    static void RemoveIconToPlayerMinimap(UObject* WorldContextObject, AActor* Actor);
+
+	/**
+	* 	替换widget中的子项
+	*/
+	static void ReplaceWidgetChildAt(class UPanelWidget* ParentWidget, int32 ChildIndex, class UWidget* NewWidget);
 
 	/* 停止匹配 */
 	UFUNCTION(BlueprintCallable, Category = "DreamStatics|Matchmaking")
@@ -86,30 +111,24 @@ public:
 		bool bTraceComplex,
 		TEnumAsByte<EDrawDebugTrace::Type> DrawDebugType);
 
-
-	/**
-	 * 获取默认的重力值
-	 */
-	UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject"), Category = DreamStatics)
-	static float GetDefaultGravityZ(UObject* WorldContextObject);
-
-
-	/**
-	 * 	替换widget中的子项
-	 */
-	static void ReplaceWidgetChildAt(class UPanelWidget* ParentWidget, int32 ChildIndex, class UWidget* NewWidget);
-
 	/**
 	 *  创建伤害widget
 	 */
-	UE_DEPRECATED(4.25, "暂时弃用")
+	UE_DEPRECATED(4.26, "暂时弃用")
 	UFUNCTION(BlueprintCallable, Category = "DreamStatics|Abilities")
-	static void SpawnDamageWidgets(AActor* TargetActor, const struct FGameplayCueParameters& Parameters,
-	                               bool bHealthSteal);
+	static void SpawnDamageWidgets(AActor* TargetActor, const struct FGameplayCueParameters& Parameters, bool bHealthSteal);
 
-	static struct FDreamGameplayEffectContext* MakeDreamEffectContextHandle(
-		AActor* SourceActor, UCurveFloat* DamageFalloffCurve, const FHitResult& Hit, const FVector& Origin);
+	
+	static struct FDreamGameplayEffectContext* MakeDreamEffectContext(AActor* SourceActor, float DamageFalloff, const FHitResult& Hit, const FVector& Origin);
 
+	UFUNCTION(BlueprintPure, Category = "DreamStatics|Abilities")
+	static FGameplayEffectContextHandle MakeDreamEffectContextHandle(AActor* SourceActor, float DamageFalloff, const FHitResult& Hit, const FVector& Origin);
+
+	UFUNCTION(BlueprintPure, Category = "DreamStatics|Abilities")
+    static class UDGameplayEffectUIData* GetGameplayUIData(TSubclassOf<class UDreamGameplayAbility> AbilityClass);
+
+	UFUNCTION(BlueprintCallable, Category = "DreamStatics|Abilities", meta = (HidePin="Ability", DefaultToSelf = "Ability"))
+    static bool ApplyGameplayEffectToAllActors(class UGameplayAbility* Ability, const FGameplayEventData& EventData, TSubclassOf<class UGameplayEffect> EffectClass);
 
 	/**
 	 *  获取Actor玩家控制器, 如果没找到会返回null
@@ -123,5 +142,14 @@ public:
 
 
 	UFUNCTION(BlueprintPure, Category = DreamStatics)
-	static void CalculateFBDirection(const FVector& Velocity, const FRotator& BaseRotation, float& Angle, bool& bIsBackward);
+	static void CalculateFBDirection(const FVector& Velocity, const FRotator& BaseRotation, float& Angle,
+	                                 bool& bIsBackward);
+
+
+	static void SpawnWeaponTrailParticles(UObject* WorldContextObject, const FWeaponTrailVFX& TrailVfx,
+	                                      const FVector& StartLocation, const FVector& EndLocation);
+
+	UFUNCTION(BlueprintPure, Category = DreamStatics)
+	static int32 GetWidgetZOrder(TEnumAsByte<EWidgetOrder::Type> Type);
+
 };

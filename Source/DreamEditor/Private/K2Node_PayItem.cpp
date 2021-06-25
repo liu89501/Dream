@@ -2,13 +2,13 @@
 
 
 #include "K2Node_PayItem.h"
-#include "DreamAsyncProxy.h"
+#include "PlayerDataInterfaceAsyncProxy.h"
 #include "PDSAsync_PayItem.h"
 
 UK2Node_PayItem::UK2Node_PayItem()
 {
-	ProxyFactoryFunctionName = GET_FUNCTION_NAME_CHECKED(UDreamAsyncProxy, CreatePDSAsyncPayItem);
-	ProxyFactoryClass = UDreamAsyncProxy::StaticClass();
+	ProxyFactoryFunctionName = GET_FUNCTION_NAME_CHECKED(UPlayerDataInterfaceAsyncProxy, CreatePDSAsyncPayItem);
+	ProxyFactoryClass = UPlayerDataInterfaceAsyncProxy::StaticClass();
 	ProxyClass = UPDSAsync_PayItem::StaticClass();
 }
 

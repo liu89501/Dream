@@ -16,27 +16,14 @@ DECLARE_LOG_CATEGORY_EXTERN(LogDream, Log, All);
 
 #define IfStandalone(Key) if (GetNetMode() == NM_Standalone) { Key; }
 
+#define DNUMBER_ZERO (0)
+#define DNUMBER_ONE (1)
+
 namespace DreamActorTagName
 {
-	static FName Teammate = TEXT("Teammate");
-	static FName Enemy = TEXT("Enemy");
-}
-
-UENUM(BlueprintType)
-namespace EWeaponAnimGroup
-{
-	enum Type
-	{
-		NONE,
-        M4,
-        M2000,
-        AK110,
-        ARRU,
-        ARUS,
-        GrenadeLauncher,
-        FragmentGrenade,
-        Shotguns
-    };
+	extern const FName Teammate;
+	extern const FName Enemy;
+	extern const FName Death;
 }
 
 UENUM(BlueprintType)
@@ -44,24 +31,15 @@ namespace EWidgetOrder
 {
 	enum Type
 	{
-		None = 0,
-		PlayerCtrl = 1,
-		Player = 2,
-		
-		WeaponUI = 3,
-		InteractiveUI = 4
+		None,
+		PlayerCtrl,
+		PlayerCtrlPopup,
+		Player,
+		PlayerPopup,
+		WeaponUI,
+		InteractiveUI
 	};
 }
-
-UENUM(BlueprintType)
-enum class EPropsQuality : uint8
-{
-	Normal,
-    Advanced,
-    Rare,
-    Epic,
-    Legendary
-};
 
 UENUM(BlueprintType)
 enum class EGameType : uint8
@@ -133,13 +111,13 @@ enum class EMiniMapDrawType : uint8
 };
 
 UENUM(BlueprintType)
-enum class ETimeFrame : uint8
+enum class EOpportunity : uint8
 {
-	Immediately UMETA(ToolTip="即时"),
-	Reloading UMETA(ToolTip="填装弹药时"),
-	Injured UMETA(ToolTip="受到伤害时"),
-	Firing UMETA(ToolTip="开火时"),
-	KilledEnemy UMETA(ToolTip="击杀敌方目标时"),
+	Immediately UMETA(ToolTip="即时", DisplayName="立即"),
+	Reloading UMETA(ToolTip="填装弹药时", DisplayName="装填弹药时"),
+	Injured UMETA(ToolTip="受到伤害时", DisplayName="受到伤害时"),
+	Firing UMETA(ToolTip="开火时", DisplayName="开火时"),
+	KilledEnemy UMETA(ToolTip="击杀敌方目标时", DisplayName="击杀敌方目标时"),
 };
 
 UENUM(BlueprintType)
@@ -148,43 +126,52 @@ namespace ETalkType
 	enum Type
 	{
 		Current,
-        World,
-        Team,
-        Private,
-        Reward,
-        NONE
-    };
+		World,
+		Team,
+		Private,
+		Reward,
+		NONE
+	};
 }
 
 USTRUCT(BlueprintType)
-struct FQualityInfo
+struct FWeaponTrailVFX
 {
-	GENERATED_USTRUCT_BODY()
+	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	FText QualityName;
+	UPROPERTY(EditAnywhere)
+	class UNiagaraSystem* TrailEffect;
+	UPROPERTY(EditAnywhere)
+	float MinimumSpawnDistance;
+	UPROPERTY(EditAnywhere)
+	float TrailFlyingSpeed;
+	UPROPERTY(EditAnywhere)
+	FVector SpawnPositionOffset;
+	UPROPERTY(EditAnywhere)
+	FName TrailEndLocationParamName;
+	UPROPERTY(EditAnywhere)
+	FName TrailLifeTimeParamName;
 
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	FLinearColor QualityThemeColor;
-};
 
-USTRUCT(BlueprintType)
-struct FPropsInfo
-{
-	GENERATED_USTRUCT_BODY()
-	
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Props)
-	EPropsQuality PropsQuality;
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Props)
-	UMaterialInstance* PropsIcon;
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Props)
-	FText PropsName;
+	FWeaponTrailVFX()
+		: TrailEffect(nullptr),
+		  MinimumSpawnDistance(200.f),
+		  TrailFlyingSpeed(25000.f),
+		  SpawnPositionOffset(FVector::ZeroVector),
+		  TrailEndLocationParamName(TEXT("EndPosition")),
+		  TrailLifeTimeParamName(TEXT("NCLifeTime"))
+	{
+	}
 };
 
 struct FMiniMapData
 {
 public:
-	FMiniMapData() : PosNormalize(FVector2D::ZeroVector), Yaw(0), DistancePercentage(0), DrawType(EMiniMapDrawType::Warning) {};
+	FMiniMapData() : PosNormalize(FVector2D::ZeroVector), Yaw(0), DistancePercentage(0),
+	                 DrawType(EMiniMapDrawType::Warning)
+	{
+	};
+
 	FMiniMapData(
 		const FVector2D& InPosNormalize,
 		float InYaw,
@@ -192,13 +179,15 @@ public:
 		EMiniMapDrawType InDrawType,
 		const FSlateBrush& InSprite,
 		const FSlateBrush& InOverflowSprite)
-	:
-	PosNormalize(InPosNormalize),
-	Yaw(InYaw),
-	DistancePercentage(InDistancePercentage),
-	DrawType(InDrawType),
-	SpriteBrush(InSprite),
-	OverflowSpriteBrush(InOverflowSprite) {}
+		:
+		PosNormalize(InPosNormalize),
+		Yaw(InYaw),
+		DistancePercentage(InDistancePercentage),
+		DrawType(InDrawType),
+		SpriteBrush(InSprite),
+		OverflowSpriteBrush(InOverflowSprite)
+	{
+	}
 
 	FVector2D PosNormalize;
 	float Yaw;
@@ -206,26 +195,6 @@ public:
 	EMiniMapDrawType DrawType;
 	FSlateBrush SpriteBrush;
 	FSlateBrush OverflowSpriteBrush;
-};
-
-USTRUCT(BlueprintType)
-struct FAbilitySlot
-{
-	GENERATED_USTRUCT_BODY()
-
-public:
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	TSubclassOf<class UGameplayAbility> AbilityClass;
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	int32 AbilityLevel;
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	EAbilityType AbilityType;
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	FString Description;
 };
 
 USTRUCT()
@@ -320,9 +289,11 @@ struct FRadialDamageProjectileInfo
 
 public:
 
-	FRadialDamageProjectileInfo() : 
+	FRadialDamageProjectileInfo() :
 		Origin(FVector::ZeroVector),
-		DamageRadius(0.f) {}
+		DamageRadius(0.f)
+	{
+	}
 
 
 	FRadialDamageProjectileInfo(
@@ -330,7 +301,7 @@ public:
 		float InDamageRadius)
 
 		: Origin(InOrigin),
-		DamageRadius(InDamageRadius)
+		  DamageRadius(InDamageRadius)
 	{
 	}
 
@@ -348,17 +319,12 @@ struct FSurfaceImpactEffect
 {
 	GENERATED_USTRUCT_BODY()
 
-public:
-
 	UPROPERTY(EditAnywhere)
 	class UParticleSystem* ImpactParticles;
 	UPROPERTY(EditAnywhere)
 	class USoundCue* ImpactSound;
 	UPROPERTY(EditAnywhere)
 	class UMaterialInterface* ImpactDecal;
-
-
-	static FSurfaceImpactEffect EmptySurfaceImpactEffect;
 };
 
 
@@ -418,6 +384,7 @@ struct FHitResultKeyFuncs : DefaultKeyFuncs<FHitResult>
 		AActor* ActorPtr = Key.GetActor();
 		return ActorPtr ? reinterpret_cast<uint64>(ActorPtr) : 0;
 	}
+
 	static FORCEINLINE bool Matches(FHitResult const& A, FHitResult const& B) { return (A.GetActor() == B.GetActor()); }
 };
 
@@ -426,10 +393,9 @@ struct FHitResultKeyFuncs : DefaultKeyFuncs<FHitResult>
 */
 struct FRandomProbability
 {
-
 public:
 
-	template<typename SourceType>
+	template <typename SourceType>
 	static SourceType RandomProbability(const TMap<SourceType, float>& ProbabilitySource)
 	{
 		float RandomValue = FMath::FRandRange(0, 100.f);
@@ -463,8 +429,9 @@ public:
 
 private:
 
-	template<typename SourceType>
-	static void GetArrayPair(const TMap<SourceType, float>& ProbabilitySource, TArray<SourceType>& Sources, TArray<float>& Probability)
+	template <typename SourceType>
+	static void GetArrayPair(const TMap<SourceType, float>& ProbabilitySource, TArray<SourceType>& Sources,
+	                         TArray<float>& Probability)
 	{
 		Sources.Empty(ProbabilitySource.Num());
 		Probability.Empty(ProbabilitySource.Num());
@@ -484,7 +451,6 @@ private:
 		}
 		return SumResult;
 	}
-
 };
 
 template <typename ElementType, typename SetKeyFunc = DefaultKeyFuncs<ElementType>>
@@ -494,7 +460,7 @@ template <typename ElementType, typename SetKeyFunc>
 struct FArrayDistinctIterator
 {
 	typedef typename TArray<ElementType>::SizeType SizeType;
-	
+
 	explicit FArrayDistinctIterator(const TArray<ElementType>& InArray)
 		: Ptr(InArray.GetData()),
 		  ArrayNum(InArray.Num()),
@@ -514,17 +480,17 @@ struct FArrayDistinctIterator
 			++CurrentIndex;
 		}
 	}
-	
+
 	FORCEINLINE const ElementType& operator*() const
 	{
 		return *Ptr;
 	}
-	
+
 	FORCEINLINE operator bool() const
 	{
 		return CurrentIndex < ArrayNum;
 	}
-	
+
 	FORCEINLINE const ElementType& operator->() const
 	{
 		return *Ptr;

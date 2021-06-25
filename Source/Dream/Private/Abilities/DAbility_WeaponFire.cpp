@@ -6,7 +6,6 @@
 #include "DGE_WeaponBaseDamage.h"
 #include "DCharacterPlayer.h"
 #include "ShootWeapon.h"
-#include "Camera/CameraComponent.h"
 
 static FGameplayTag EventTag = FGameplayTag::RequestGameplayTag(TEXT("Event.WeaponFire"));
 
@@ -29,9 +28,6 @@ void UDAbility_WeaponFire::ActivateAbility(const FGameplayAbilitySpecHandle Hand
             {
                 if (AShootWeapon* ActiveWeapon = PlayerShooter->GetActiveWeapon())
                 {
-                    FVector Location = PlayerShooter->TPCamera->GetComponentLocation();
-                    FVector EndLocation = PlayerShooter->TPCamera->GetComponentRotation().RotateVector(Location * ActiveWeapon->TraceDistance);
-
                     //UDGameplayStatics::LineTraceAndSendEvent(ActorInfo->OwnerActor.Get(), EventTag, Location, EndLocation, );
                 }
             }
@@ -56,5 +52,5 @@ void UDAbility_WeaponFire::EndAbility(const FGameplayAbilitySpecHandle Handle,
 
 void UDAbility_WeaponFire::OnTriggerEvent(const FGameplayEventData* EventData)
 {
-    ApplyGameplayEffectToAllActors(*EventData, UDGE_WeaponBaseDamage::StaticClass());
+    
 }

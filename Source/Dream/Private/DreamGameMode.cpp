@@ -6,10 +6,10 @@
 #include "EngineUtils.h"
 #include "DreamType.h"
 #include "DreamGameSession.h"
-#include "PlayerDataStore.h"
+#include "PlayerDataInterface.h"
 #include "Character/DPlayerController.h"
 #include "GameFramework/PlayerState.h"
-#include "PlayerDataStoreModule.h"
+#include "PlayerDataInterfaceModule.h"
 
 #define IdleShutdownTime 300 
 
@@ -43,9 +43,9 @@ void ADreamGameMode::PostLogin(APlayerController* NewPlayer)
 	
 	IdleTimeCount = 0.f;
 	PlayerNumCounter.Increment();
-	if (FPlayerDataStore* PlayerDataStore = FPlayerDataStoreModule::Get())
+	if (FPlayerDataInterface* PlayerDataInterface = FPlayerDataInterfaceModule::Get())
 	{
-		PlayerDataStore->UpdateActivePlayers(true);
+		PlayerDataInterface->UpdateActivePlayers(true);
 	}
 }
 
@@ -58,9 +58,9 @@ void ADreamGameMode::Logout(AController* Exiting)
 	if (Exiting->IsA(APlayerController::StaticClass()))
 	{
 		PlayerNumCounter.Decrement();
-		if (FPlayerDataStore* PlayerDataStore = FPlayerDataStoreModule::Get())
+		if (FPlayerDataInterface* PlayerDataInterface = FPlayerDataInterfaceModule::Get())
 		{
-			PlayerDataStore->UpdateActivePlayers(false);
+			PlayerDataInterface->UpdateActivePlayers(false);
 		}
 	}
 }
@@ -134,6 +134,6 @@ void ADreamGameMode::InitGame(const FString& MapName, const FString& Options, FS
 			SetActorTickEnabled(true);
 		}
 		
-		//FPlayerDataStoreModule::Get()->OnAddWeaponComplete.BindUObject(this, &ADreamGameMode::OnPlayerGetWeapons);
+		//FPlayerDataInterfaceModule::Get()->OnAddWeaponComplete.BindUObject(this, &ADreamGameMode::OnPlayerGetWeapons);
 	}
 }

@@ -2,8 +2,9 @@
 
 
 #include "Projectile/DProjectileTraceable.h"
+
+#include "DProjectileComponent.h"
 #include "DrawDebugHelpers.h"
-#include "DCharacterBase.h"
 #include "GenericTeamAgentInterface.h"
 #include "ShootWeapon.h"
 #include "GameFramework/ProjectileMovementComponent.h"
@@ -19,7 +20,7 @@ void ADProjectileTraceable::Tick(float DeltaSeconds)
     Super::Tick(DeltaSeconds);
 
     FVector ActorLocation = GetActorLocation();
-
+    
     FCollisionQueryParams QueryParams;
     QueryParams.AddIgnoredActor(this);
     QueryParams.AddIgnoredActor(GetOwner());
@@ -28,26 +29,20 @@ void ADProjectileTraceable::Tick(float DeltaSeconds)
     FVector TraceEnd = ActorLocation + Projectile->Velocity.GetSafeNormal() * TrackCapsuleHalfHeight;
     
     bool bIsBlocking = GetWorld()->SweepSingleByObjectType(Hit, ActorLocation, TraceEnd, FQuat::Identity,
-                                                           ECollisionChannel::ECC_Pawn,
-                                                           FCollisionShape::MakeSphere(TrackCapsuleRadius),
+                                                           ECC_Pawn, FCollisionShape::MakeSphere(TrackCapsuleRadius),
                                                            QueryParams);
 
     if (bIsBlocking)
     {
         AActor* HitActor = Hit.GetActor();
-        if (ADCharacterBase* PawnBase = Cast<ADCharacterBase>(HitActor))
+        if (!HitActor->ActorHasTag(DreamActorTagName::Death))
         {
-            if (PawnBase->GetHealth() == 0)
+            ETeamAttitude::Type Attitude = FGenericTeamId::GetAttitude(GetWeapon()->GetOwner(), HitActor);
+            if (Attitude == ETeamAttitude::Hostile)
             {
-                return;
+                SetActorTickEnabled(false);
+                Projectile->HomingTargetComponent = HitActor->GetRootComponent();
             }
-        }
-
-        ETeamAttitude::Type Attitude = FGenericTeamId::GetAttitude(GetWeapon()->GetOwner(), HitActor);
-        if (Attitude == ETeamAttitude::Hostile)
-        {
-            SetActorTickEnabled(false);
-            Projectile->HomingTargetComponent = HitActor->GetRootComponent();
         }
     }
 }

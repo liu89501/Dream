@@ -43,7 +43,7 @@ public class Dream : ModuleRules
             "PhysicsCore",
             "OnlineSubsystem",
             "OnlineSubsystemSteam",
-            "PlayerDataStore",
+            "PlayerDataInterface",
             "AIModule"
         });
 

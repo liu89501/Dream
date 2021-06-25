@@ -5,4 +5,6 @@
 
 DEFINE_LOG_CATEGORY(LogDream)
 
-FSurfaceImpactEffect FSurfaceImpactEffect::EmptySurfaceImpactEffect;
+const FName DreamActorTagName::Teammate = TEXT("Teammate");
+const FName DreamActorTagName::Enemy = TEXT("Enemy");
+const FName DreamActorTagName::Death = TEXT("Death");

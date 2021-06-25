@@ -1,8 +1,9 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
 #include "Props/Weapon/ShootWeapon_Instant.h"
+
+#include "DGameplayStatics.h"
 #include "DreamGameInstance.h"
-#include "NiagaraComponent.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Kismet/GameplayStatics.h"
 
@@ -17,17 +18,10 @@ void AShootWeapon_Instant::HandleSpawnAmmo(const FHitResult& HitResult)
 
 	if (!bAuthority)
 	{
-		if (BulletTrace)
-		{
-			if (FVector::Distance(HitResult.ImpactPoint, HitResult.TraceStart) > 300.f)
-			{
-				UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
-                GetWorld(), BulletTrace, HitResult.TraceStart, FRotator::ZeroRotator,
-                FVector::ZeroVector, true, true, ENCPoolMethod::AutoRelease);
-
-				NC->SetVectorParameter(TraceParamName, HitResult.ImpactPoint);
-			}
-		}
+		FVector MuzzleLocation;
+		FRotator MuzzleRotation;
+		GetMuzzlePoint(MuzzleLocation, MuzzleRotation);
+		UDGameplayStatics::SpawnWeaponTrailParticles(this, TrailVfx, MuzzleLocation, HitResult.ImpactPoint);
 	}
 
 	if (HitResult.bBlockingHit)
@@ -40,7 +34,7 @@ void AShootWeapon_Instant::HandleSpawnAmmo(const FHitResult& HitResult)
 		{
 			UDreamGameInstance* GI = Cast<UDreamGameInstance>(GetGameInstance());
 			EPhysicalSurface PhysicalSurface = HitResult.PhysMaterial.IsValid() ? 
-                HitResult.PhysMaterial->SurfaceType.GetValue() : EPhysicalSurface::SurfaceType_Default;
+                HitResult.PhysMaterial->SurfaceType.GetValue() : SurfaceType_Default;
 
 			const FSurfaceImpactEffect& SurfaceEffect = GI->GetSurfaceImpactEffect(PhysicalSurface);
 

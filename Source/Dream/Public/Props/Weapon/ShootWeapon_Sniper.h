@@ -18,14 +18,14 @@ public:
 
 	AShootWeapon_Sniper();
 
-	UPROPERTY(VisibleAnywhere)
-	class UArrowComponent* ScopeViewPoint;
+	/*UPROPERTY(VisibleAnywhere)
+	USceneComponent* ScopePoint;*/
 
 	/* 瞄准时的枪口偏移 */
 	UPROPERTY(EditAnywhere, Category = SniperWeapon)
 	FVector AimMuzzleOffset;
 
-	void SetWeaponAim(bool NewAimed) override;
+	virtual void SetWeaponAim(bool NewAimed) override;
 
 protected:
 
@@ -37,10 +37,8 @@ protected:
 
 	virtual void GetMuzzlePoint(FVector& Point, FRotator& Direction) const override;
 
+	virtual void AimTimelineTick(float Value) const override;
+
 	UFUNCTION(BlueprintImplementableEvent, meta = (DisplayName = "OnAimEnded"))
 	void BP_OnAimChange();
-
-private:
-
-	FTransform LastCameraTransform;
 };

@@ -6,7 +6,7 @@
 #include "CoreMinimal.h"
 #include "DreamType.h"
 #include "DCharacterBase.h"
-#include "PlayerDataStore.h"
+#include "PlayerDataInterface.h"
 #include "DPlayerController.h"
 #include "GameFramework/Character.h"
 #include "DCharacterPlayer.generated.h"
@@ -14,21 +14,17 @@
 class AShootWeapon;
 class UDModuleBase;
 
-
-USTRUCT(BlueprintType)
-struct DREAM_API FMontageSet
+UENUM(BlueprintType)
+enum class EMovingDirection : uint8
 {
-	GENERATED_USTRUCT_BODY()
-
-public:
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	UAnimMontage* ShootAnim;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	UAnimMontage* ReloadAnim;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	UAnimMontage* EquipAnim;
-
+	F,
+	FL,
+	FR,
+	L,
+	R,
+	BL,
+	BR,
+	B
 };
 
 UCLASS()
@@ -48,13 +44,13 @@ public:
 	class USpringArmComponent* TPCameraArm;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-	class UAudioComponent* WalkAudio;
+	class UAudioComponent* AudioComponent;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	class USceneCaptureComponent2D* CharacterCapture;
-
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-	class UPerkEffectSystemComponent* PerkEffectSystem;
+	class UDirectionalLightComponent* CaptureLight;
 
 	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CharacterPlayer)
@@ -62,37 +58,43 @@ public:
 	/** Base look up/down rate, in deg/sec. Other scaling may affect final rate. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CharacterPlayer)
 	float BaseLookUpRate;
+
+	/** 人物的Yaw角度限制 超过这个范围会旋转自身 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CharacterPlayer)
+	float MinRotateLimit;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CharacterPlayer)
+	float MaxRotateLimit;
+
+
+	/** begin ======================= 摄像机瞄准插值参数 ============================ */
 	
 	/* 瞄准时摄像机弹簧臂得偏移量 */
-	UPROPERTY(EditAnywhere, Category = CharacterPlayer)
-	FVector CameraArmOffset;
-	UPROPERTY(EditAnywhere, Category = CharacterPlayer)
-	FVector CameraArmAimOffset;
+	UPROPERTY(BlueprintReadOnly, Category = "CharacterPlayer|Camera")
+	FVector DefaultArmSocketOffset;
+	/** 瞄准时摄像机的位置 */
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "CharacterPlayer|Camera")
+	FVector AimedArmSocketOffset;
+
+	UPROPERTY(BlueprintReadOnly, Category = "CharacterPlayer|Camera")
+	FRotator DefaultCameraRotation;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "CharacterPlayer|Camera")
+	FRotator AimedCameraRotation;
+
+	/** end ======================= 摄像机瞄准插值参数 ============================ */
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = CharacterPlayer)
 	float SprintSpeed;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = CharacterPlayer)
+	float AimMoveSpeed;
 	UPROPERTY(BlueprintReadWrite, Category = CharacterPlayer)
 	float NormalSpeed;
 
 	UPROPERTY(BlueprintReadWrite, Category = "CharacterPlayer")
 	bool bAimed;
-	UPROPERTY(BlueprintReadWrite, Category = "CharacterPlayer")
+	UPROPERTY(BlueprintReadWrite, Replicated, Category = "CharacterPlayer")
 	bool bSprinted;
-	UPROPERTY(BlueprintReadWrite, Category = "CharacterPlayer")
-	bool bCanTurnPawn;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Animation")
-	UAnimMontage* CombatToRelax;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Animation")
-	float CombatToRelaxAttachWaitTime;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Animation")
-	UAnimMontage* RelaxToCombat;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Animation")
-	float RelaxToCombatAttachWaitTime;
 	
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Animation")
-	TMap<TEnumAsByte<EWeaponAnimGroup::Type>, FMontageSet> WeaponMontage;
-
 	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|UI")
 	TSubclassOf<class UPlayerHUD> PlayerHUDClass;
 
@@ -101,12 +103,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Weapon")
 	FName WeaponSocketName;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Weapon")
-	FName WeaponRelaxSocketName;
 	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|Weapon")
-	FName LeftShoulderSocketName;
-	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|Weapon")
-	FName RightShoulderSocketName;
+	FName WeaponHolsterSocketName;
 
 	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|Weapon")
 	float OutOfCombatTime;
@@ -170,9 +168,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "CharacterPlayer")
 	void SetPlayerHUDVisible(bool bVisible);
 
-	UFUNCTION(server, reliable)
-	void ServerSetCombatStatus(bool bNewCombatStatus);
-
+	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
+	EMovingDirection GetMovingDirection() const;
+	
 	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	FRotator GetRemoteControllerRotation() const;
 
@@ -206,6 +204,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	void EquippedModule(int32 Index, TSubclassOf<UDModuleBase> ModuleClass);
 
+	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
+	TArray<TSubclassOf<UDModuleBase>> GetModules() const;
+
 	/*UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	void ClearCombatStatus();*/
 
@@ -214,16 +215,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category=CharacterPlayer)
 	void SwitchWeapon(int32 NewWeaponIndex);
-
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category=CharacterPlayer)
-	void ToggleActiveWeaponStatus();
-
-	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
-	void ActivateCharacterCapture();
-	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
-	void DeactivateCharacterCapture();
-	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
-	void ResetCharacterWeaponCapture();
 
 	/**
 	* 	添加一个永不消失的Sprite(除非手动删除)到小地图中
@@ -238,6 +229,13 @@ public:
 	UFUNCTION(BlueprintCallable, Category="CharacterPlayer|MiniMap")
 	void ClearInfiniteActors();
 
+	UFUNCTION(BlueprintCallable, Category="CharacterPlayer|CharacterCapture")
+	void ActivateCharacterCapture();
+	UFUNCTION(BlueprintCallable, Category="CharacterPlayer|CharacterCapture")
+	void DeactivateCharacterCapture();
+	UFUNCTION(BlueprintCallable, Category="CharacterPlayer|CharacterCapture")
+	void ResetCharacterCapture();
+
 	/**
 	 * @param Location 创建widget组件的世界位置
 	 * @param DamageValue 伤害值
@@ -250,25 +248,38 @@ public:
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	void ShowHitEnemyTips(bool bEnemyDeath);
 
-public:
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
+	float GetCtrlYawDeltaCount() const;
 
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
+	void UpdateCharacterAttributes(const FEquipmentAttributes& OldAttrs, const FEquipmentAttributes& NewAttrs);
+
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	void SetActiveWeapon(AShootWeapon* NewWeapon);
 
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	void SetCombatStatus(bool bNewCombatStatus);
 
 	bool GetMiniMapTips(TArray<FMiniMapData>& Data);
 
-	const FMontageSet* GetCurrentActionMontage() const;
+	const struct FCharacterMontage* GetCurrentActionMontage() const;
 
-	FName GetWeaponSlotNameFromIndex(int32 WeaponSlotIndex) const
-	{
-		return WeaponSlotIndex == 0 ? WeaponRelaxSocketName : WeaponSlotIndex == 1 ? LeftShoulderSocketName : RightShoulderSocketName;
-	}
+	/** Camera 相关 */
+	void SetCameraFieldOfView(float NewFOV);
+	void CameraAimTransformLerp(float Alpha);
+	
+	/** GameplayAbility 相关 */
 
+	/**
+	 *	通过GameplayTag 触发Ability
+	 *	@param Target Ability应用的目标 如果有的话 没有就是自身
+	 */
+	void TriggerAbilityFromTag(const FGameplayTag& Tag, AActor* Target);
+	
 protected:
 
-	UFUNCTION()
-	void OnRep_CombatStatus();
+	/*UFUNCTION()
+	void OnRep_CombatStatus();*/
 
 	UFUNCTION()
 	void OnRep_ActiveWeapon();
@@ -276,6 +287,7 @@ protected:
 	/** 开火 */
 	void StartFire();
 	void StopFire();
+	void ConfirmFire();
 	void HandleFire();
 
 	/** 换弹夹 */
@@ -302,6 +314,9 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerEquippedModule(int32 Index, TSubclassOf<UDModuleBase> ModuleClass);
 
+	UFUNCTION(server, reliable)
+    void ServerSetCombatStatus(bool bNewCombatStatus);
+
 	/** 瞄准 */
 	void StartAim();
 	void StopAim();
@@ -327,6 +342,7 @@ protected:
 	/** 跳 */
 	void StartJump();
 	void StopJump();
+	void SwitchCrouch();
 
 	/** 下蹲 */
 	void StartCrouch();
@@ -359,6 +375,13 @@ protected:
 
 	virtual void OnRep_PlayerState() override;
 
+	/** 状态切换相关 */
+	void ModStatusToRelax();
+	void AttemptSetStatusToRelax();
+	void ClearCombatStatusCounter();
+
+	virtual void Tick(float DeltaSeconds) override;
+
 	// Called to bind functionality to input
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
@@ -371,11 +394,15 @@ protected:
 
 	virtual void HealthChanged(const FOnAttributeChangeData& AttrData) override;
 
+	virtual void HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle) override;
+
 	UFUNCTION(Client, reliable)
 	void ClientHitEnemy(const FDamageTargetInfo& DamageInfo);
-	virtual void HitEnemy(const FDamageTargetInfo& DamageInfo) override;
+	virtual void HitEnemy(const FDamageTargetInfo& DamageInfo, ADCharacterBase* HitTarget) override;
 
 	virtual int32 GetPickUpMagazineNumber(EAmmoType AmmoType) const;
+
+	void SetMeshLightChannel(int32 LightChannel = 0);
 
 	/* 尝试将Pawn状态修改未空闲 */
 	/*void AttemptSetStatusToRelax();
@@ -404,23 +431,25 @@ protected:
 	virtual void OnActiveGameplayEffectTimeChange(FActiveGameplayEffectHandle Handle, float NewStartTime, float NewDuration);
 	virtual void OnActiveGameplayEffectRemoved(const FActiveGameplayEffect& Effect);
 
-	UPROPERTY(Replicated)
-	FRotator ReplicatedCtrlRotation;
+protected:
 
 	UPROPERTY(ReplicatedUsing = OnRep_ActiveWeapon)
 	AShootWeapon* ActiveWeapon;
 
-	UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_CombatStatus, Category = CharacterPlayer)
+	UPROPERTY(BlueprintReadOnly, Replicated, Category = CharacterPlayer)
 	bool bCombatStatus;
 
 	UPROPERTY()
 	EWeaponStatus WeaponStatus;
 
 	UPROPERTY(EditAnywhere)
-	TArray<FAbilitySlot> DefaultAbilitySlot;
+	TArray<TSubclassOf<class UGameplayAbility>> DefaultAbilitySlot;
 	
 	UPROPERTY()
-	TArray<FAbilitySlot> AbilitySlot;
+	TArray<TSubclassOf<class UGameplayAbility>> AbilitySlot;
+
+	UPROPERTY(Replicated)
+	FRotator RemoteCtrlRotation;
 
 private:
 
@@ -459,9 +488,12 @@ private:
 	 */
 	TArray<TSubclassOf<UDModuleBase>> EquippedModules;
 
+	/** 战斗状态Handle */
 	FTimerHandle Handle_CombatStatus;
-	FTimerHandle Handle_CanTurn;
+	
+	//FTimerHandle Handle_CanTurn;
 
+	/** 雷达扫描handle */
 	FTimerHandle Handle_RadarScan;
 
 	/* 武器相关 */
@@ -470,7 +502,15 @@ private:
 	FTimerHandle Handle_Equip;
 
 	/* 记录进入战斗状态的次数 */
-	//FThreadSafeCounter CombatStatusCounter;
+	FThreadSafeCounter CombatStatusCounter;
+	
 	/* 记录开火按键是否按下 */
 	bool bFireButtonDown;
+
+	/** 控制器 yaw 的累计值 */	
+	float CtrlYawDeltaCount;
+	float PrevCtrlYaw;
+
+	FVector2D MovingInput;
 };
+

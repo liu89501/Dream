@@ -11,9 +11,11 @@
 #include "PDSAsync_RunServer.h"
 #include "AIController.h"
 #include "DCharacterPlayer.h"
+#include "DGameplayEffectUIData.h"
 #include "DreamAttributeSet.h"
+#include "DreamGameplayPerk.h"
 #include "DreamGameplayType.h"
-#include "GameplayAbility.h"
+#include "DreamGameplayAbility.h"
 #include "MatchmakingCallProxy.h"
 #include "NavigationSystem.h"
 #include "UserWidget.h"
@@ -23,14 +25,17 @@
 #include "OnlineSessionInterface.h"
 #include "OnlineSessionSettings.h"
 #include "PanelWidget.h"
-#include "GameplayEffectTypes.h"
 #include "PropsInterface.h"
 #include "GameFramework/PhysicsVolume.h"
 #include "PhysicsEngine/PhysicsSettings.h"
+#include "NiagaraComponent.h"
+#include "NiagaraFunctionLibrary.h"
+#include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetMathLibrary.h"
 
-TSubclassOf<AShootWeapon> UDGameplayStatics::LoadWeaponClass(FString QualifiedName)
+UClass* UDGameplayStatics::LoadUClass(FString QualifiedName)
 {
-	return LoadClass<AActor>(nullptr, *QualifiedName);
+	return LoadClass<UObject>(nullptr, *QualifiedName);
 }
 
 FString UDGameplayStatics::GetClassPathName(TSubclassOf<UObject> ObjectClass)
@@ -38,18 +43,53 @@ FString UDGameplayStatics::GetClassPathName(TSubclassOf<UObject> ObjectClass)
 	return ObjectClass->GetPathName();
 }
 
-bool UDGameplayStatics::GetClassPropsInfo(const FString& ClassString, FPropsInfo& PropsInfo)
+const FPropsInfo& UDGameplayStatics::GetPropsInfoFromClassName(const FString& ClassString)
 {
 	UClass* LoadedClass = LoadClass<UObject>(nullptr, *ClassString);
-	if (LoadedClass)
+	return LoadedClass ? GetPropsInfoFromClass(LoadedClass) : FPropsInfo::EmptyPropsInfo;
+}
+
+const FEquipmentAttributes& UDGameplayStatics::GetEquipmentAttributesFromClassName(const FString& ClassString)
+{
+	UClass* LoadedClass = LoadClass<UObject>(nullptr, *ClassString);
+	return LoadedClass ? GetEquipmentAttributesFromClass(LoadedClass) : FEquipmentAttributes::EmptyAttributes;
+}
+
+const FEquipmentAttributes& UDGameplayStatics::GetEquipmentAttributesFromClass(UClass* PropsClass)
+{
+	if (PropsClass)
 	{
-		if (LoadedClass->ImplementsInterface(IPropsInterface::UClassType::StaticClass()))
+		if (IPropsInterface* PropsInterface = Cast<IPropsInterface>(PropsClass->GetDefaultObject()))
 		{
-			PropsInfo = IPropsInterface::Execute_GetPropsInfo(LoadedClass->GetDefaultObject());
-			return true;
+			return PropsInterface->GetEquipmentAttributes();
 		}
 	}
-	return false;
+	return FEquipmentAttributes::EmptyAttributes;
+}
+
+FLinearColor UDGameplayStatics::GetGameThemeColor(UObject* WorldContextObject)
+{
+	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull))
+	{
+		if (UDreamGameInstance* Instance = World->GetGameInstance<UDreamGameInstance>())
+		{
+			return Instance->ThemeColor;
+		}
+	}
+
+	return FLinearColor::White;
+}
+
+const FPropsInfo& UDGameplayStatics::GetPropsInfoFromClass(UClass* PropsClass)
+{
+	if (PropsClass)
+	{
+		if (IPropsInterface* PropsInterface = Cast<IPropsInterface>(PropsClass->GetDefaultObject()))
+		{
+			return PropsInterface->GetPropsInfo();
+		}
+	}
+	return FPropsInfo::EmptyPropsInfo;
 }
 
 bool UDGameplayStatics::GetQualityInfo(UObject* WorldContextObject, EPropsQuality Quality, FQualityInfo& QualityInfo)
@@ -106,28 +146,6 @@ FName UDGameplayStatics::GetInputActionKeyName(APlayerController* PlayerControll
 	}
 
 	return NAME_None;
-}
-
-bool UDGameplayStatics::SetFocus(UWidget* Widget)
-{
-	if (!Widget)
-	{
-		return false;
-	}
-
-	if (APlayerController* PlayerController = Widget->GetOwningPlayer())
-	{
-		if (ULocalPlayer* LocalPlayer = PlayerController->GetLocalPlayer())
-		{
-			TSharedRef<SWidget> SafeWidget = Widget->TakeWidget();
-			FReply& DelayedSlateOperations = LocalPlayer->GetSlateOperations();
-			DelayedSlateOperations.SetUserFocus(SafeWidget);
-
-			return true;
-		}
-	}
-
-	return false;
 }
 
 void UDGameplayStatics::ServerTravel(UObject* WorldContextObject, const FString& URL, bool bAbsolute)
@@ -204,6 +222,7 @@ bool UDGameplayStatics::LineTraceAndSendEvent(
 
 	FGameplayEventData Payload;
 	Payload.TargetData = FGameplayAbilityTargetDataHandle(new FGameplayAbilityTargetData_SingleTargetHit(OutHit));
+	Payload.Instigator = Source;
 	AbilitySystem->HandleGameplayEvent(InEventTag, &Payload);
 	return bHit;
 }
@@ -266,6 +285,22 @@ float UDGameplayStatics::GetDefaultGravityZ(UObject* WorldContextObject)
 	return UPhysicsSettings::Get()->DefaultGravityZ;
 }
 
+void UDGameplayStatics::AddIconToPlayerMinimap(UObject* WorldContextObject, AActor* Actor)
+{
+	if (ADCharacterPlayer* PlayerCharacter = Cast<ADCharacterPlayer>(UGameplayStatics::GetPlayerCharacter(WorldContextObject, 0)))
+	{
+		PlayerCharacter->AddInfiniteActor(Actor);
+	}
+}
+
+void UDGameplayStatics::RemoveIconToPlayerMinimap(UObject* WorldContextObject, AActor* Actor)
+{
+	if (ADCharacterPlayer* PlayerCharacter = Cast<ADCharacterPlayer>(UGameplayStatics::GetPlayerCharacter(WorldContextObject, 0)))
+	{
+		PlayerCharacter->RemoveInfiniteActor(Actor);
+	}
+}
+
 void UDGameplayStatics::ReplaceWidgetChildAt(UPanelWidget* ParentWidget, int32 ChildIndex, UWidget* NewWidget)
 {
 	if (ParentWidget)
@@ -323,18 +358,12 @@ void UDGameplayStatics::SpawnDamageWidgets(AActor* TargetActor, const FGameplayC
 	}*/
 }
 
-FDreamGameplayEffectContext* UDGameplayStatics::MakeDreamEffectContextHandle(AActor* SourceActor,
-                                                                             UCurveFloat* DamageFalloffCurve, const FHitResult& Hit, const FVector& Origin)
+FDreamGameplayEffectContext* UDGameplayStatics::MakeDreamEffectContext(AActor* SourceActor, float DamageFalloff, const FHitResult& Hit, const FVector& Origin)
 {
 	if (UAbilitySystemComponent* AbilitySystem = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(SourceActor))
 	{
 		FDreamGameplayEffectContext* EffectContext = new FDreamGameplayEffectContext();
-		if (DamageFalloffCurve)
-		{
-			float FloatValue = DamageFalloffCurve->GetFloatValue(FVector::Distance(Origin, Hit.ImpactPoint));
-			EffectContext->SetFalloffDamage(FloatValue);
-		}
-		
+		EffectContext->SetFalloffDamage(DamageFalloff);
 		EffectContext->AddInstigator(AbilitySystem->GetOwnerActor(), AbilitySystem->GetAvatarActor());
 		EffectContext->AddOrigin(Origin);
 		EffectContext->AddHitResult(Hit);
@@ -345,6 +374,76 @@ FDreamGameplayEffectContext* UDGameplayStatics::MakeDreamEffectContextHandle(AAc
 	DREAM_NLOG(Error, TEXT("未能正确的创建FDreamGameplayEffectContext结构体, 原因：SourceActor不能获取到AbilitySystem"));
 
 	return nullptr;
+}
+
+FGameplayEffectContextHandle UDGameplayStatics::MakeDreamEffectContextHandle(AActor* SourceActor, float DamageFalloff, const FHitResult& Hit, const FVector& Origin)
+{
+	return FGameplayEffectContextHandle(MakeDreamEffectContext(SourceActor, DamageFalloff, Hit, Origin));
+}
+
+UDGameplayEffectUIData* UDGameplayStatics::GetGameplayUIData(TSubclassOf<UDreamGameplayAbility> AbilityClass)
+{
+	if (AbilityClass)
+	{
+		return AbilityClass->GetDefaultObject<UDreamGameplayAbility>()->AbilityUIData;
+	}
+	return nullptr;
+}
+
+bool UDGameplayStatics::ApplyGameplayEffectToAllActors(UGameplayAbility* Ability, const FGameplayEventData& EventData, TSubclassOf<UGameplayEffect> EffectClass)
+{
+	if (Ability == nullptr)
+	{
+		DREAM_NLOG(Error, TEXT("Ability Invalid"));
+		return false;
+	}
+	
+	if (EventData.TargetData.Data.Num() == 0)
+	{
+		DREAM_NLOG(Error, TEXT("EventData.TargetData Is Empty"));
+		return false;
+	}
+
+	TSharedPtr<FGameplayAbilityTargetData> TargetData = EventData.TargetData.Data[0];
+
+	if (!TargetData.IsValid())
+	{
+		DREAM_NLOG(Error, TEXT("TargetData Invalid"));
+		return false;
+	}
+
+	UAbilitySystemComponent* SourceComponent = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(EventData.Instigator);
+	if (!SourceComponent)
+	{
+		DREAM_NLOG(Verbose, TEXT("SourceComponent Invalid"));
+		return false;
+	}
+
+	TArray<TWeakObjectPtr<AActor>> TargetActors = TargetData->GetActors();
+
+	for (TWeakObjectPtr<AActor> Target : TargetActors)
+	{
+		if (!Target.IsValid())
+		{
+			continue;
+		}
+
+		UAbilitySystemComponent* TargetComponent = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Target.Get());
+		
+		if (TargetComponent == nullptr)
+		{
+			continue;
+		}
+		
+		FGameplayEffectContextHandle EffectContextHandle = SourceComponent->MakeEffectContext();
+		EffectContextHandle.SetAbility(Ability);
+		EffectContextHandle.AddOrigin(TargetData->GetOrigin().GetLocation());
+        
+		UGameplayEffect* GE = EffectClass->GetDefaultObject<UGameplayEffect>();
+		SourceComponent->ApplyGameplayEffectToTarget(GE, TargetComponent, Ability->GetAbilityLevel(), EffectContextHandle);
+	}
+
+	return true;
 }
 
 APlayerController* UDGameplayStatics::GetActorPlayerController(AActor* Actor)
@@ -430,6 +529,34 @@ void UDGameplayStatics::CalculateFBDirection(const FVector& Velocity, const FRot
 			}
 		}
 
-		Angle = ForwardDeltaDegree * 2;
+		Angle = ForwardDeltaDegree;
 	}
+}
+
+void UDGameplayStatics::SpawnWeaponTrailParticles(UObject* WorldContextObject, const FWeaponTrailVFX& TrailVfx, const FVector& StartLocation, const FVector& EndLocation)
+{
+	if (TrailVfx.TrailEffect)
+	{
+		if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull))
+		{
+			FRotator Rotation = UKismetMathLibrary::FindLookAtRotation(StartLocation, EndLocation);
+			FVector SpawnLocation = StartLocation + Rotation.RotateVector(TrailVfx.SpawnPositionOffset);
+
+			float Distance = FVector::Distance(SpawnLocation, EndLocation);
+			if (Distance > TrailVfx.MinimumSpawnDistance)
+			{
+				UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAtLocation(
+                    World, TrailVfx.TrailEffect, SpawnLocation, FRotator::ZeroRotator,
+                    FVector::ZeroVector, true, true, ENCPoolMethod::AutoRelease);
+				
+				NC->SetVectorParameter(TrailVfx.TrailEndLocationParamName, EndLocation);
+				NC->SetFloatParameter(TrailVfx.TrailLifeTimeParamName, Distance / TrailVfx.TrailFlyingSpeed);
+			}
+		}
+	}
+}
+
+int32 UDGameplayStatics::GetWidgetZOrder(TEnumAsByte<EWidgetOrder::Type> Type)
+{
+	return static_cast<uint8>(Type.GetValue());
 }

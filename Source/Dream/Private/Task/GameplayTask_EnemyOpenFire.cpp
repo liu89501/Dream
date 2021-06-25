@@ -2,14 +2,15 @@
 
 
 #include "GameplayTask_EnemyOpenFire.h"
-#include "DShooterAIModuleComponent.h"
+
+#include "DEnemyShooter.h"
 #include "GameplayTasksComponent.h"
 #include "TimerManager.h"
 #include "Engine/World.h"
 #include "Kismet/KismetMathLibrary.h"
 
 
-UGameplayTask_EnemyOpenFire* UGameplayTask_EnemyOpenFire::EnemyOpenFire(ADEnemyBase* Shooter, AActor* InTargetPawn, float InIntervalTime, int InMinNumOfTimes, int InMaxNumOfTimes)
+UGameplayTask_EnemyOpenFire* UGameplayTask_EnemyOpenFire::EnemyOpenFire(ADEnemyShooter* Shooter, AActor* InTargetPawn, float InIntervalTime, int InMinNumOfTimes, int InMaxNumOfTimes)
 {
 	if (Shooter)
 	{
@@ -17,15 +18,11 @@ UGameplayTask_EnemyOpenFire* UGameplayTask_EnemyOpenFire::EnemyOpenFire(ADEnemyB
 
 		if (Task)
 		{
-			if (UDShooterAIModuleComponent* ShooterModule = Shooter->FindComponentByClass<UDShooterAIModuleComponent>())
-			{
-				Task->TargetPawn = InTargetPawn;
-				Task->ShooterModuleComponent = ShooterModule;
-				Task->IntervalTime = InIntervalTime;
-				Task->ActualNumberOfTimes = UKismetMathLibrary::RandomIntegerInRange(InMinNumOfTimes, InMaxNumOfTimes);
-
-				return Task;
-			}
+			Task->OwnerEnemy = Shooter;
+			Task->TargetPawn = InTargetPawn;
+			Task->IntervalTime = InIntervalTime;
+			Task->ActualNumberOfTimes = UKismetMathLibrary::RandomIntegerInRange(InMinNumOfTimes, InMaxNumOfTimes);
+			return Task;
 		}
 	}
 	
@@ -41,17 +38,14 @@ void UGameplayTask_EnemyOpenFire::AbortTask()
 
 void UGameplayTask_EnemyOpenFire::Activate()
 {
-	GetWorld()->GetTimerManager().SetTimer(Handle_OpenFire, this, &UGameplayTask_EnemyOpenFire::OnFireComplete, IntervalTime, true, 0.f);
+	GetWorld()->GetTimerManager().SetTimer(Handle_OpenFire, this, &UGameplayTask_EnemyOpenFire::OnFiring, IntervalTime, true, 0.f);
 }
 
-void UGameplayTask_EnemyOpenFire::OnFireComplete()
+void UGameplayTask_EnemyOpenFire::OnFiring()
 {
-	ActualNumberOfTimes--;
+	OwnerEnemy->OpenFire(TargetPawn->GetActorLocation());
 
-	if (ShooterModuleComponent && TargetPawn)
-	{
-		ShooterModuleComponent->OpenFire(TargetPawn->GetActorLocation());
-	}
+	ActualNumberOfTimes--;
 
 	if (ActualNumberOfTimes == 0)
 	{

@@ -18,5 +18,6 @@ class DREAM_API UDGE_DamageHealthSteal : public UGameplayEffect
 
 public:
 
-	static FGameplayTag HealthStealSetByCallerTag;
+	static FGameplayTag HSHealthSetByCallerTag;
+	static FGameplayTag HSShieldSetByCallerTag;
 };

@@ -4,10 +4,9 @@
 
 #include "CoreMinimal.h"
 
-#include "DPlayerController.h"
 #include "DreamType.h"
 #include "UdpSocketReceiver.h"
-#include "PlayerDataStoreType.h"
+#include "PlayerDataInterfaceType.h"
 #include "GameFramework/GameModeBase.h"
 #include "DreamGameMode.generated.h"
 

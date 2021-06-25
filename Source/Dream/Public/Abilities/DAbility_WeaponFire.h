@@ -10,7 +10,7 @@
  * 
  */
 UCLASS()
-class DREAM_API UDAbility_WeaponFire : public UDreamGameplayAbility
+class DREAM_API UDAbility_WeaponFire : public UGameplayAbility
 {
     GENERATED_BODY()
 

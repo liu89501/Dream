@@ -1,12 +1,12 @@
 
 #include "K2Node_SwitchWeapon.h"
 #include "PDSAsync_SwitchWeapon.h"
-#include "DreamAsyncProxy.h"
+#include "PlayerDataInterfaceAsyncProxy.h"
 
 UK2Node_SwitchWeapon::UK2Node_SwitchWeapon()
 {
-	ProxyFactoryFunctionName = GET_FUNCTION_NAME_CHECKED(UDreamAsyncProxy, CreatePDSAsyncSwitchWeapon);
-	ProxyFactoryClass = UDreamAsyncProxy::StaticClass();
+	ProxyFactoryFunctionName = GET_FUNCTION_NAME_CHECKED(UPlayerDataInterfaceAsyncProxy, CreatePDSAsyncSwitchWeapon);
+	ProxyFactoryClass = UPlayerDataInterfaceAsyncProxy::StaticClass();
 	ProxyClass = UPDSAsync_SwitchWeapon::StaticClass();
 }
 

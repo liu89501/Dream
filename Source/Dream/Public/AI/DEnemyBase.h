@@ -6,6 +6,7 @@
 #include "DreamType.h"
 #include "ShootWeapon.h"
 #include "Character/DCharacterBase.h"
+#include "Perception/AIPerceptionTypes.h"
 #include "Perception/AIPerceptionListenerInterface.h"
 #include "DEnemyBase.generated.h"
 
@@ -50,38 +51,49 @@ public:
 
 	UPROPERTY(VisibleAnywhere)
 	class UHealthWidgetComponent* HealthUI;
+	
 
-public:
-
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AISettings)
+	class UBehaviorTree* BehaviorTree;
+	
 	/**
 	 * 被击杀时的奖励
 	 */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AIModule)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AISettings)
 	FReward Reward;
 
-	UPROPERTY(EditAnywhere, Category = "Enemy|Abilities")
+	UPROPERTY(EditAnywhere, Category = "AISettings|Abilities")
 	UDataTable* DefaultAttributes;
 
 	UPROPERTY(BlueprintReadOnly)
 	FVector SpawnLocation;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AIModule)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AISettings)
 	float HealthUIShowSecond;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AIModule)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AISettings)
 	TArray<TSubclassOf<class UGameplayAbility>> OwningAbilities;
 
 	/**
 	 * 	AI最大的巡逻范围, 相对于 SpawnLocation
 	 */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AIModule)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AISettings)
 	float MaxPatrolRange;
 	
+	UPROPERTY(EditDefaultsOnly, Category = AISettings)
+	FName BlackboardName_HostileTarget;
+
 	/**
-	 *  发现敌人时的奔跑速度
-	 */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AIModule)
-	float RunSpeed;
+	* 触发Team感知事件的直径
+	*/
+	UPROPERTY(EditDefaultsOnly, Category = AISettings)
+	float NotifyTeamDiameter;
+
+	UPROPERTY(BlueprintReadOnly, Category = AISettings)
+	float WalkSpeed;
+
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = AISettings)
+	float JogSpeed;
 
 public:
 
@@ -101,8 +113,7 @@ protected:
 
 	virtual void BeginPlay() override;
 
-	virtual void HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle,
-        ADCharacterBase* SourceCharacter, const FGameplayTagContainer& AssetTags) override;
+	virtual void HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle) override;
 	
 	virtual UAIPerceptionComponent* GetPerceptionComponent() override;
 
@@ -112,6 +123,16 @@ protected:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	virtual void ActivateHostile(ADCharacterBase* Hostile, bool bTriggerTeamStimulus = true);
+
+	virtual void RefreshActiveHostile();
+
+	virtual void LostAllHostileTarget();
+
+	virtual void OnTargetPerceptionUpdated(ADCharacterBase* StimulusPawn, struct FAIStimulus Stimulus);
+
+	void HostileTargetDestroy(ADCharacterBase* DestroyedActor);
+
 protected:
 
 	UPROPERTY()
@@ -120,10 +141,16 @@ protected:
 	UPROPERTY()
 	ADAIGenerator* OwnerAIGenerator;
 
+	UPROPERTY()
+	class AAIController* AIController;
+
 private:
 
 	FTimerHandle Handle_ShowUI;
 
 	FDelegateHandle HostileDeathHandle;
+
+	UFUNCTION()
+    void OnTargetPerceptionUpdated0(AActor* Actor, FAIStimulus Stimulus);
 	
 };

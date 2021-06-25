@@ -2,6 +2,7 @@
 
 #include "DProjectile.h"
 #include "DCharacterPlayer.h"
+#include "DProjectileComponent.h"
 #include "DreamGameInstance.h"
 #include "ShootWeapon.h"
 #include "UnrealNetwork.h"
@@ -17,11 +18,11 @@ ADProjectile::ADProjectile()
     SphereCollision->SetCollisionObjectType(Collision_ObjectType_Projectile);
 
     SphereCollision->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-    SphereCollision->SetCollisionResponseToAllChannels(ECollisionResponse::ECR_Block);
-    SphereCollision->SetCollisionResponseToChannel(Collision_ObjectType_Projectile, ECollisionResponse::ECR_Ignore);
-    SphereCollision->SetCollisionResponseToChannel(Collision_ObjectType_Weapon, ECollisionResponse::ECR_Ignore);
-    SphereCollision->SetCollisionResponseToChannel(ECollisionChannel::ECC_Visibility, ECollisionResponse::ECR_Ignore);
-    SphereCollision->SetCollisionResponseToChannel(ECollisionChannel::ECC_Camera, ECollisionResponse::ECR_Ignore);
+    SphereCollision->SetCollisionResponseToAllChannels(ECR_Block);
+    SphereCollision->SetCollisionResponseToChannel(Collision_ObjectType_Projectile, ECR_Ignore);
+    SphereCollision->SetCollisionResponseToChannel(Collision_ObjectType_Weapon, ECR_Ignore);
+    SphereCollision->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);
+    SphereCollision->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 
     SphereCollision->OnComponentHit.AddDynamic(this, &ADProjectile::OnProjectileComponentHit);
 
@@ -33,7 +34,7 @@ ADProjectile::ADProjectile()
     bReplicates = true;
     SetReplicatingMovement(true);
 
-    Projectile = CreateDefaultSubobject<UProjectileMovementComponent>(TEXT("Projectile"));
+    Projectile = CreateDefaultSubobject<UDProjectileComponent>(TEXT("Projectile"));
     Projectile->MaxSpeed = 10000.f;
     Projectile->InitialSpeed = 10000.f;
     Projectile->ProjectileGravityScale = .6f;
@@ -88,7 +89,7 @@ void ADProjectile::OnRep_Impact()
             UWorld* World = GetWorld();
 
             bool bHit = World->SweepSingleByChannel(HitInfo, Location, Location + 2.f, FQuat::Identity,
-                                                    ECollisionChannel::ECC_Visibility,
+                                                    ECC_Visibility,
                                                     FCollisionShape::MakeSphere(
                                                         SphereCollision->GetScaledSphereRadius() + 8.f), CollisionQuery);
 
@@ -137,6 +138,8 @@ void ADProjectile::OnProjectileComponentHit(UPrimitiveComponent* HitComponent, A
                                             UPrimitiveComponent* OtherComp, FVector NormalImpulse,
                                             const FHitResult& Hit)
 {
+    // Authority Only
+    
     if (bImpact)
     {
         return;

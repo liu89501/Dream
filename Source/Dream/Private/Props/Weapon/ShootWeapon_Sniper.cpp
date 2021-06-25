@@ -4,12 +4,12 @@
 #include "Props/Weapon/ShootWeapon_Sniper.h"
 #include "Camera/CameraComponent.h"
 #include "Character/DCharacterPlayer.h"
-#include "Components/ArrowComponent.h"
+#include "Character/DPlayerCameraManager.h"
 
 AShootWeapon_Sniper::AShootWeapon_Sniper()
 {
-	ScopeViewPoint = CreateDefaultSubobject<UArrowComponent>(TEXT("ScopeViewPoint"));
-	ScopeViewPoint->SetupAttachment(RootComponent);
+	/*ScopePoint = CreateDefaultSubobject<USceneComponent>(TEXT("ScopePoint"));
+	ScopePoint->SetupAttachment(RootComponent);*/
 }
 
 void AShootWeapon_Sniper::PostInitializeComponents()
@@ -30,20 +30,13 @@ void AShootWeapon_Sniper::SetWeaponEnable(bool bEnable)
 void AShootWeapon_Sniper::OnAimEnded()
 {
 	BP_OnAimChange();
-
-	if (ADCharacterPlayer* Shooter = GetOwningShooter())
+	if (bAimed)
 	{
-		if (bAimed)
-		{
-			Shooter->TPCamera->SetWorldTransform(ScopeViewPoint->GetComponentTransform());
-			WeaponMesh->SetVisibility(false, true);
-		}
-		else
-		{
-			WeaponMesh->SetVisibility(true, true);
-			Shooter->TPCamera->SetRelativeTransform(LastCameraTransform);
-			LastCameraTransform = Shooter->TPCamera->GetRelativeTransform();
-		}
+		GetOwningShooter()->GetRootComponent()->SetVisibility(false, true);
+	}
+	else
+	{
+		GetOwningShooter()->GetRootComponent()->SetVisibility(true, true);
 	}
 }
 
@@ -54,25 +47,20 @@ void AShootWeapon_Sniper::SetWeaponAim(bool NewAimed)
 
 void AShootWeapon_Sniper::GetMuzzlePoint(FVector& Point, FRotator& Direction) const
 {
-	if (bAimed)
+	ADCharacterPlayer* Shooter = GetOwningShooter();
+	if (Shooter->IsLocallyControlled() && bAimed)
 	{
-		ADCharacterPlayer* Shooter = GetOwningShooter();
-		if (Shooter && Shooter->IsLocallyControlled())
-		{
-			Direction = Shooter->TPCamera->GetComponentRotation();
-			Point = Shooter->TPCamera->GetComponentLocation() + Direction.RotateVector(AimMuzzleOffset);
-			return;
-		}
+		Direction = Shooter->TPCamera->GetComponentRotation();
+		Point = Shooter->TPCamera->GetComponentLocation() + Direction.RotateVector(AimMuzzleOffset);
 	}
-
-	Super::GetMuzzlePoint(Point, Direction);
+	else
+	{
+		Super::GetMuzzlePoint(Point, Direction);
+	}
 }
 
-//void AShootWeapon_Sniper::AimTimelineTick(float Value)
-//{
-//	Super::AimTimelineTick(Value);
-//	ADCharacterPlayer* Shooter = GetOwningShooter();
-//
-//	Shooter->TPCamera->PostProcessSettings.DepthOfFieldFstop = FMath::Lerp(0.f, 30.f, Value);
-//	Shooter->TPCamera->PostProcessSettings.DepthOfFieldFocalDistance = FMath::Lerp(0.f, 20.f, Value);
-//}
+void AShootWeapon_Sniper::AimTimelineTick(float Value) const
+{
+	Super::AimTimelineTick(Value);
+	GetOwningShooter()->TPCamera->PostProcessSettings.DepthOfFieldFocalDistance = FMath::Lerp(0.f, 20.f, Value);
+}

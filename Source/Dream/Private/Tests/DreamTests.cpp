@@ -3,7 +3,7 @@
 #include "Misc/AutomationTest.h"
 #include "DreamType.h"
 #include "JsonObjectConverter.h"
-#include "PlayerDataStoreType.h"
+#include "PlayerDataInterfaceType.h"
 #include "Kismet/KismetMathLibrary.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDreamTests, "Dream.Default", EAutomationTestFlags::EditorContext | EAutomationTestFlags::SmokeFilter)
@@ -12,14 +12,14 @@ bool FDreamTests::RunTest(const FString& Parameters)
 {
 
 	DREAM_NLOG(Log, TEXT("----------- Json相关测试 开始 -------------"));
-	FStoreItem Item;
+	FDItemInfo Item;
 	Item.Type = EItemType::Weapon;
 	Item.ItemClass = TEXT("aaaa");
 	Item.ItemId = 10;
 	Item.ItemPrice = 5000;
 
 	FString OutString;
-	FJsonObjectConverter::UStructToJsonObjectString<FStoreItem>(Item, OutString);
+	FJsonObjectConverter::UStructToJsonObjectString<FDItemInfo>(Item, OutString);
 	DREAM_NLOG(Log, TEXT("Serialize: %s"), *OutString);
 
 	TSharedPtr<FJsonObject> Object1 = TSharedPtr<FJsonObject>(new FJsonObject);
@@ -40,8 +40,8 @@ bool FDreamTests::RunTest(const FString& Parameters)
 	FJsonSerializer::Deserialize(Reader1, Object1);
 	FJsonSerializer::Deserialize(Reader2, Object2);
 
-	FStoreItem OutItem1;
-	FStoreItem OutItem2;
+	FDItemInfo OutItem1;
+	FDItemInfo OutItem2;
 	FJsonObjectConverter::JsonObjectToUStruct(Object1.ToSharedRef(), &OutItem1);
 	FJsonObjectConverter::JsonObjectToUStruct(Object2.ToSharedRef(), &OutItem2);
 	

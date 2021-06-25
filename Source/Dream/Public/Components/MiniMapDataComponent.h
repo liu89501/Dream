@@ -27,7 +27,7 @@ public:
 
 public:
 
-	FMiniMapData CalculationPosition(const FVector& TargetLocation, const FRotator& TargetRotation, float ScanRange);
+	FMiniMapData CalculationPosition(const FVector& TargetLocation, const FRotator& TargetRotation, float ScanRange) const;
 	
 	
 protected:

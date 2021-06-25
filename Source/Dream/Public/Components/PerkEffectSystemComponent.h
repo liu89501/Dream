@@ -11,6 +11,42 @@
 
 class UDreamGameplayPerk;
 
+UENUM()
+enum class EPerkChannel : uint8
+{
+	Weapon,
+	Module
+};
+
+USTRUCT(BlueprintType)
+struct FActivationOpportunityParams
+{
+	GENERATED_BODY()
+
+	FActivationOpportunityParams() = default;
+
+	FActivationOpportunityParams(UAbilitySystemComponent* InSourceComponent, UAbilitySystemComponent* InTargetComponent)
+		: SourceComponent(InSourceComponent),
+		  TargetComponent(InTargetComponent)
+	{
+	}
+	
+	FActivationOpportunityParams(AActor* Source, AActor* Target);
+
+	/** 必须不能为空 */
+	UPROPERTY(BlueprintReadOnly, Category=PerkEffect)
+	class UAbilitySystemComponent* SourceComponent;
+
+	/** 可能为空 (GE应用到自身时)  */
+	UPROPERTY(BlueprintReadOnly, Category=PerkEffect)
+	class UAbilitySystemComponent* TargetComponent;
+
+	bool IsValid() const
+	{
+		return SourceComponent != nullptr;
+	}
+};
+
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class DREAM_API UPerkEffectSystemComponent : public UActorComponent
 {
@@ -20,14 +56,11 @@ public:
 	// Sets default values for this component's properties
 	UPerkEffectSystemComponent();
 
-	void ActivationTimeFrame(ETimeFrame TimeFrame);
+	void ActivationOpportunity(EOpportunity Opportunity, const FActivationOpportunityParams& OpportunityParams);
 
-	UFUNCTION(Server, Reliable)
-	void ServerActivationTimeFrame(ETimeFrame TimeFrame);
+	void ApplyPerks(const TArray<TSubclassOf<UDreamGameplayPerk>>& Perks, EPerkChannel PerkChannel = EPerkChannel::Weapon);
 
-	void ApplyPerks(const TArray<TSubclassOf<UDreamGameplayPerk>>& Perks);
-
-	void ClearPerks();
+	void ClearPerks(EPerkChannel PerkChannel = EPerkChannel::Weapon);
 
 protected:
 	// Called when the game starts
@@ -39,8 +72,8 @@ public:
 
 private:
 
-	TArray<FActiveGameplayEffectHandle> ActivatedEffects;
+	TMap<EPerkChannel, TArray<FActiveGameplayEffectHandle>> ActivatedEffects;
 
-	TMap<ETimeFrame, TArray<UDreamGameplayPerk*>> AppliedPerks;
+	TMap<EPerkChannel, TMap<EOpportunity, TArray<UDreamGameplayPerk*>>> AppliedPerks;
 		
 };

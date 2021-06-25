@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DGameplayEffectUIData.h"
 #include "Abilities/GameplayAbility.h"
 #include "DreamGameplayAbility.generated.h"
 
@@ -15,10 +16,7 @@ class DREAM_API UDreamGameplayAbility : public UGameplayAbility
 	GENERATED_BODY()
 
 public:
-
-	/**
-	* 	应用GameplayEffect 到 GameplayEvent中的目标Actors
-	*/
-	UFUNCTION(BlueprintCallable, Category = "Ability")
-    bool ApplyGameplayEffectToAllActors(const FGameplayEventData& EventData, TSubclassOf<class UGameplayEffect> EffectClass);
+	
+	UPROPERTY(EditDefaultsOnly, Instanced, Category=DreamAbility)
+	UDGameplayEffectUIData* AbilityUIData;
 };

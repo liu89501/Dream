@@ -29,6 +29,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gear|Settings")
 	FPropsInfo PropsInfo;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gear|Settings")
+	FEquipmentAttributes Attributes;
 
 
 public:
@@ -48,9 +50,14 @@ public:
 
 public:
 
-	virtual FPropsInfo GetPropsInfo_Implementation() const override 
+	virtual const FPropsInfo& GetPropsInfo() const override
 	{
 		return PropsInfo;
+	}
+
+	virtual const FEquipmentAttributes& GetEquipmentAttributes() const override
+	{
+		return Attributes;
 	}
 
 	virtual void Equipped(UPrimitiveComponent* TargetComponent);
