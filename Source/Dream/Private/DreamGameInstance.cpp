@@ -2,17 +2,20 @@
 
 
 #include "DreamGameInstance.h"
+
+#include "DGameUserSettings.h"
 #include "Engine.h"
 #include "DreamType.h"
 #include "MoviePlayer.h"
+#include "PDI/PlayerDataInterfaceStatic.h"
 #include "UserWidget.h"
+
+FString InvalidMap = TEXT("InvalidMap");
 
 UDreamGameInstance::UDreamGameInstance()
 {
 
 }
-
-FString UDreamGameInstance::InvalidMap = TEXT("InvalidMap");
 
 FSurfaceImpactEffect EmptySurfaceImpactEffect = FSurfaceImpactEffect();
 
@@ -41,6 +44,8 @@ void UDreamGameInstance::Init()
 {
 	Super::Init();
 
+	FPlayerDataInterfaceStatic::Startup();
+
 	if (!IsRunningDedicatedServer())
 	{
 		LoadingScreenWidget = CreateWidget(this, LoadingScreenWidgetClass);
@@ -52,6 +57,8 @@ void UDreamGameInstance::Init()
 void UDreamGameInstance::Shutdown()
 {
 	Super::Shutdown();
+
+	FPlayerDataInterfaceStatic::Shutdown();
 }
 
 void UDreamGameInstance::OnPreLoadMap(const FString& MapName)

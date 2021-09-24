@@ -8,7 +8,7 @@ const FPropsInfo& UDModuleBase::GetPropsInfo() const
 	return PropsInfo;
 }
 
-const FEquipmentAttributes& UDModuleBase::GetEquipmentAttributes() const
+ERewardNotifyMode UDModuleBase::GetRewardNotifyMode() const
 {
-	return ModuleAttributes;
+	return ERewardNotifyMode::Primary;
 }

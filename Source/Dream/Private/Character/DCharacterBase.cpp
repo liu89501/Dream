@@ -32,13 +32,9 @@ void ADCharacterBase::OnDeath(const AActor* Causer)
     OnCharacterDeath.Broadcast(this);
 }
 
-FDamageResult ADCharacterBase::CalculationDamage(float Damage, AActor* DamageCauser)
-{
-    return FDamageResult(Damage, false);
-}
-
 void ADCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
+    DOREPLIFETIME_CONDITION(ADCharacterBase, Level, COND_OwnerOnly);
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 }
 
@@ -98,6 +94,28 @@ UAbilitySystemComponent* ADCharacterBase::GetAbilitySystemComponent() const
     return AbilitySystem;
 }
 
+void ADCharacterBase::SetCharacterLevel(int32 NewLevel)
+{
+    if (GetLocalRole() < ROLE_Authority)
+    {
+        ServerSetCharacterLevel(NewLevel);
+    }
+    else
+    {
+        Level = NewLevel;
+    }
+}
+
+void ADCharacterBase::ServerSetCharacterLevel_Implementation(int32 NewLevel)
+{
+    SetCharacterLevel(NewLevel);
+}
+
+bool ADCharacterBase::ServerSetCharacterLevel_Validate(int32 NewLevel)
+{
+    return NewLevel >= Level;
+}
+
 void ADCharacterBase::HealthChanged(const FOnAttributeChangeData& AttrData)
 {
     BP_OnHealthChanged();
@@ -122,10 +140,8 @@ void ADCharacterBase::BeginPlay()
 {
     Super::BeginPlay();
 
-    AbilitySystem->GetGameplayAttributeValueChangeDelegate(DreamAttrStatics().HealthProperty).AddUObject(
-        this, &ADCharacterBase::HealthChanged);
-    AbilitySystem->GetGameplayAttributeValueChangeDelegate(DreamAttrStatics().ShieldProperty).AddUObject(
-        this, &ADCharacterBase::HealthChanged);
+    AbilitySystem->GetGameplayAttributeValueChangeDelegate(DreamAttrStatics().HealthProperty).AddUObject(this, &ADCharacterBase::HealthChanged);
+    AbilitySystem->GetGameplayAttributeValueChangeDelegate(DreamAttrStatics().ShieldProperty).AddUObject(this, &ADCharacterBase::HealthChanged);
 }
 
 void ADCharacterBase::SetGenericTeamId(const FGenericTeamId& NewTeamID)

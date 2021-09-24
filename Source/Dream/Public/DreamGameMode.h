@@ -6,7 +6,7 @@
 
 #include "DreamType.h"
 #include "UdpSocketReceiver.h"
-#include "PlayerDataInterfaceType.h"
+#include "PDI/PlayerDataInterfaceType.h"
 #include "GameFramework/GameModeBase.h"
 #include "DreamGameMode.generated.h"
 
@@ -54,13 +54,9 @@ protected:
 
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
-	AActor* ChoosePlayerStart_Implementation(AController* Player) override;
+	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
 
 	virtual FString InitNewPlayer(APlayerController* NewPlayerController, const FUniqueNetIdRepl& UniqueId, const FString& Options, const FString& Portal = TEXT("")) override;
-
-	void OnPlayerGetWeapons(const TArray<FPlayerWeapon>& AddedWeapons);
-
-	virtual void GameCompleted();
 
 private:
 

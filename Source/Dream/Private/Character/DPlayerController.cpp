@@ -17,11 +17,46 @@
 #include "OnlineSubsystemTypes.h"
 #include "OnlineSessionSettings.h"
 #include "Character/DCharacterPlayer.h"
-#include "PlayerDataInterfaceModule.h"
+#include "PlayerDataInterfaceStatic.h"
+#include "PDI/PlayerDataInterface.h"
+#include "PDI/PlayerDataInterfaceStatic.h"
 
 #define LOCTEXT_NAMESPACE "Player.Controller"
 
 typedef TSharedRef<TArray<uint8>, ESPMode::ThreadSafe> RawData;
+
+bool FRewardMessage::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
+{
+    uint8 Sign = 0;
+    
+    if (Ar.IsSaving())
+    {
+        if (RewardPropsClass)
+        {
+            Sign |= 1; 
+        }
+
+        if (RewardNum > 1)
+        {
+            Sign |= 1 << 1;
+        }
+    }
+
+    Ar.SerializeBits(&Sign, 2);
+
+    if (Sign & 1)
+    {
+        Ar << RewardPropsClass;
+    }
+
+    if (Sign & 1 << 1)
+    {
+        Ar << RewardNum;
+    }
+
+    bOutSuccess = true;
+    return true;
+}
 
 ADPlayerController::ADPlayerController()
     : LevelOneAmmunition(800)
@@ -42,21 +77,7 @@ void ADPlayerController::BeginPlay()
 
     if (IsLocalController())
     {
-        FPlayerDataInterface* PDS = FPlayerDataInterfaceModule::Get();
-        
-        if (PDS == nullptr)
-        {
-#if WITH_EDITOR
-            DREAM_NLOG(Error, TEXT("Steam SDK 初始化失败"));
-#else
-            OnlineSubsystemInitErrorDialog(LOCTEXT("SDK_Init_Error", "Steam SDK 初始化失败"));
-#endif
-            return;
-        }
-        
-        PDS->OnGetPlayerInfoComplete.AddUObject(this, &ADPlayerController::OnGetPlayerInfoComplete);
-
-        if (ISocketSubsystem* SocketSystem = ISocketSubsystem::Get(STEAM_SUBSYSTEM))
+        if (ISocketSubsystem* SocketSystem = ISocketSubsystem::Get())
         {
             ClientSocket = SocketSystem->CreateSocket(TEXT("SteamClientSocket"), TEXT("LocalSteamClientSocket"));
             FTimespan ThreadWaitTime = FTimespan::FromMilliseconds(1000);
@@ -100,44 +121,9 @@ void ADPlayerController::ProcessRebornCharacter(const FTransform& SpawnTransform
     Possess(RiseCharacter);
 }
 
-void ADPlayerController::PersistenceWeapons(const TArray<TSubclassOf<AShootWeapon>>& Weapons)
-{
-    if (IsLocalController())
-    {
-        ServerPersistenceWeapons(Weapons);
-    }
-    else if (GetLocalRole() == ROLE_Authority)
-    {
-        if (FPlayerDataInterface* PDS = FPlayerDataInterfaceModule::Get())
-        {
-            TArray<FPlayerWeaponAdd> NewWeapons;
-            for (TSubclassOf<AShootWeapon> WeaponClass : Weapons)
-            {
-                FPlayerWeaponAdd Wep;
-                Wep.WeaponClass = WeaponClass->GetPathName();
-                NewWeapons.Add(Wep);
-            }
-            
-            PDS->AddWeapons(NewWeapons);
-        }
-    }
-}
-
-int64 ADPlayerController::IncreaseOrDecreaseMoney(bool bIncrease, int64 Amount)
-{
-    return (OnlinePlayerInfo.Money += (bIncrease ? Amount : -Amount));
-}
-
-const FPlayerInfo& ADPlayerController::GetOnlinePlayerInfo() const
-{
-    return OnlinePlayerInfo;
-}
-
 void ADPlayerController::OnGetPlayerInfoComplete(const FPlayerInfo& PlayerInfo, const FString& ErrorMessage)
 {
-    FPlayerDataInterfaceModule::Get()->OnGetPlayerInfoComplete.RemoveAll(this);
-    
-    OnlinePlayerInfo = PlayerInfo;
+    //OnlinePlayerInfo = PlayerInfo;
     
     if (!ErrorMessage.IsEmpty())
     {
@@ -163,9 +149,9 @@ void ADPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 void ADPlayerController::TestLoginServer()
 {
-    if (FPlayerDataInterface* PDS = FPlayerDataInterfaceModule::Get())
+    if (FPlayerDataInterface* PDS = FPlayerDataInterfaceStatic::Get())
     {
-        PDS->Login();
+        PDS->Login(FCommonCompleteNotify());
     }
 }
 
@@ -284,8 +270,7 @@ void ADPlayerController::SendMulticastMessage(TEnumAsByte<EMessageType::Type> Ty
     }
 }
 
-void ADPlayerController::SendMessageToPlayer(const FUniqueNetIdRepl& UserNetId, TEnumAsByte<EMessageType::Type> Type,
-                                             const FString& Message)
+void ADPlayerController::SendMessageToPlayer(const FUniqueNetIdRepl& UserNetId, TEnumAsByte<EMessageType::Type> Type, const FString& Message)
 {
     FTCHARToUTF8 Utf8Msg(*Message);
     TArray<uint8> Data;
@@ -369,12 +354,7 @@ void ADPlayerController::ExitGame()
 
 void ADPlayerController::BeginGame()
 {
-    FPlayerDataInterfaceModule::Get()->Login();
-}
-
-void ADPlayerController::ServerPersistenceWeapons_Implementation(const TArray<TSubclassOf<AShootWeapon>>& Weapons)
-{
-    PersistenceWeapons(Weapons);
+    FPlayerDataInterfaceStatic::Get()->Login(FCommonCompleteNotify());
 }
 
 void ADPlayerController::HandleTeamApply()
@@ -409,14 +389,16 @@ int32 ADPlayerController::GetDefaultAmmunition(EAmmoType AmmoType) const
                : CDO->LevelThreeAmmunition;
 }
 
-void ADPlayerController::ClientReceiveRewardMessage_Implementation(UClass* PropsClass)
+void ADPlayerController::ClientReceiveRewardMessage_Implementation(const TArray<FRewardMessage>& RewardMessages)
 {
-    if (PropsClass)
+    for (const FRewardMessage& RewardMessage : RewardMessages)
     {
-        const FPropsInfo& PropsInfo = UDGameplayStatics::GetPropsInfoFromClass(PropsClass);
-        if (PropsInfo.IsValid())
+        if (RewardMessage.RewardPropsClass)
         {
-            BP_ReceiveRewardMessage(PropsInfo);
+            if (IPropsInterface* PropsInterface = Cast<IPropsInterface>(RewardMessage.RewardPropsClass->GetDefaultObject()))
+            {
+                BP_ReceiveRewardMessage(PropsInterface->GetPropsInfo(), PropsInterface->GetRewardNotifyMode(), RewardMessage.RewardNum);
+            }
         }
     }
 }

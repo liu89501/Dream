@@ -6,8 +6,9 @@
 #include "CoreMinimal.h"
 #include "DreamType.h"
 #include "DCharacterBase.h"
-#include "PlayerDataInterface.h"
+#include "DModuleBase.h"
 #include "DPlayerController.h"
+#include "PlayerDataInterfaceType.h"
 #include "GameFramework/Character.h"
 #include "DCharacterPlayer.generated.h"
 
@@ -25,6 +26,18 @@ enum class EMovingDirection : uint8
 	BL,
 	BR,
 	B
+};
+
+USTRUCT(BlueprintType)
+struct FCharacterMeshCustomize : public FTableRowBase
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	USkeletalMesh* MasterMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TArray<USkeletalMesh*> SlaveMeshs;
 };
 
 UCLASS()
@@ -45,12 +58,6 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	class UAudioComponent* AudioComponent;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-	class USceneCaptureComponent2D* CharacterCapture;
-	
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-	class UDirectionalLightComponent* CaptureLight;
 
 	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CharacterPlayer)
@@ -103,7 +110,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Weapon")
 	FName WeaponSocketName;
-	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|Weapon")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Weapon")
 	FName WeaponHolsterSocketName;
 
 	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|Weapon")
@@ -136,6 +143,12 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "CharacterPlayer")
 	AShootWeapon* GetActiveWeapon() const;
+
+	/**
+	 * 获取当前玩家正在使用的是几号位的武器
+	 */
+	UFUNCTION(BlueprintCallable, Category = "CharacterPlayer")
+	int32 GetActiveWeaponIndex() const;
 
 	UFUNCTION(BlueprintCallable, Category = "CharacterPlayer")
 	float PlayMontage(UAnimMontage* PawnAnim, UAnimMontage* WeaponAnim);
@@ -170,12 +183,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	EMovingDirection GetMovingDirection() const;
-	
-	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
-	FRotator GetRemoteControllerRotation() const;
-
-	UFUNCTION(BlueprintImplementableEvent, Category = CharacterPlayer)
-	void BP_OnHitTargetActor(float MakeDamage);
 
 	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	bool PickUpMagazine(EAmmoType AmmoType);
@@ -196,19 +203,13 @@ public:
 	int32 GetWeaponAmmunition() const;
 
 	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
-	void SetInventoryWeapon(int32 Index, /*int32 WeaponAttackPower,*/ TSubclassOf<AShootWeapon> NewWeaponClass);
+	void EquipWeapon(int32 Index, const FEquipmentAttributes& Attrs, TSubclassOf<AShootWeapon> WeaponClass);
 
 	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
-	const TArray<TSubclassOf<AShootWeapon>>& GetLocalEquippedWeaponClass() const;
+	void EquipModule(TSubclassOf<UDModuleBase> ModuleClass, const FEquipmentAttributes& Attrs);
 
 	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
-	void EquippedModule(int32 Index, TSubclassOf<UDModuleBase> ModuleClass);
-
-	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
-	TArray<TSubclassOf<UDModuleBase>> GetModules() const;
-
-	/*UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
-	void ClearCombatStatus();*/
+	void LearningTalents(const TArray<TSubclassOf<class UDreamGameplayAbility>>& TalentClasses);
 
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
     void ToggleCrossHairVisible(bool bVisible);
@@ -229,13 +230,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category="CharacterPlayer|MiniMap")
 	void ClearInfiniteActors();
 
-	UFUNCTION(BlueprintCallable, Category="CharacterPlayer|CharacterCapture")
-	void ActivateCharacterCapture();
-	UFUNCTION(BlueprintCallable, Category="CharacterPlayer|CharacterCapture")
-	void DeactivateCharacterCapture();
-	UFUNCTION(BlueprintCallable, Category="CharacterPlayer|CharacterCapture")
-	void ResetCharacterCapture();
-
 	/**
 	 * @param Location 创建widget组件的世界位置
 	 * @param DamageValue 伤害值
@@ -252,13 +246,13 @@ public:
 	float GetCtrlYawDeltaCount() const;
 
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
-	void UpdateCharacterAttributes(const FEquipmentAttributes& OldAttrs, const FEquipmentAttributes& NewAttrs);
-
-	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
-	void SetActiveWeapon(AShootWeapon* NewWeapon);
+	void RefreshAttributeBaseValue();
 
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	void SetCombatStatus(bool bNewCombatStatus);
+
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
+    UPlayerHUD* GetPlayerHUD() const;
 
 	bool GetMiniMapTips(TArray<FMiniMapData>& Data);
 
@@ -301,18 +295,27 @@ protected:
 	void MulticastReloadMagazine();
 
 	/** 装备武器(切换武器) */
-	void EquipWeapon();
-	void EquipmentFinished();
+	void SwitchWeapon();
+	void HandleSwitchWeapon(int32 WeaponIndex);
+	void SwitchFinished(int32 WeaponIndex);
 	UFUNCTION(Reliable, Server)
-	void ServerEquipWeapon();
+	void ServerSwitchWeapon();
 	UFUNCTION(Reliable, NetMulticast)
-	void MulticastEquipWeapon();
+	void MulticastSwitchWeapon();
+
+	void SwitchWeaponToFirst();
+	void SwitchWeaponToSecond();
 
 	UFUNCTION(Server, Reliable)
-	void ServerSetInventoryWeapon(int32 Index, TSubclassOf<AShootWeapon> NewWeaponClass);
+	void ServerEquipWeapon(int32 Index, const FEquipmentAttributes& Attrs, TSubclassOf<AShootWeapon> NewWeaponClass);
+	void DoServerEquipWeapon(int32 Index, const FEquipmentAttributes& Attrs, UClass* NewWeaponClass);
 	
 	UFUNCTION(Server, Reliable)
-	void ServerEquippedModule(int32 Index, TSubclassOf<UDModuleBase> ModuleClass);
+	void ServerEquipModule(TSubclassOf<UDModuleBase> ModuleClass, const FEquipmentAttributes& Attrs);
+	void DoServerEquipModule(UClass* ModuleClass, const FEquipmentAttributes& Attrs);
+
+	UFUNCTION(Server, Reliable)
+	void ServerLearningTalent(const TArray<TSubclassOf<UDreamGameplayAbility>>& TalentClasses);
 
 	UFUNCTION(server, reliable)
     void ServerSetCombatStatus(bool bNewCombatStatus);
@@ -375,6 +378,8 @@ protected:
 
 	virtual void OnRep_PlayerState() override;
 
+	void SetActiveWeapon(AShootWeapon* NewWeapon);
+
 	/** 状态切换相关 */
 	void ModStatusToRelax();
 	void AttemptSetStatusToRelax();
@@ -386,7 +391,6 @@ protected:
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-	virtual void PreReplication(IRepChangedPropertyTracker& ChangedPropertyTracker) override;
 
 	virtual void Destroyed() override;
 
@@ -415,21 +419,32 @@ protected:
 
 	void SprintMoveSpeedChange(bool bNewSprint);
 
-	void OnInitPlayer(const TArray<FPlayerWeapon>& Weapons, const FString& ErrorMessage);
+	void OnInitPlayer(const FPlayerInfo& PlayerInfo, const FString& ErrorMessage);
 
 	void UpdateHealthUI();
 
 	void RadarScanTick();
 
-	virtual void RefreshAttributes();
+	UFUNCTION(Server, Reliable)
+    void ServerInitializePlayer(const FPlayerInfo& PlayerInfo);
 
 	/* 客户端Pawn重生 一般处理UI相关逻辑 */
 	UFUNCTION(Client, Reliable)
 	void ClientResurrection(int32 ResurrectionTime);
 
+	UFUNCTION(Server, Reliable)
+	void ServerUpdateMovingInput(const FVector2D& NewMovingInput);
+
+	UFUNCTION()
+	void OnRep_CharacterMesh();
+
 	virtual void OnActiveGameplayEffectAdded(UAbilitySystemComponent* ASC, const FGameplayEffectSpec& Spec, FActiveGameplayEffectHandle Handle);
 	virtual void OnActiveGameplayEffectTimeChange(FActiveGameplayEffectHandle Handle, float NewStartTime, float NewDuration);
 	virtual void OnActiveGameplayEffectRemoved(const FActiveGameplayEffect& Effect);
+
+	UFUNCTION(BlueprintCallable)
+    void IncrementExperience(int32 Exp);
+	void DoSetLevel(int32 NewLevel, const FString& ErrMsg);
 
 protected:
 
@@ -442,14 +457,22 @@ protected:
 	UPROPERTY()
 	EWeaponStatus WeaponStatus;
 
-	UPROPERTY(EditAnywhere)
-	TArray<TSubclassOf<class UGameplayAbility>> DefaultAbilitySlot;
-	
-	UPROPERTY()
-	TArray<TSubclassOf<class UGameplayAbility>> AbilitySlot;
+	UPROPERTY(BlueprintReadWrite, ReplicatedUsing = OnRep_CharacterMesh)
+	FCharacterMeshCustomize CharacterMesh;
 
 	UPROPERTY(Replicated)
-	FRotator RemoteCtrlRotation;
+	FVector2D MovingInput;
+	
+	FVector2D PrevMovingInput;
+
+#if WITH_EDITOR
+	
+	UPROPERTY(BlueprintReadWrite)
+	bool EnableDebugView;
+	
+#endif
+
+	
 
 private:
 
@@ -479,14 +502,15 @@ private:
 	/** 当前玩家已装备的武器 仅服务器有效 */
 	UPROPERTY()
 	TArray<AShootWeapon*> WeaponInventory;
+	/** 当前装备的模块 */
+	UPROPERTY()
+	TMap<EModuleCategory, UDModuleBase*> EquippedModules;
+
+	UPROPERTY()
+	TArray<TSubclassOf<UDreamGameplayAbility>> LearnedTalents; 
 
 	/** 当前玩家已装备的武器 只对本地玩家有效 服务器此数组为空 目前只用于UI显示 */
-	TArray<TSubclassOf<AShootWeapon>> LocalEquippedWeaponClass;
-
-	/**
-	 * 当前装备的模块
-	 */
-	TArray<TSubclassOf<UDModuleBase>> EquippedModules;
+	//TArray<TSubclassOf<AShootWeapon>> LocalEquippedWeaponClass;
 
 	/** 战斗状态Handle */
 	FTimerHandle Handle_CombatStatus;
@@ -511,6 +535,7 @@ private:
 	float CtrlYawDeltaCount;
 	float PrevCtrlYaw;
 
-	FVector2D MovingInput;
+	UPROPERTY()
+	UClass* SlaveMeshAnimBPClass;
 };
 

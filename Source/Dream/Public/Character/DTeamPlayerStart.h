@@ -15,8 +15,4 @@ class DREAM_API ADTeamPlayerStart : public APlayerStart
 {
 	GENERATED_BODY()
 
-public:
-
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Team)
-	ETeamName OwningTeam;
 };

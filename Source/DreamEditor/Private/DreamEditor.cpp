@@ -20,7 +20,7 @@ void FDreamEditorModule::ShutdownModule()
 
 bool FDreamEditorModule::IsGameModule() const
 {
-	return true;
+	return false;
 }
 
 IMPLEMENT_GAME_MODULE(FDreamEditorModule, DreamEditor);

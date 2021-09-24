@@ -6,10 +6,10 @@
 #include "EngineUtils.h"
 #include "DreamType.h"
 #include "DreamGameSession.h"
-#include "PlayerDataInterface.h"
 #include "Character/DPlayerController.h"
 #include "GameFramework/PlayerState.h"
-#include "PlayerDataInterfaceModule.h"
+#include "PDI/PlayerDataInterface.h"
+#include "PDI/PlayerDataInterfaceStatic.h"
 
 #define IdleShutdownTime 300 
 
@@ -43,7 +43,7 @@ void ADreamGameMode::PostLogin(APlayerController* NewPlayer)
 	
 	IdleTimeCount = 0.f;
 	PlayerNumCounter.Increment();
-	if (FPlayerDataInterface* PlayerDataInterface = FPlayerDataInterfaceModule::Get())
+	if (FPlayerDataInterface* PlayerDataInterface = FPlayerDataInterfaceStatic::Get())
 	{
 		PlayerDataInterface->UpdateActivePlayers(true);
 	}
@@ -58,7 +58,7 @@ void ADreamGameMode::Logout(AController* Exiting)
 	if (Exiting->IsA(APlayerController::StaticClass()))
 	{
 		PlayerNumCounter.Decrement();
-		if (FPlayerDataInterface* PlayerDataInterface = FPlayerDataInterfaceModule::Get())
+		if (FPlayerDataInterface* PlayerDataInterface = FPlayerDataInterfaceStatic::Get())
 		{
 			PlayerDataInterface->UpdateActivePlayers(false);
 		}
@@ -81,39 +81,6 @@ void ADreamGameMode::Tick(float DeltaSeconds)
 	}
 }
 
-void ADreamGameMode::OnPlayerGetWeapons(const TArray<FPlayerWeapon>& AddedWeapons)
-{
-	/*if (AddedWeapons.Num() == 0)
-	{
-		return;
-	}
-
-	TMap<FString, ADPlayerController*> AllPlayers;
-
-	for (TActorIterator<ADPlayerController> It(GetWorld()); It; ++It)
-	{
-		FUniqueNetIdRepl UniqueNetId = It->PlayerState->GetUniqueId();
-		AllPlayers.Add(UniqueNetId->ToString(), *It);
-	}
-
-	for (FPlayerWeapon Weapon : AddedWeapons)
-	{
-		if (ADPlayerController* Ctrl = *AllPlayers.Find(Weapon.UserId))
-		{
-			UClass* WeaponClass = StaticLoadClass(AShootWeapon::StaticClass(), NULL, *Weapon.WeaponClass);
-			Ctrl->ClientReceiveRewardMessage(WeaponClass);
-		}
-	}*/
-}
-
-void ADreamGameMode::GameCompleted()
-{
-	for (TActorIterator<ADPlayerController> It(GetWorld()); It; ++It)
-	{
-		FUniqueNetIdRepl UniqueNetId = It->PlayerState->GetUniqueId();
-	}
-}
-
 void ADreamGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	Super::EndPlay(EndPlayReason);
@@ -133,7 +100,5 @@ void ADreamGameMode::InitGame(const FString& MapName, const FString& Options, FS
 		{
 			SetActorTickEnabled(true);
 		}
-		
-		//FPlayerDataInterfaceModule::Get()->OnAddWeaponComplete.BindUObject(this, &ADreamGameMode::OnPlayerGetWeapons);
 	}
 }

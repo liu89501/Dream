@@ -5,7 +5,6 @@
 
 #include "AbilitySystemComponent.h"
 #include "Engine/World.h"
-#include "Kismet/KismetMathLibrary.h"
 #include "UnrealNetwork.h"
 #include "Components/WidgetComponent.h"
 #include "Kismet/GameplayStatics.h"
@@ -13,12 +12,10 @@
 #include "BrainComponent.h"
 #include "DAIGenerator.h"
 #include "DreamAttributeSet.h"
-#include "GameFramework/GameModeBase.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "PlayerDataInterface.h"
 #include "Perception/AISense_Damage.h"
 #include "DreamGameInstance.h"
-#include "GameFramework/PlayerState.h"
 #include "EngineUtils.h"
 #include "GameplayTasksComponent.h"
 #include "HealthWidgetComponent.h"
@@ -26,6 +23,7 @@
 #include "Character/DCharacterPlayer.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "DreamDropProps.h"
+#include "PlayerDataInterfaceStatic.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "Perception/AISense_Sight.h"
@@ -39,42 +37,36 @@ ADEnemyBase::ADEnemyBase()
 	HealthUI->SetupAttachment(RootComponent);
 
 	TasksComponent = CreateDefaultSubobject<UGameplayTasksComponent>(TEXT("TasksComponent"));
-
-	PrimaryActorTick.bCanEverTick = false;
+	
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	JogSpeed = 400.f;
-
-	//PrimaryActorTick.bStartWithTickEnabled = false;
-	//PrimaryActorTick.TickInterval = .4f;
 }
 
 void ADEnemyBase::HealthChanged(const FOnAttributeChangeData& AttrData)
 {
 	Super::HealthChanged(AttrData);
 
-	if (IsRunningDedicatedServer())
+	if (GetNetMode() == NM_DedicatedServer)
 	{
 		return;
 	}
 
-	HealthUI->UpdateStatus(GetHealthPercent(), GetShieldPercent());
-
 	if (GetHealth() == 0)
 	{
-		if (TSubclassOf<ADreamDropProps> AmmunitionClass = FRandomProbability::RandomProbability(Reward.AmmunitionReward))
+		TSubclassOf<ADreamDropProps> RandomProbability = FRandomProbability::RandomProbabilityEx<TSubclassOf<ADreamDropProps>>(Reward.AmmunitionReward);
+		if (RandomProbability)
 		{
-			GetWorld()->SpawnActor<ADreamDropProps>(AmmunitionClass, FTransform(GetActorLocation()));
+			GetWorld()->SpawnActor<ADreamDropProps>(RandomProbability, FTransform(GetActorLocation()));
 		}
 
 		HealthUI->DestroyComponent();
 	}
-}
-
-void ADEnemyBase::ShowHealthUI()
-{
-	if (UUserWidget* Widget = HealthUI->GetUserWidgetObject())
+	else
 	{
-		Widget->SetRenderOpacity(1.f);
+		HealthUI->SetVisibility(true);
+		GetWorldTimerManager().SetTimerForNextTick(this, &ADEnemyBase::UpdateHealthUI);
 		GetWorldTimerManager().SetTimer(Handle_ShowUI, this, &ADEnemyBase::HiddenHealthUI, HealthUIShowSecond);
 	}
 }
@@ -91,10 +83,12 @@ void ADEnemyBase::SetAIGenerator(ADAIGenerator* Generator)
 
 void ADEnemyBase::HiddenHealthUI()
 {
-	if (UUserWidget* Widget = HealthUI->GetUserWidgetObject())
-	{
-		Widget->SetRenderOpacity(0);
-	}
+	HealthUI->SetVisibility(false);
+}
+
+void ADEnemyBase::UpdateHealthUI()
+{
+	HealthUI->UpdateStatus(GetHealthPercent(), GetShieldPercent());
 }
 
 void ADEnemyBase::BeginPlay()
@@ -111,10 +105,7 @@ void ADEnemyBase::BeginPlay()
 	{
 		AIController->RunBehaviorTree(BehaviorTree);
 		AIPerception->OnTargetPerceptionUpdated.AddDynamic(this, &ADEnemyBase::OnTargetPerceptionUpdated0);
-	}
 
-	if (GetLocalRole() == ROLE_Authority)
-	{
 		if (DefaultAttributes)
 		{
 			AttributeSet->InitFromMetaDataTable(DefaultAttributes);
@@ -124,13 +115,11 @@ void ADEnemyBase::BeginPlay()
 		{
 			AbilitySystem->GiveAbility(FGameplayAbilitySpec(OwningAbility));
 		}
+
+		SetActorTickEnabled(true);
 	}
 
-	if (IsRunningDedicatedServer())
-	{
-		HealthUI->DestroyComponent();
-	}
-	else
+	if (GetNetMode() != NM_DedicatedServer)
 	{
 		HiddenHealthUI();
 	}
@@ -147,10 +136,8 @@ void ADEnemyBase::HandleDamage(const float DamageDone, const FGameplayEffectCont
 		return;
 	}
 
-	float& DamageCount = HostileDamageCount.FindOrAdd(OriginalInstigator);
-	DamageCount += DamageDone;
-
-	UAISense_Damage::ReportDamageEvent(GetWorld(), this, OriginalInstigator, DamageDone, OriginalInstigator->GetActorLocation(), GetActorLocation());
+	UAISense_Damage::ReportDamageEvent(GetWorld(), this, OriginalInstigator, DamageDone,
+	                                   OriginalInstigator->GetActorLocation(), GetActorLocation());
 }
 
 void ADEnemyBase::OnDeath(const AActor* Causer)
@@ -161,8 +148,6 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 	{
 		OwnerAIGenerator->AIDeathCount();
 	}
-
-	//AIPerception->OnOwnerEndPlay(this, EEndPlayReason::Destroyed);
 
 	if (AAIController* AICtrl = Cast<AAIController>(Controller))
 	{
@@ -175,38 +160,58 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 		}
 	}
 
-	TArray<FPlayerWeaponAdd> Weapons;
+	TArray<UItemData*> FinalRewards;
+
+	TMap<ADPlayerController*, TArray<UItemData*>> AllPlayerRewards;
 
 	for (TActorIterator<ADPlayerController> It(GetWorld()); It; ++It)
 	{
-		TSubclassOf<AShootWeapon> WeaponClass = FRandomProbability::RandomProbability(Reward.WeaponReward);
-
-		if (*WeaponClass == nullptr)
+		for (FRewardProbabilityList& RewardProbabilities : Reward.Rewards)
 		{
-			continue;
-		}
+			TArray<UItemData*> RewardsTemplate;
+			TArray<float> Probability;
+		
+			for (FRewardProbability RewardProbability : RewardProbabilities.RewardList)
+			{
+				RewardsTemplate.Add(RewardProbability.Reward);
+				Probability.Add(RewardProbability.Probability);
+			}
 
-		const FUniqueNetIdRepl& UniqueId = It->PlayerState->GetUniqueId();
-		if (!UniqueId.IsValid())
-		{
-			DREAM_NLOG(Error, TEXT("ADEnemyBase::OnDeath UniqueId Invalid"));
-			continue;
+			int32 Index = FRandomProbability::RandomProbability(Probability);
+			if (Index > INDEX_NONE)
+			{
+				FinalRewards.Add(RewardsTemplate[Index]);
+				AllPlayerRewards.FindOrAdd(*It).Add(RewardsTemplate[Index]);
+			}
 		}
+	}
 
-		FPlayerWeaponAdd Weapon;
-		Weapon.WeaponClass = WeaponClass->GetPathName();
-		It->ClientReceiveRewardMessage(WeaponClass);
-		Weapons.Add(Weapon);
-	}
-#if !WITH_EDITOR
-	if (Weapons.Num() > 0)
-	{
-		FPlayerDataInterface* PDS = FPlayerDataInterfaceModule::Get();
-		PDS->AddWeapons(Weapons);
-	}
-#endif
+	FCommonCompleteNotify Delegate;
+	Delegate.BindUObject(this, &ADEnemyBase::OnRewardsAddCompleted, AllPlayerRewards);
+	FPlayerDataInterfaceStatic::Get()->AddPlayerRewards(FinalRewards, Delegate);
 
 	SetLifeSpan(3.f);
+}
+
+void ADEnemyBase::OnRewardsAddCompleted(const FString& ErrorMessage, TMap<ADPlayerController*, TArray<UItemData*>> Rewards)
+{
+	if (ErrorMessage.IsEmpty())
+	{
+		for (TPair<ADPlayerController*, TArray<UItemData*>> PlayerReward : Rewards)
+		{
+			TArray<FRewardMessage> RewardMessages;
+			for (UItemData* RewardItem : PlayerReward.Value)
+			{
+				FRewardMessage RewardMessage;
+				RewardMessage.RewardPropsClass = RewardItem->GetItemClass();
+				RewardMessage.RewardNum = RewardItem->GetItemAmount();
+				
+				RewardMessages.Add(RewardMessage);
+			}
+			
+			PlayerReward.Key->ClientReceiveRewardMessage(RewardMessages);
+		}
+	}
 }
 
 UAIPerceptionComponent* ADEnemyBase::GetPerceptionComponent()
@@ -214,35 +219,16 @@ UAIPerceptionComponent* ADEnemyBase::GetPerceptionComponent()
 	return AIPerception;
 }
 
-FDamageResult ADEnemyBase::CalculationDamage(float Damage, AActor* DamageCauser)
-{
-	FDamageResult DamageResult;
-
-	if (ADCharacterPlayer* Player = Cast<ADCharacterPlayer>(DamageCauser))
-	{
-		//Damage *= 1000.f / FMath::Max(Defense - Player->Penetration, 1.f);
-
-		if (UKismetMathLibrary::RandomBoolWithWeight(Player->GetCriticalRate()))
-		{
-			Damage *= FMath::Max(Player->GetCriticalDamage(), 1.f);
-			DamageResult.bCritical = true;
-		}
-	}
-
-	DamageResult.Damage = Damage;
-
-	return DamageResult;
-}
-
 void ADEnemyBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+	DOREPLIFETIME(ADEnemyBase, CtrlYaw);
 }
 
 void ADEnemyBase::ActivateHostile(ADCharacterBase* Hostile, bool bTriggerTeamStimulus)
 {
 	AIController->SetFocus(Hostile);
-	
+
 	if (bTriggerTeamStimulus)
 	{
 		UAIPerceptionSystem* PerceptionSystem = UAIPerceptionSystem::GetCurrent(GetWorld());
@@ -281,7 +267,8 @@ void ADEnemyBase::LostAllHostileTarget()
 {
 	AIController->ClearFocus(EAIFocusPriority::Gameplay);
 	AIController->GetBlackboardComponent()->ClearValue(BlackboardName_HostileTarget);
-	GetCharacterMovement()->MaxWalkSpeed = GetClass()->GetDefaultObject<ADEnemyBase>()->GetCharacterMovement()->MaxWalkSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = GetClass()->GetDefaultObject<ADEnemyBase>()->GetCharacterMovement()->
+	                                                   MaxWalkSpeed;
 }
 
 void ADEnemyBase::OnTargetPerceptionUpdated(ADCharacterBase* StimulusPawn, FAIStimulus Stimulus)
@@ -321,6 +308,41 @@ void ADEnemyBase::OnTargetPerceptionUpdated(ADCharacterBase* StimulusPawn, FAISt
 	}
 }
 
+void ADEnemyBase::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+
+	FRotator ControlRotation = GetControlRotation();
+	CtrlYaw = ControlRotation.Yaw;
+
+	FRotator ActorRotation = GetActorRotation();
+	float YawDelta = FMath::Abs(FRotator::NormalizeAxis(CtrlYaw - ActorRotation.Yaw));
+
+	if (FMath::IsNearlyZero(GetVelocity().Size2D()))
+	{
+		if (YawDelta >= 60.f || bTurnInProgress)
+		{
+			SetActorRotation(FMath::RInterpTo(ActorRotation, FRotator(0, CtrlYaw, 0), DeltaSeconds, 10.f));
+
+			if (FMath::IsNearlyZero(YawDelta, 1.f))
+			{
+				bTurnInProgress = false;
+			}
+			else
+			{
+				bTurnInProgress = true;
+			}
+		}
+	}
+	else
+	{
+		if (YawDelta > 40.f)
+		{
+			SetActorRotation(FMath::RInterpTo(ActorRotation, FRotator(0, CtrlYaw, 0), DeltaSeconds, 10.f));
+		}
+	}
+}
+
 void ADEnemyBase::HostileTargetDestroy(ADCharacterBase* DestroyedActor)
 {
 	AIPerception->ForgetActor(DestroyedActor);
@@ -334,7 +356,7 @@ void ADEnemyBase::OnTargetPerceptionUpdated0(AActor* Actor, FAIStimulus Stimulus
 		DREAM_NLOG(Warning, TEXT("OnTargetPerceptionUpdated0 -> Actor Invalid"));
 		return;
 	}
-	
+
 	if (ADCharacterBase* StimulusPawn = Cast<ADCharacterBase>(Actor->GetInstigator()))
 	{
 		if (StimulusPawn->GetHealth() == 0)
@@ -342,7 +364,7 @@ void ADEnemyBase::OnTargetPerceptionUpdated0(AActor* Actor, FAIStimulus Stimulus
 			// 死亡的敌人不用走后续逻辑
 			return;
 		}
-	
+
 		OnTargetPerceptionUpdated(StimulusPawn, Stimulus);
 	}
 }

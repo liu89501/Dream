@@ -24,7 +24,6 @@ public class DreamEditor : ModuleRules
             }
         );
 
-        // "SkeletonEditor",
         PrivateDependencyModuleNames.AddRange(new string[] {
             "Core",
             "CoreUObject",
@@ -32,7 +31,6 @@ public class DreamEditor : ModuleRules
             "PropertyEditor",
             "ContentBrowser",
             "Dream",
-            "PlayerDataInterface",
             "Slate",
             "SlateCore",
             "UnrealEd",

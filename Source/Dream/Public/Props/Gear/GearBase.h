@@ -55,9 +55,9 @@ public:
 		return PropsInfo;
 	}
 
-	virtual const FEquipmentAttributes& GetEquipmentAttributes() const override
+	virtual ERewardNotifyMode GetRewardNotifyMode() const override
 	{
-		return Attributes;
+		return ERewardNotifyMode::Primary;
 	}
 
 	virtual void Equipped(UPrimitiveComponent* TargetComponent);

@@ -42,5 +42,9 @@ void UBTService_StatusManager::TickNode(UBehaviorTreeComponent& OwnerComp, uint8
 				EnemyOwner->GetCharacterMovement()->MaxWalkSpeed = NewWalkSpeed;
 			}
 		}
+		else
+		{
+			BlackboardComponent->ClearValue(TargetPawnSelector.GetSelectedKeyID());
+		}
 	}
 }

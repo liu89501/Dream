@@ -31,8 +31,19 @@ public:
 	UPROPERTY(EditAnywhere, Category=Scalable)
 	bool bUseScale;
 
+	/** 超过此距离将不显示 为0则永远都显示 */
+	UPROPERTY(EditAnywhere, Category=Scalable)
+	float HiddenDistance;
+
 public:
 
+	virtual void BeginPlay() override;
+	
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+private:
+
+	UPROPERTY()
+	APawn* LocalPlayerCharacter;
 	
 };

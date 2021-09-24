@@ -4,11 +4,19 @@
 
 #include "CoreMinimal.h"
 
-
 #include "DPropsType.h"
 #include "DreamType.h"
 #include "PropsInterface.h"
 #include "DModuleBase.generated.h"
+
+UENUM(BlueprintType)
+enum class EModuleCategory : uint8
+{
+	C1,
+    C2,
+    C3,
+    C4
+};
 
 /**
  * 
@@ -23,10 +31,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Module")
 	FPropsInfo PropsInfo;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Module")
+	UPROPERTY(BlueprintReadOnly, Category = "Module")
 	FEquipmentAttributes ModuleAttributes;
 
-	virtual const FPropsInfo& GetPropsInfo() const override;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Module")
+	FEquipmentAttributesAssign AttributesAssign;
 
-	virtual const FEquipmentAttributes& GetEquipmentAttributes() const override;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Module")
+	EModuleCategory Category;
+
+	virtual const FPropsInfo& GetPropsInfo() const override;
+	
+	virtual ERewardNotifyMode GetRewardNotifyMode() const override;
 };

@@ -32,10 +32,12 @@
 #include "Props/Weapon/ShootWeapon.h"
 #include "UI/PlayerHUD.h"
 #include "GameplayEffectTypes.h"
-#include "PlayerDataInterfaceModule.h"
+#include "PlayerDataInterfaceStatic.h"
 #include "DModuleBase.h"
 #include "DPlayerCameraManager.h"
 #include "GameplayEffectExtension.h"
+#include "HealthWidgetComponent.h"
+#include "PDI/PlayerDataInterfaceStatic.h"
 
 // Sets default values
 ADCharacterPlayer::ADCharacterPlayer()
@@ -56,17 +58,6 @@ ADCharacterPlayer::ADCharacterPlayer()
 
     AudioComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("AudioComponent"));
     AudioComponent->SetupAttachment(RootComponent);
-
-    CharacterCapture = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("CharacterCapture"));
-    CharacterCapture->SetHiddenInGame(true);
-    CharacterCapture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
-    CharacterCapture->SetupAttachment(RootComponent);
-
-    CaptureLight = CreateDefaultSubobject<UDirectionalLightComponent>(TEXT("CaptureLight"));
-    CaptureLight->LightingChannels.bChannel0 = false;
-    CaptureLight->LightingChannels.bChannel1 = true;
-    CaptureLight->LightingChannels.bChannel2 = false;
-    CaptureLight->SetupAttachment(RootComponent);
 
     TPCameraArm = CreateDefaultSubobject<USpringArmComponent>(TEXT("TPCameraArm"));
     TPCameraArm->SetupAttachment(RootComponent);
@@ -92,15 +83,16 @@ ADCharacterPlayer::ADCharacterPlayer()
 
     GetMesh()->SetCollisionResponseToChannel(Collision_ObjectType_Projectile, ECollisionResponse::ECR_Block);
 
-    GetCapsuleComponent()->SetCollisionResponseToChannel(
-        Collision_ObjectType_Projectile, ECollisionResponse::ECR_Ignore);
+    GetCapsuleComponent()->SetCollisionResponseToChannel(Collision_ObjectType_Projectile, ECollisionResponse::ECR_Ignore);
 
     GetCharacterMovement()->bOrientRotationToMovement = false;
 
     // 初始化武器插槽
     WeaponInventory.AddZeroed(2);
-    LocalEquippedWeaponClass.AddZeroed(2);
-    EquippedModules.AddZeroed(4);
+    //LocalEquippedWeaponClass.AddZeroed(2);
+
+    ConstructorHelpers::FClassFinder<UAnimInstance> AnimBPAsset(TEXT("/Game/Animation/AnimBP_CharacterCopy"));
+    SlaveMeshAnimBPClass = AnimBPAsset.Class;
 }
 
 void ADCharacterPlayer::PossessedBy(AController* InController)
@@ -127,6 +119,8 @@ void ADCharacterPlayer::BeginPlay()
 
     if (IsLocallyControlled())
     {
+        InitializeUI();
+        
         DefaultCameraRotation = TPCamera->GetRelativeRotation();
         DefaultArmSocketOffset = TPCameraArm->SocketOffset;
         
@@ -137,16 +131,15 @@ void ADCharacterPlayer::BeginPlay()
             PC->SetInputMode(FInputModeGameOnly());
         }
         
-        if (FPlayerDataInterface* PDS = FPlayerDataInterfaceModule::Get())
+        if (FPlayerDataInterface* PDS = FPlayerDataInterfaceStatic::Get())
         {
-            PDS->OnGetWeaponComplete.AddUObject(this, &ADCharacterPlayer::OnInitPlayer);
-            PDS->GetPlayerWeapons(EGetWeaponCondition::Equipped);
+            FGetPlayerInfoComplete Delegate;
+            Delegate.BindUObject(this, &ADCharacterPlayer::OnInitPlayer);
+            PDS->GetPlayerInfo(EGetEquipmentCondition::Equipped, Delegate);
         }
 
         AbilitySystem->OnActiveGameplayEffectAddedDelegateToSelf.AddUObject(this, &ADCharacterPlayer::OnActiveGameplayEffectAdded);
         AbilitySystem->OnAnyGameplayEffectRemovedDelegate().AddUObject(this, &ADCharacterPlayer::OnActiveGameplayEffectRemoved);
-
-        InitializeUI();
     }
 
     Super::BeginPlay();
@@ -155,11 +148,6 @@ void ADCharacterPlayer::BeginPlay()
 
     if (GetLocalRole() == ROLE_Authority)
     {
-        for (TSubclassOf<UGameplayAbility> Ability : DefaultAbilitySlot)
-        {
-            AbilitySystem->GiveAbility(FGameplayAbilitySpec(Ability));
-        }
-        
 #if WITH_EDITOR
 
         if (TestInitAttributes)
@@ -239,7 +227,7 @@ void ADCharacterPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
     PlayerInputComponent->BindAction("OpenFire", IE_Pressed, this, &ADCharacterPlayer::StartFire);
     PlayerInputComponent->BindAction("OpenFire", IE_Released, this, &ADCharacterPlayer::StopFire);
 
-    PlayerInputComponent->BindAction("Equip", IE_Pressed, this, &ADCharacterPlayer::EquipWeapon);
+    PlayerInputComponent->BindAction("Equip", IE_Pressed, this, &ADCharacterPlayer::SwitchWeapon);
     PlayerInputComponent->BindAction("Reload", IE_Pressed, this, &ADCharacterPlayer::ReloadMagazine);
 
     PlayerInputComponent->BindAction("Aim", IE_Pressed, this, &ADCharacterPlayer::StartAim);
@@ -248,6 +236,9 @@ void ADCharacterPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
     PlayerInputComponent->BindAction("Sprint", IE_Pressed, this, &ADCharacterPlayer::ToggleSprint);
     //PlayerInputComponent->BindAction("Sprint", IE_Released, this, &ADCharacterPlayer::StopSprint);
+
+    PlayerInputComponent->BindAction("Weapon1", IE_Pressed, this, &ADCharacterPlayer::SwitchWeaponToFirst);
+    PlayerInputComponent->BindAction("Weapon2", IE_Pressed, this, &ADCharacterPlayer::SwitchWeaponToSecond);
 }
 
 void ADCharacterPlayer::StartFire()
@@ -256,6 +247,12 @@ void ADCharacterPlayer::StartFire()
 
     if (!ActiveWeapon)
     {
+        return;
+    }
+
+    if (ActiveWeapon->AmmoNum == 0)
+    {
+        ReloadMagazine();
         return;
     }
 
@@ -309,18 +306,12 @@ void ADCharacterPlayer::ConfirmFire()
 
 void ADCharacterPlayer::HandleFire()
 {
-    if (WeaponStatus > EWeaponStatus::Firing)
+    if (WeaponStatus > EWeaponStatus::Firing || ActiveWeapon->AmmoNum == 0)
     {
         return;
     }
 
-    if (ActiveWeapon->AmmoNum == 0)
-    {
-        ReloadMagazine();
-        return;
-    }
-
-    TriggerAbilityFromTag(ConditionTags::Condition_Firing, this);
+    //TriggerAbilityFromTag(ConditionTags::Condition_Firing, this);
 
     ActiveWeapon->HandleFire();
     UpdateAmmoUI();
@@ -328,6 +319,16 @@ void ADCharacterPlayer::HandleFire()
     if (ActiveWeapon->FireCameraShake)
     {
         GetPlayerController()->ClientStartCameraShake(ActiveWeapon->FireCameraShake);
+    }
+
+    if (ActiveWeapon->FireMode == EFireMode::SemiAutomatic)
+    {
+        ActiveWeapon->BP_OnStopFire();
+    }
+    else if (ActiveWeapon->FireMode == EFireMode::Accumulation)
+    {
+        ActiveWeapon->BP_OnStopFire();
+        GetWorldTimerManager().ClearTimer(Handle_Shoot);
     }
 }
 
@@ -340,28 +341,32 @@ void ADCharacterPlayer::StopFire()
         return;
     }
 
-    ActiveWeapon->BP_OnStopFire();
-
     if (WeaponStatus == EWeaponStatus::Firing)
     {
         AttemptSetStatusToRelax(); 
         WeaponStatus = EWeaponStatus::Idle;
     }
 
-    if (ActiveWeapon->FireMode != EFireMode::SemiAutomatic && Handle_Shoot.IsValid())
+    if (Handle_Shoot.IsValid())
     {
+        ActiveWeapon->BP_OnStopFire();
         GetWorldTimerManager().ClearTimer(Handle_Shoot);
     }
 }
 
-void ADCharacterPlayer::EquipWeapon()
+void ADCharacterPlayer::SwitchWeapon()
+{
+    HandleSwitchWeapon(-1);
+}
+
+void ADCharacterPlayer::HandleSwitchWeapon(int32 WeaponIndex)
 {
     if (!CanEquip())
     {
         return;
     }
 
-    ServerEquipWeapon();
+    ServerSwitchWeapon();
 
     WeaponStatus = EWeaponStatus::Equipping;
     
@@ -374,15 +379,15 @@ void ADCharacterPlayer::EquipWeapon()
         ActiveWeapon->SetWeaponEnable(false);
 
         float Duration = PlayMontage(GetCurrentActionMontage()->EquipAnim, nullptr);
-        GetWorldTimerManager().SetTimer(Handle_Equip, this, &ADCharacterPlayer::EquipmentFinished, Duration);
+        GetWorldTimerManager().SetTimer(Handle_Equip, FTimerDelegate::CreateUObject(this, &ADCharacterPlayer::SwitchFinished, -1), Duration, false);
     }
     else
     {
-        EquipmentFinished();
+        SwitchFinished(WeaponIndex);
     }
 }
 
-void ADCharacterPlayer::MulticastEquipWeapon_Implementation()
+void ADCharacterPlayer::MulticastSwitchWeapon_Implementation()
 {
     if (GetLocalRole() != ROLE_SimulatedProxy)
     {
@@ -392,21 +397,21 @@ void ADCharacterPlayer::MulticastEquipWeapon_Implementation()
     float MontageDuration = PlayMontage(GetCurrentActionMontage()->EquipAnim, nullptr);
 }
 
-void ADCharacterPlayer::ServerEquipWeapon_Implementation()
+void ADCharacterPlayer::ServerSwitchWeapon_Implementation()
 {
     if (bCombatStatus)
     {
-        MulticastEquipWeapon();
+        MulticastSwitchWeapon();
         float Duration = PlayMontage(GetCurrentActionMontage()->EquipAnim, nullptr);
-        GetWorldTimerManager().SetTimer(Handle_Equip, this, &ADCharacterPlayer::EquipmentFinished, Duration);
+        GetWorldTimerManager().SetTimer(Handle_Equip, FTimerDelegate::CreateUObject(this, &ADCharacterPlayer::SwitchFinished, -1), Duration, false);
     }
     else
     {
-        EquipmentFinished();
+        SwitchFinished(-1);
     }
 }
 
-void ADCharacterPlayer::EquipmentFinished()
+void ADCharacterPlayer::SwitchFinished(int32 WeaponIndex)
 {
     //ActiveWeapon->SetActorHiddenInGame(true);
     if (IsLocallyControlled())
@@ -417,7 +422,33 @@ void ADCharacterPlayer::EquipmentFinished()
 
     if (GetLocalRole() == ROLE_Authority)
     {
-        SwitchWeapon(ActiveWeaponIndex == (WeaponInventory.Num() - 1) ? 0 : ActiveWeaponIndex + 1);
+        if (WeaponIndex == -1)
+        {
+            WeaponIndex = ActiveWeaponIndex == (WeaponInventory.Num() - 1) ? 0 : ActiveWeaponIndex + 1;
+        }
+
+        SwitchWeapon(WeaponIndex);
+    }
+
+    if (IsLocallyControlled())
+    {
+        ActiveWeaponIndex = WeaponIndex;
+    }
+}
+
+void ADCharacterPlayer::SwitchWeaponToFirst()
+{
+    if (ActiveWeaponIndex != 0)
+    {
+        HandleSwitchWeapon(0);
+    }
+}
+
+void ADCharacterPlayer::SwitchWeaponToSecond()
+{
+    if (ActiveWeaponIndex != 1)
+    {
+        HandleSwitchWeapon(1);
     }
 }
 
@@ -511,90 +542,90 @@ void ADCharacterPlayer::OnRep_ActiveWeapon()
     SetActiveWeapon(ActiveWeapon);
 }
 
-void ADCharacterPlayer::SetInventoryWeapon(int32 Index, TSubclassOf<AShootWeapon> NewWeaponClass)
+void ADCharacterPlayer::EquipWeapon(int32 Index, const FEquipmentAttributes& Attrs, TSubclassOf<AShootWeapon> WeaponClass)
 {
     if (GetLocalRole() < ROLE_Authority)
     {
-        LocalEquippedWeaponClass[Index] = NewWeaponClass;
-        ServerSetInventoryWeapon(Index, NewWeaponClass);
-        return;
-    }
-
-    if (Index >= 0 && Index < WeaponInventory.Num())
-    {
-        FActorSpawnParameters SpawnParam;
-        SpawnParam.Owner = this;
-        SpawnParam.Instigator = this;
-        AShootWeapon* NewWeapon = GetWorld()->SpawnActor<AShootWeapon>(NewWeaponClass, SpawnParam);
-
-        if (AShootWeapon* OldWeapon = WeaponInventory[Index])
-        {
-            OldWeapon->Destroy();
-        }
+        checkf(Index >= 0 && Index < WeaponInventory.Num(), TEXT("SetInventoryWeapon Fatal Error"));
         
-        WeaponInventory[Index] = NewWeapon;
-
-        if (Index == ActiveWeaponIndex)
-        {
-            NewWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, WeaponSocketName);
-            NewWeapon->SetActorRelativeTransform(NewWeapon->WeaponSocketOffset);
-            SetActiveWeapon(NewWeapon);
-        }
-        else
-        {
-            // NewWeapon->SetActorHiddenInGame(true);
-            NewWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, WeaponHolsterSocketName);
-            NewWeapon->SetActorRelativeTransform(NewWeapon->WeaponHolsterSocketOffset);
-        }
+        ServerEquipWeapon(Index, Attrs, WeaponClass);
     }
     else
     {
-        DREAM_NLOG(Error, TEXT("SetInventoryWeapon Fatal Error"));
+        DoServerEquipWeapon(Index, Attrs, *WeaponClass);
     }
 }
 
-void ADCharacterPlayer::ServerSetInventoryWeapon_Implementation(int32 Index, TSubclassOf<AShootWeapon> NewWeaponClass)
+void ADCharacterPlayer::DoServerEquipWeapon(int32 Index, const FEquipmentAttributes& Attrs, UClass* NewWeaponClass)
 {
-    SetInventoryWeapon(Index, NewWeaponClass);
+    FActorSpawnParameters SpawnParam;
+    SpawnParam.Owner = this;
+    SpawnParam.Instigator = this;
+    AShootWeapon* NewWeapon = GetWorld()->SpawnActor<AShootWeapon>(NewWeaponClass, SpawnParam);
+    NewWeapon->WeaponAttribute = Attrs;
+
+    if (AShootWeapon* OldWeapon = WeaponInventory[Index])
+    {
+        OldWeapon->Destroy();
+    }
+        
+    WeaponInventory[Index] = NewWeapon;
+
+    if (Index == ActiveWeaponIndex)
+    {
+        NewWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, WeaponSocketName);
+        NewWeapon->SetActorRelativeTransform(NewWeapon->WeaponSocketOffset);
+        SetActiveWeapon(NewWeapon);
+    }
+    else
+    {
+        NewWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, WeaponHolsterSocketName);
+        NewWeapon->SetActorRelativeTransform(NewWeapon->WeaponHolsterSocketOffset);
+    }
 }
 
-const TArray<TSubclassOf<AShootWeapon>>& ADCharacterPlayer::GetLocalEquippedWeaponClass() const
+void ADCharacterPlayer::ServerEquipWeapon_Implementation(int32 Index, const FEquipmentAttributes& Attrs, TSubclassOf<AShootWeapon> NewWeaponClass)
 {
-    return LocalEquippedWeaponClass;
+    EquipWeapon(Index, Attrs, NewWeaponClass);
 }
 
-void ADCharacterPlayer::EquippedModule(int32 Index, TSubclassOf<UDModuleBase> ModuleClass)
+void ADCharacterPlayer::EquipModule(TSubclassOf<UDModuleBase> ModuleClass, const FEquipmentAttributes& Attrs)
 {
-    UDModuleBase* Module = ModuleClass->GetDefaultObject<UDModuleBase>();
-    
     if (GetLocalRole() < ROLE_Authority)
     {
-        ServerEquippedModule(Index, ModuleClass);
+        ServerEquipModule(ModuleClass, Attrs);
     }
     else
     {
-        FEquipmentAttributes& PrevAttrs = FEquipmentAttributes::EmptyAttributes;
-        
-        if (TSubclassOf<UDModuleBase> PrevModule = EquippedModules[Index])
-        {
-            UDModuleBase* PrevModuleCDO = PrevModule->GetDefaultObject<UDModuleBase>();
-            PrevAttrs = PrevModuleCDO->ModuleAttributes;
-        }
-
-        UpdateCharacterAttributes(PrevAttrs, Module->ModuleAttributes);
+        DoServerEquipModule(*ModuleClass, Attrs);
+        RefreshAttributeBaseValue();
     }
-
-    EquippedModules[Index] = ModuleClass;
 }
 
-TArray<TSubclassOf<UDModuleBase>> ADCharacterPlayer::GetModules() const
+void ADCharacterPlayer::DoServerEquipModule(UClass* ModuleClass, const FEquipmentAttributes& Attrs)
 {
-    return EquippedModules;
+    UDModuleBase* Module = NewObject<UDModuleBase>(this, ModuleClass);
+    Module->ModuleAttributes = Attrs;
+    EquippedModules.Add(Module->Category, Module);
 }
 
-void ADCharacterPlayer::ServerEquippedModule_Implementation(int32 Index, TSubclassOf<UDModuleBase> ModuleClass)
+void ADCharacterPlayer::ServerEquipModule_Implementation(TSubclassOf<UDModuleBase> ModuleClass, const FEquipmentAttributes& Attrs)
 {
-    EquippedModule(Index, ModuleClass);
+    EquipModule(ModuleClass, Attrs);
+}
+
+void ADCharacterPlayer::LearningTalents(const TArray<TSubclassOf<UDreamGameplayAbility>>& TalentClasses)
+{
+    if (GetLocalRole() == ROLE_Authority)
+    {
+        LearnedTalents.Reset();
+        LearnedTalents.Append(TalentClasses);
+        RefreshAttributeBaseValue();
+    }
+    else
+    {
+        ServerLearningTalent(TalentClasses);
+    }
 }
 
 void ADCharacterPlayer::SwitchWeapon(int32 NewWeaponIndex)
@@ -603,18 +634,14 @@ void ADCharacterPlayer::SwitchWeapon(int32 NewWeaponIndex)
     {
         return;
     }
-    
-    if (NewWeaponIndex >= WeaponInventory.Num())
-    {
-        return;
-    }
+
+    ActiveWeaponIndex = NewWeaponIndex;
 
     AShootWeapon* NewWeapon = WeaponInventory[NewWeaponIndex];
 
     ActiveWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, WeaponHolsterSocketName);
     ActiveWeapon->SetActorRelativeTransform(ActiveWeapon->WeaponHolsterSocketOffset);
     
-    ActiveWeaponIndex = NewWeaponIndex;
     NewWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, WeaponSocketName);
     NewWeapon->SetActorRelativeTransform(NewWeapon->WeaponSocketOffset);
     SetActiveWeapon(NewWeapon);
@@ -640,37 +667,6 @@ void ADCharacterPlayer::ClearInfiniteActors()
     InfiniteActors.Reset();
 }
 
-void ADCharacterPlayer::ActivateCharacterCapture()
-{
-    SetMeshLightChannel(1);
-    CharacterCapture->ShowOnlyActorComponents(this);
-    ResetCharacterCapture();
-    CharacterCapture->SetHiddenInGame(false);
-}
-
-void ADCharacterPlayer::DeactivateCharacterCapture()
-{
-    SetMeshLightChannel(0);
-    CharacterCapture->ClearShowOnlyComponents();
-    CharacterCapture->SetHiddenInGame(true);
-}
-
-void ADCharacterPlayer::ResetCharacterCapture()
-{
-    const TArray<USceneComponent*>& Components = GetMesh()->GetAttachChildren();
-
-    for (USceneComponent* Component : Components)
-    {
-        if (UPrimitiveComponent* PrimitiveComponent = Cast<UPrimitiveComponent>(Component))
-        {
-            if (AActor* ComponentOwner = PrimitiveComponent->GetOwner())
-            {
-                CharacterCapture->ShowOnlyActorComponents(ComponentOwner, true);
-            }
-        }
-    }
-}
-
 void ADCharacterPlayer::SpawnDamageWidget(const FVector& Location, float DamageValue, bool bCritical, bool bIsHealthSteal)
 {
     UDamageWidgetComponent* DamageWidget = NewObject<UDamageWidgetComponent>(this, DamageWidgetClass);
@@ -694,35 +690,37 @@ float ADCharacterPlayer::GetCtrlYawDeltaCount() const
     return CtrlYawDeltaCount;
 }
 
-void ADCharacterPlayer::UpdateCharacterAttributes(const FEquipmentAttributes& OldAttrs, const FEquipmentAttributes& NewAttrs)
+void ADCharacterPlayer::RefreshAttributeBaseValue()
 {
-    AbilitySystem->ApplyModToAttribute(DreamAttrStatics().AttackPowerProperty,
-        EGameplayModOp::Additive, NewAttrs.AttackPower - OldAttrs.AttackPower);
-    
-    AbilitySystem->ApplyModToAttribute(DreamAttrStatics().HealthStealPercentageProperty,
-        EGameplayModOp::Additive, NewAttrs.HealthSteal - OldAttrs.HealthSteal);
+    FEquipmentAttributes FinalValue;
 
-    AbilitySystem->ApplyModToAttribute(DreamAttrStatics().DefensePowerProperty,
-        EGameplayModOp::Additive, NewAttrs.Defense - OldAttrs.Defense);
-    
-    AbilitySystem->ApplyModToAttribute(DreamAttrStatics().CriticalRateProperty,
-        EGameplayModOp::Additive, NewAttrs.CriticalRate - OldAttrs.CriticalRate);
-    
-    AbilitySystem->ApplyModToAttribute(DreamAttrStatics().CriticalRateProperty,
-        EGameplayModOp::Additive, NewAttrs.CriticalDamage - OldAttrs.CriticalDamage);
+    FinalValue += ActiveWeapon->WeaponAttribute;
 
-    for (TSubclassOf<UDreamGameplayAbility> Ability : OldAttrs.Perks)
+    for (TPair<EModuleCategory, UDModuleBase*> Module : EquippedModules)
     {
-        if (FGameplayAbilitySpec* AbilitySpec = AbilitySystem->FindAbilitySpecFromClass(Ability))
-        {
-            AbilitySystem->ClearAbility(AbilitySpec->Handle);
-        }
+        FinalValue += Module.Value->ModuleAttributes;
     }
 
-    for (TSubclassOf<UDreamGameplayAbility> Ability : NewAttrs.Perks)
+    AttributeSet->SetAttackPower(FinalValue.AttackPower);
+    AttributeSet->SetAttackPower(FinalValue.AttackPower);
+    AttributeSet->SetCriticalDamage(FinalValue.CriticalDamage);
+    AttributeSet->SetCriticalRate(FinalValue.CriticalRate);
+    AttributeSet->SetDefensePower(FinalValue.Defense);
+    AttributeSet->SetHealthStealPercentage(FinalValue.HealthSteal);
+
+    AbilitySystem->ClearAllAbilities();
+
+    FinalValue.Perks.Append(LearnedTalents);
+
+    for (const FSoftClassPath& AbilityClass : FinalValue.Perks)
     {
-        AbilitySystem->GiveAbility(FGameplayAbilitySpec(Ability));
+        AbilitySystem->GiveAbility(FGameplayAbilitySpec(AbilityClass.TryLoadClass<UDreamGameplayAbility>()));
     }
+
+    static FGameplayTag BuffTag = FGameplayTag::RequestGameplayTag(TEXT("GE.Buff"));
+    int32 RemoveActiveEffectsWithTags = AbilitySystem->RemoveActiveEffectsWithTags(FGameplayTagContainer(BuffTag));
+
+    //DREAM_NLOG(Error, TEXT("RemoveActiveEffectsWithTags: %d"), RemoveActiveEffectsWithTags);
 
     TriggerAbilityFromTag(ConditionTags::Condition_Immediately, this);
 }
@@ -766,15 +764,12 @@ EMovingDirection ADCharacterPlayer::GetMovingDirection() const
 
 void ADCharacterPlayer::SetActiveWeapon(AShootWeapon* NewWeapon)
 {
-    bool bAuthority = GetLocalRole() == ROLE_Authority;
-    bool bIsLocallyControlled = IsLocallyControlled();
-
-    if (bAuthority)
-    {
-        UpdateCharacterAttributes(ActiveWeapon ? ActiveWeapon->WeaponAttribute : FEquipmentAttributes::EmptyAttributes, NewWeapon->WeaponAttribute);
-    }
-
     ActiveWeapon = NewWeapon;
+
+    if (GetLocalRole() == ROLE_Authority)
+    {
+        RefreshAttributeBaseValue();
+    }
 
     /*if (NewWeapon == nullptr)
     {
@@ -783,7 +778,7 @@ void ADCharacterPlayer::SetActiveWeapon(AShootWeapon* NewWeapon)
 
     //BP_OnActiveWeaponChanged();
 
-    if (bIsLocallyControlled)
+    if (IsLocallyControlled())
     {
         ActiveWeapon->SetWeaponEnable(true);
         PlayerHUD->SetCrossHairBrush(ActiveWeapon->GetDynamicCrosshairBrush());
@@ -797,23 +792,39 @@ void ADCharacterPlayer::SetActiveWeapon(AShootWeapon* NewWeapon)
     }*/
 }
 
-void ADCharacterPlayer::OnInitPlayer(const TArray<FPlayerWeapon>& Weapons, const FString& ErrorMessage)
+void ADCharacterPlayer::OnInitPlayer(const FPlayerInfo& PlayerInfo, const FString& ErrorMessage)
 {
-    FPlayerDataInterfaceModule::Get()->OnGetWeaponComplete.RemoveAll(this);
-    
     if (!ErrorMessage.IsEmpty())
     {
-        //BP_GetPlayerWeapons(Weapons);
-        DREAM_LOG(Error, TEXT("GetWeapons Fail"));
+        DREAM_LOG(Error, TEXT("InitPlayer Failure"));
         GetPlayerController()->ClientReturnToMainMenuWithTextReason(FText::FromString(ErrorMessage));
         return;
     }
 
-    for (FPlayerWeapon Weapon : Weapons)
+    ServerInitializePlayer(PlayerInfo);
+}
+
+void ADCharacterPlayer::ServerInitializePlayer_Implementation(const FPlayerInfo& PlayerInfo)
+{
+    for (const FPlayerWeapon& Weapon : PlayerInfo.Weapons)
     {
-        UClass* WeaponClass = LoadClass<AShootWeapon>(this, *Weapon.WeaponClass);
-        SetInventoryWeapon(Weapon.EquipmentIndex, WeaponClass);
+        UClass* WeaponClass = Weapon.WeaponClass.TryLoadClass<AShootWeapon>();
+        DoServerEquipWeapon(Weapon.Index, Weapon.Attributes, WeaponClass);
     }
+
+    for (const FPlayerModule& Module : PlayerInfo.Modules)
+    {
+        UClass* ModuleClass = Module.ModuleClass.TryLoadClass<UDModuleBase>();
+        DoServerEquipModule(ModuleClass, Module.Attributes);
+    }
+
+    LearnedTalents.Reset();
+    for (const FTalentInfo& Talent : PlayerInfo.Talents)
+    {
+        LearnedTalents.Add(Talent.TalentClass.TryLoadClass<UDreamGameplayAbility>());
+    }
+    
+    RefreshAttributeBaseValue();
 }
 
 bool ADCharacterPlayer::CanShoot() const
@@ -898,7 +909,7 @@ void ADCharacterPlayer::MoveRight(float Value)
         // get right vector
         const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-        AddControllerYawInput(Value * GetWorld()->GetDeltaSeconds());
+        //AddControllerYawInput(Value * GetWorld()->GetDeltaSeconds());
         AddMovementInput(Direction, Value);
     }
 
@@ -908,6 +919,16 @@ void ADCharacterPlayer::MoveRight(float Value)
 AShootWeapon* ADCharacterPlayer::GetActiveWeapon() const
 {
     return ActiveWeapon;
+}
+
+int32 ADCharacterPlayer::GetActiveWeaponIndex() const
+{
+    return ActiveWeaponIndex;
+}
+
+void ADCharacterPlayer::ServerLearningTalent_Implementation(const TArray<TSubclassOf<UDreamGameplayAbility>>& TalentClasses)
+{
+    LearningTalents(TalentClasses);
 }
 
 void ADCharacterPlayer::StartAim()
@@ -1086,13 +1107,8 @@ void ADCharacterPlayer::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ADCharacterPlayer, ActiveWeapon);
     DOREPLIFETIME(ADCharacterPlayer, bCombatStatus);
     DOREPLIFETIME(ADCharacterPlayer, bSprinted);
-    DOREPLIFETIME_CONDITION(ADCharacterPlayer, RemoteCtrlRotation, ELifetimeCondition::COND_SkipOwner);
-}
-
-void ADCharacterPlayer::PreReplication(IRepChangedPropertyTracker& ChangedPropertyTracker)
-{
-    Super::PreReplication(ChangedPropertyTracker);
-    RemoteCtrlRotation = GetControlRotation();
+    DOREPLIFETIME(ADCharacterPlayer, CharacterMesh);
+    DOREPLIFETIME_CONDITION(ADCharacterPlayer, MovingInput, ELifetimeCondition::COND_SkipOwner);
 }
 
 void ADCharacterPlayer::Destroyed()
@@ -1225,9 +1241,24 @@ void ADCharacterPlayer::RadarScanTick()
     }
 }
 
-void ADCharacterPlayer::RefreshAttributes()
+void ADCharacterPlayer::ServerUpdateMovingInput_Implementation(const FVector2D& NewMovingInput)
 {
-    //AttributeSet->SetAttackPower(ActiveWeapon->WeaponAttribute.AttackPower);
+    MovingInput = NewMovingInput;
+}
+
+void ADCharacterPlayer::OnRep_CharacterMesh()
+{
+    GetMesh()->SetSkeletalMesh(CharacterMesh.MasterMesh);
+
+    for (USkeletalMesh* SKMesh : CharacterMesh.SlaveMeshs)
+    {
+        USkeletalMeshComponent* SKComponent = NewObject<USkeletalMeshComponent>(this);
+        SKComponent->RegisterComponent();
+        SKComponent->SetSkeletalMesh(SKMesh);
+        SKComponent->SetAnimClass(SlaveMeshAnimBPClass);
+        SKComponent->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+        SKComponent->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform);
+    }
 }
 
 void ADCharacterPlayer::OnActiveGameplayEffectAdded(UAbilitySystemComponent* ASC, const FGameplayEffectSpec& Spec, FActiveGameplayEffectHandle Handle)
@@ -1297,11 +1328,6 @@ void ADCharacterPlayer::ClientHitEnemy_Implementation(const FDamageTargetInfo& D
         if (const FHitResult* HitResult = DreamEffectContext->GetHitResult())
         {
             SpawnDamageWidget(HitResult->ImpactPoint, DamageInfo.DamageAmount, DreamEffectContext->GetDamageCritical(), false);
-            
-            if (ADEnemyBase* Enemy = Cast<ADEnemyBase>(HitResult->GetActor()))
-            {
-                Enemy->ShowHealthUI();
-            }
         }
     }
 }
@@ -1384,34 +1410,31 @@ void ADCharacterPlayer::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
 
-    /*if (FMath::IsNearlyZero(GetVelocity().Size()))
-    {
-        FRotator Delta = (CtrlRotation - ActorRotation);
-        Delta.Normalize();
-                
-        CtrlYawDeltaCount += Delta.Yaw - PrevCtrlYaw;
-        PrevCtrlYaw = Delta.Yaw;
-                
-        if (!UKismetMathLibrary::InRange_FloatFloat(Delta.Yaw, MinRotateLimit, MaxRotateLimit))
-        {
-            float TargetYaw = CtrlRotation.Yaw + (Delta.Yaw > 0 ? MinRotateLimit : MaxRotateLimit);
-            SetActorRotation(FMath::RInterpTo(ActorRotation, FRotator(0, TargetYaw, 0), DeltaSeconds, 20.f));
-        }
-    }
-    else
+    FRotator ActorRotation = GetActorRotation();
+    FRotator CtrlRotation = GetBaseAimRotation();
+
+    bool bUpdateRotation = !GetVelocity().IsNearlyZero() || bCombatStatus;
+
+#if WITH_EDITOR
+    
+    bUpdateRotation &= !EnableDebugView;
+    
+#endif
+    
+    if (bUpdateRotation)
     {
         SetActorRotation(FMath::RInterpTo(ActorRotation, FRotator(0, CtrlRotation.Yaw, 0), DeltaSeconds, 18.f));
-    }*/
+    }
 
-    FRotator ActorRotation = GetActorRotation();
-    FRotator CtrlRotation = GetRemoteControllerRotation();
+    if (IsLocallyControlled())
+    {
+        if (!MovingInput.Equals(PrevMovingInput))
+        {
+            ServerUpdateMovingInput(MovingInput);
+        }
 
-    SetActorRotation(FMath::RInterpTo(ActorRotation, FRotator(0, CtrlRotation.Yaw, 0), DeltaSeconds, 18.f));
-}
-
-FRotator ADCharacterPlayer::GetRemoteControllerRotation() const
-{
-    return IsLocallyControlled() ? GetControlRotation() : RemoteCtrlRotation;
+        PrevMovingInput = MovingInput;
+    }
 }
 
 bool ADCharacterPlayer::PickUpMagazine(EAmmoType AmmoType)
@@ -1454,6 +1477,29 @@ void ADCharacterPlayer::SetCombatStatus(bool bNewCombatStatus)
     bCombatStatus = bNewCombatStatus;
 }
 
+UPlayerHUD* ADCharacterPlayer::GetPlayerHUD() const
+{
+    return PlayerHUD;
+}
+
+void ADCharacterPlayer::IncrementExperience(int32 Exp)
+{
+    FExperienceChangeDelegate Delegate;
+    Delegate.BindUObject(this, &ADCharacterPlayer::DoSetLevel);
+    
+    FUserExperiencePair ExperiencePair;
+    ExperiencePair.IncreaseExperienceAmount = Exp;
+    FPlayerDataInterfaceStatic::Get()->IncreaseExperience(ExperiencePair, Delegate);
+}
+
+void ADCharacterPlayer::DoSetLevel(int32 NewLevel, const FString& ErrMsg)
+{
+    if (ErrMsg.IsEmpty() && Level < NewLevel)
+    {
+        SetCharacterLevel(NewLevel);
+    }
+}
+
 void ADCharacterPlayer::DoAddMiniMapTips(TArray<FMiniMapData>& Data, const TArray<AActor*>& ScanActors)
 {
     for (AActor* ScanActor : ScanActors)
@@ -1469,11 +1515,11 @@ void ADCharacterPlayer::DoAddMiniMapTips(TArray<FMiniMapData>& Data, const TArra
         
         if (IMiniMapDataInterface* DataInterface = Cast<IMiniMapDataInterface>(ScanActor))
         {
-            Data.Add(DataInterface->GetMiniMapDataComponent()->CalculationPosition(GetActorLocation(), GetControlRotation(), RadarScanRadius));
-        }
-        else if (UMiniMapDataComponent* MiniMapDataComponent = ScanActor->FindComponentByClass<UMiniMapDataComponent>())
-        {
-            Data.Add(MiniMapDataComponent->CalculationPosition(GetActorLocation(), GetControlRotation(), RadarScanRadius));
+            UMiniMapDataComponent* DataComponent = DataInterface->GetMiniMapDataComponent();
+            if (DataComponent->IsActive())
+            {
+                Data.Add(DataComponent->CalculationPosition(GetActorLocation(), GetControlRotation(), RadarScanRadius));
+            }
         }
     }
 }

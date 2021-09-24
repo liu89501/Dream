@@ -19,28 +19,17 @@ public:
 
 	ADPlayerState();
 
-	UPROPERTY(BlueprintReadWrite, Replicated, Category = FpsPlayerState)
+	UPROPERTY(BlueprintReadWrite, Replicated, Category = DPlayerState)
 	int32 KillNum;
 
-	UPROPERTY(BlueprintReadWrite, Replicated, Category = FpsPlayerState)
+	UPROPERTY(BlueprintReadWrite, Replicated, Category = DPlayerState)
 	int32 DieNum;
 
-	UPROPERTY(BlueprintReadWrite, Replicated, Category = FpsPlayerState)
-	ETeamName Team;
-
-	UFUNCTION(BlueprintCallable, Category = FpsPlayerStateApi)
-	FLinearColor GetTeamColor() const;
+	UPROPERTY(BlueprintReadWrite, Replicated, Category = DPlayerState)
+	int32 PlayerLevel;
 
 protected:
 
-	void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
-private:
-
-	UPROPERTY(EditAnywhere)
-	FLinearColor OneTeamColor;
-
-	UPROPERTY(EditAnywhere)
-	FLinearColor TwoTeamColor;
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 };

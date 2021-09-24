@@ -5,8 +5,6 @@
 #include "UnrealNetwork.h"
 
 ADPlayerState::ADPlayerState()
-	: OneTeamColor(FLinearColor(.1f, .46f, .53f)),
-	TwoTeamColor(FLinearColor(.75f, .75f, .18f))
 {
 
 }
@@ -17,10 +15,4 @@ void ADPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLif
 
 	DOREPLIFETIME(ADPlayerState, KillNum);
 	DOREPLIFETIME(ADPlayerState, DieNum);
-	DOREPLIFETIME(ADPlayerState, Team);
-}
-
-FLinearColor ADPlayerState::GetTeamColor() const
-{
-	return Team == ETeamName::One_Team ? OneTeamColor : TwoTeamColor;
 }

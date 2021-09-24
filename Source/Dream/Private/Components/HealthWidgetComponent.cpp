@@ -4,6 +4,11 @@
 #include "HealthWidgetComponent.h"
 #include "HealthUIInterface.h"
 
+UHealthWidgetComponent::UHealthWidgetComponent()
+{
+    
+}
+
 void UHealthWidgetComponent::UpdateStatus(float HealthPercentage, float ShieldPercentage) const
 {
     if (UUserWidget* WidgetObject = GetUserWidgetObject())

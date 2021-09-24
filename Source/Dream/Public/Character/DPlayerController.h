@@ -12,6 +12,39 @@
 #include "GameFramework/PlayerController.h"
 #include "DPlayerController.generated.h"
 
+USTRUCT(BlueprintType)
+struct FRewardMessage
+{
+	GENERATED_BODY()
+
+public:
+
+	FRewardMessage()
+		: RewardPropsClass(nullptr),
+		  RewardNum(1)
+	{
+	}
+
+	virtual ~FRewardMessage() = default;
+
+	UPROPERTY(BlueprintReadOnly)
+	UClass* RewardPropsClass;
+
+	UPROPERTY(BlueprintReadOnly)
+	int32 RewardNum;
+
+	virtual bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess);
+};
+
+template<>
+struct TStructOpsTypeTraits< FRewardMessage > : TStructOpsTypeTraitsBase2< FRewardMessage >
+{
+	enum
+	{
+		WithNetSerializer = true
+    };
+};
+
 /**
  *
  */
@@ -51,7 +84,7 @@ public:
 	void SendTalkMessage(const FTalkMessage& Message);
 
 	UFUNCTION(BlueprintImplementableEvent, Category = DController, meta = (ScriptName = "OnReceiveRewardMessage", DisplayName = "OnReceiveRewardMessage"))
-	void BP_ReceiveRewardMessage(const FPropsInfo& PropsInfo);
+	void BP_ReceiveRewardMessage(const FPropsInfo& PropsInfo, ERewardNotifyMode NotifyMode, int32 RewardNum);
 
 	/*
 		接收服务器的 击杀消息
@@ -91,19 +124,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = DController, BlueprintAuthorityOnly)
     void ProcessRebornCharacter(const FTransform& SpawnTransform);
 
-	UFUNCTION(BlueprintCallable, Category = DController)
-	void PersistenceWeapons(const TArray<TSubclassOf<class AShootWeapon>>& Weapons);
-
-	/**
-	 * 增加或减少玩家身上的钱
-	 */
-	UFUNCTION(BlueprintCallable, Category = DController)
-	int64 IncreaseOrDecreaseMoney(bool bIncrease, int64 Amount);
-
-	UFUNCTION(BlueprintCallable, Category = DController)
-	const FPlayerInfo& GetOnlinePlayerInfo() const;
-
-	
 	/* TEST ---------------------------------- */
 	UFUNCTION(Exec)
     void TestLoginServer();
@@ -119,7 +139,7 @@ public:
 public:
 
 	UFUNCTION(Client, Reliable)
-	void ClientReceiveRewardMessage(UClass* PropsClass);
+	void ClientReceiveRewardMessage(const TArray<FRewardMessage>& RewardMessages);
 
 	bool AddWeaponAmmunition(EAmmoType AmmoType, int32 AmmunitionAmount);
 	UFUNCTION(Server, Reliable)
@@ -139,9 +159,6 @@ public:
 	}
 
 protected:
-
-	UFUNCTION(Server, Reliable)
-	void ServerPersistenceWeapons(const TArray<TSubclassOf<class AShootWeapon>>& Weapons);
 
 	virtual void HandleTeamApply();
 
@@ -185,7 +202,7 @@ private:
 	class FSocket* ClientSocket;
 
 	FConfirmRebornCharacter OnConfirmReborn;
-
-	UPROPERTY()
-	FPlayerInfo OnlinePlayerInfo;
+	
+	/*UPROPERTY()
+	FPlayerInfo OnlinePlayerInfo;*/
 };

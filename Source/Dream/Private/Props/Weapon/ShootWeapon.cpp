@@ -108,7 +108,7 @@ bool FBulletHitInfoHandle::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bO
         }
         Ar.SerializeBits(&StructID, 8);
 
-        UScriptStruct* ScriptStruct = StructContainer().GetScriptStruct(StructID);
+        UScriptStruct* ScriptStruct = FBulletHitInfoStructContainer::StructContainer().GetScriptStruct(StructID);
         
         if (Ar.IsLoading())
         {
@@ -139,7 +139,7 @@ Type* FBulletHitInfoHandle::Get() const
 {
     if (Data.IsValid())
     {
-        if (Type::StaticStruct() == StructContainer().GetScriptStruct(Data->GetStructID()))
+        if (Type::StaticStruct() == FBulletHitInfoStructContainer::StructContainer().GetScriptStruct(Data->GetStructID()))
         {
             return static_cast<Type*>(Data.Get());
         }
@@ -486,9 +486,9 @@ const FPropsInfo& AShootWeapon::GetPropsInfo() const
     return WeaponInfo;
 }
 
-const FEquipmentAttributes& AShootWeapon::GetEquipmentAttributes() const
+ERewardNotifyMode AShootWeapon::GetRewardNotifyMode() const
 {
-    return WeaponAttribute;
+    return ERewardNotifyMode::Primary;
 }
 
 void AShootWeapon::ApplyPointDamage(const FHitResult& HitInfo)

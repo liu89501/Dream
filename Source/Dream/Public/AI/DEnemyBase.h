@@ -11,6 +11,27 @@
 #include "DEnemyBase.generated.h"
 
 USTRUCT(BlueprintType)
+struct FRewardProbability
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere)
+	float Probability;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Instanced)
+	class UItemData* Reward;
+};
+
+USTRUCT(BlueprintType)
+struct FRewardProbabilityList
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere)
+	TArray<FRewardProbability> RewardList;
+};
+
+USTRUCT(BlueprintType)
 struct FReward
 {
 	GENERATED_USTRUCT_BODY()
@@ -18,17 +39,10 @@ struct FReward
 public:
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	TMap<TSubclassOf<AShootWeapon>, float> WeaponReward;
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	TMap<int32, float> WeaponRewardFrequency;
+	TArray<FRewardProbabilityList> Rewards;
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere)
 	TMap<TSubclassOf<class ADreamDropProps>, float> AmmunitionReward;
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	TMap<int32, float> AmmunitionRewardFrequency;
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	FInt32Range MoneyReward;
 };
 
 /**
@@ -97,8 +111,6 @@ public:
 
 public:
 
-	virtual void ShowHealthUI();
-
 	class AAIController* GetAIController() const;
 
 	void SetAIGenerator(class ADAIGenerator* Generator);
@@ -110,6 +122,7 @@ protected:
 	virtual void HealthChanged(const FOnAttributeChangeData& AttrData) override;
 
 	virtual void HiddenHealthUI();
+	virtual void UpdateHealthUI();
 
 	virtual void BeginPlay() override;
 
@@ -118,8 +131,6 @@ protected:
 	virtual UAIPerceptionComponent* GetPerceptionComponent() override;
 
 	virtual void OnDeath(const AActor* Causer) override;
-
-	virtual FDamageResult CalculationDamage(float Damage, AActor* DamageCauser) override;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -131,18 +142,23 @@ protected:
 
 	virtual void OnTargetPerceptionUpdated(ADCharacterBase* StimulusPawn, struct FAIStimulus Stimulus);
 
+	virtual void Tick(float DeltaSeconds) override;
+
 	void HostileTargetDestroy(ADCharacterBase* DestroyedActor);
 
 protected:
-
-	UPROPERTY()
-	TMap<AActor*, float> HostileDamageCount;
 
 	UPROPERTY()
 	ADAIGenerator* OwnerAIGenerator;
 
 	UPROPERTY()
 	class AAIController* AIController;
+
+	UPROPERTY(Replicated, BlueprintReadOnly)
+	float CtrlYaw;
+
+	UPROPERTY(BlueprintReadOnly)
+	bool bTurnInProgress;
 
 private:
 
@@ -152,5 +168,7 @@ private:
 
 	UFUNCTION()
     void OnTargetPerceptionUpdated0(AActor* Actor, FAIStimulus Stimulus);
+
+	void OnRewardsAddCompleted(const FString& ErrorMessage, TMap<class ADPlayerController*, TArray<UItemData*>> Rewards);
 	
 };

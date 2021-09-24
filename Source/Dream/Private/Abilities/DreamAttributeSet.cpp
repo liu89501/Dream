@@ -129,17 +129,7 @@ void UDreamAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallb
 	Super::PostGameplayEffectExecute(Data);
 
 	FGameplayEffectContextHandle Context = Data.EffectSpec.GetContext();
-	UAbilitySystemComponent* Source = Context.GetOriginalInstigatorAbilitySystemComponent();
 
-	// Compute the delta between old and new, if it is available
-	/*float DeltaValue = 0;
-	if (Data.EvaluatedData.ModifierOp == EGameplayModOp::Type::Additive)
-	{
-		// If this was additive, store the raw delta value to be passed along later
-		DeltaValue = Data.EvaluatedData.Magnitude;
-	}*/
-
-	// Get the Target actor, which should be our owner
 	ADCharacterBase* TargetCharacter = nullptr;
 	if (Data.Target.AbilityActorInfo.IsValid() && Data.Target.AbilityActorInfo->OwnerActor.IsValid())
 	{
@@ -149,13 +139,6 @@ void UDreamAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallb
 
 	if (Data.EvaluatedData.Attribute == GetDamageAttribute())
 	{
-		// Get the Source actor
-		/*ADCharacterBase* SourceCharacter = nullptr;
-		if (Source && Source->AbilityActorInfo.IsValid() && Source->AbilityActorInfo->OwnerActor.IsValid())
-		{
-			SourceCharacter = Cast<ADCharacterBase>(Source->AbilityActorInfo->OwnerActor.Get());
-		}*/
-
 		const float LocalDamageDone = GetDamage();
 		SetDamage(0.f);
 
@@ -193,15 +176,7 @@ void UDreamAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallb
 	}
 	else if (Data.EvaluatedData.Attribute == GetHealthAttribute())
 	{
-		// Handle other health changes such as from healing or direct modifiers
-		// First clamp it
-		SetHealth(FMath::Clamp(GetHealth(), 0.0f, GetMaxHealth()));
-		
-		if (TargetCharacter)
-		{
-			// Call for all health changes
-			//TargetCharacter->HandleHealthChanged(DeltaValue, SourceTags);
-		}
+		//SetHealth(FMath::Clamp(GetHealth(), 0.0f, GetMaxHealth()));
 	}
 	else if (Data.EvaluatedData.Attribute == GetHealthStealAttribute())
 	{
@@ -209,24 +184,20 @@ void UDreamAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallb
 		{
 			return;
 		}
-		
+
+		float CurrentHealth = GetHealth();
+
 		// 生命回复效果
 		float HealthStealValue = GetHealthSteal();
+		float OverflowCureAmount = FMath::Max(0.f, HealthStealValue + CurrentHealth - GetMaxHealth());
 
-		FGameplayEffectSpec TreatmentEffectSpec(GetDefault<UDGE_DamageHealthSteal>(), Context);
-		TreatmentEffectSpec.SetSetByCallerMagnitude(UDGE_DamageHealthSteal::HSHealthSetByCallerTag, HealthStealValue);
-
-		float SourceHealthValue = Source->GetNumericAttribute(DreamAttrStatics().HealthProperty);
-		float SourceMaxHealthValue = Source->GetNumericAttribute(DreamAttrStatics().MaxHealthProperty);
-		float OverflowCureAmount = FMath::Max(0.f, HealthStealValue + SourceHealthValue - SourceMaxHealthValue);
+		SetHealth(CurrentHealth + HealthStealValue);
 		
 		if (OverflowCureAmount > 0.f)
 		{
-			TreatmentEffectSpec.SetSetByCallerMagnitude(UDGE_DamageHealthSteal::HSShieldSetByCallerTag, OverflowCureAmount);
+			SetShield(GetShield() + OverflowCureAmount);
 		}
 
-		Source->ApplyGameplayEffectSpecToSelf(TreatmentEffectSpec);
-		
 		SetHealthSteal(0.f);
 	}
 }

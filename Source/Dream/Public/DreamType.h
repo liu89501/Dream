@@ -37,7 +37,8 @@ namespace EWidgetOrder
 		Player,
 		PlayerPopup,
 		WeaponUI,
-		InteractiveUI
+		InteractiveUI,
+		LoadingPop
 	};
 }
 
@@ -57,14 +58,6 @@ enum class EGearType : uint8
 	Hand,
 	Leg,
 	Shoe
-};
-
-UENUM(BlueprintType)
-enum class ETeamName : uint8
-{
-	None,
-	One_Team,
-	Two_Team
 };
 
 UENUM(BlueprintType)
@@ -395,17 +388,11 @@ struct FRandomProbability
 {
 public:
 
-	template <typename SourceType>
-	static SourceType RandomProbability(const TMap<SourceType, float>& ProbabilitySource)
+	static int32 RandomProbability(const TArray<float>& Probability, int32 ProbabilityRange = 1000.f)
 	{
-		float RandomValue = FMath::FRandRange(0, 100.f);
+		float RandomValue = FMath::FRandRange(0, ProbabilityRange);
 
-		TArray<SourceType> Values;
-		TArray<float> Probability;
-
-		FRandomProbability::GetArrayPair(ProbabilitySource, Values, Probability);
-
-		int32 Index = -1;
+		int32 Index = INDEX_NONE;
 
 		for (int I = 0; I < Probability.Num(); I++)
 		{
@@ -419,7 +406,20 @@ public:
 			}
 		}
 
-		if (Index == -1)
+		return Index;
+	}
+
+	template <typename SourceType>
+	static SourceType RandomProbabilityEx(const TMap<SourceType, float>& ProbabilitySource, int32 ProbabilityRange = 1000.f)
+	{
+		TArray<SourceType> Values;
+		TArray<float> Probability;
+		
+		GetArrayPair(ProbabilitySource, Values, Probability);
+
+		int32 Index = RandomProbability(Probability, ProbabilityRange);
+
+		if (Index == INDEX_NONE)
 		{
 			return SourceType();
 		}
@@ -430,18 +430,15 @@ public:
 private:
 
 	template <typename SourceType>
-	static void GetArrayPair(const TMap<SourceType, float>& ProbabilitySource, TArray<SourceType>& Sources,
-	                         TArray<float>& Probability)
+    static void GetArrayPair(const TMap<SourceType, float>& ProbabilitySource, TArray<SourceType>& Sources, TArray<float>& Probability)
 	{
-		Sources.Empty(ProbabilitySource.Num());
-		Probability.Empty(ProbabilitySource.Num());
 		for (TPair<SourceType, float> Pair : ProbabilitySource)
 		{
 			Sources.Add(Pair.Key);
 			Probability.Add(Pair.Value);
 		}
 	}
-
+	
 	static float Sum(const TArray<float>& Array, int32 EndIndex, int32 StartIndex = 0)
 	{
 		float SumResult = 0.f;

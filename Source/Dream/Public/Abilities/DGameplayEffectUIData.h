@@ -23,11 +23,14 @@ public:
 };
 
 UCLASS()
-class DREAM_API UDGameplayEffectUIData_Buff : public UDGameplayEffectUIData
+class DREAM_API UDGameplayEffectUIData_Buff : public UGameplayEffectUIData
 {
     GENERATED_BODY()
     
 public:
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UIData")
+    UTexture2D* Icon;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UIData")
     FGameplayTag BuffTag;

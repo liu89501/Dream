@@ -2,32 +2,69 @@
 
 
 #include "Components/ScalableWidgetComponent.h"
-
 #include "GameFramework/Character.h"
-#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 
 UScalableWidgetComponent::UScalableWidgetComponent()
 {
+    SetIsReplicated(false);
     PrimaryComponentTick.bCanEverTick = true;
+    PrimaryComponentTick.bStartWithTickEnabled = false;
+}
+
+void UScalableWidgetComponent::BeginPlay()
+{
+    Super::BeginPlay();
+    
+    if (GetNetMode() != NM_DedicatedServer)
+    {
+        SetComponentTickEnabled(true);
+    }
 }
 
 void UScalableWidgetComponent::TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction)
 {
     Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-    if (!bUseScale)
+    if (LocalPlayerCharacter == nullptr)
     {
-        return;
+        if (APlayerController* PlayerController = GEngine->GetFirstLocalPlayerController(GetWorld()))
+        {
+            LocalPlayerCharacter = PlayerController->GetPawn();
+        }
     }
 
-    if (UUserWidget* UserWidget = GetUserWidgetObject())
+    bool bVisibleFlag = GetVisibleFlag();
+        
+    if (LocalPlayerCharacter)
     {
-        if (ACharacter* PlayerCharacter = Cast<ACharacter>(GetOwner()))
+        float Distance = FVector::Distance(GetOwner()->GetActorLocation(), LocalPlayerCharacter->GetActorLocation());
+
+        if (HiddenDistance > 0)
         {
-            float Distance = (GetOwner()->GetActorLocation() - PlayerCharacter->GetActorLocation()).Size();
+            if (HiddenDistance < Distance)
+            {
+                if (bVisibleFlag)
+                {
+                    SetVisibility(false);
+                }
+            }
+            else
+            {
+                if (!bVisibleFlag)
+                {
+                    SetVisibility(true);
+                }
+            }
+        }
+
+        if (bVisibleFlag && bUseScale)
+        {
             float ScaleValue = UKismetMathLibrary::MapRangeClamped(Distance, DistanceA, DistanceB, ScaleA, ScaleB);
-            UserWidget->SetRenderScale(FVector2D(ScaleValue, ScaleValue));
+            if (UUserWidget* UserWidget = GetUserWidgetObject())
+            {
+                UserWidget->SetRenderScale(FVector2D(ScaleValue, ScaleValue));
+            }
         }
     }
 }

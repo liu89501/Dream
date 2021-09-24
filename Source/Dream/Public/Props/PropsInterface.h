@@ -25,5 +25,5 @@ public:
 
 	virtual const FPropsInfo& GetPropsInfo() const = 0;
 
-	virtual const FEquipmentAttributes& GetEquipmentAttributes() const = 0;
+	virtual ERewardNotifyMode GetRewardNotifyMode() const = 0;
 };

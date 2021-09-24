@@ -9,13 +9,10 @@
 			"Type": "Runtime",
 			"LoadingPhase": "Default",
 			"AdditionalDependencies": [
-				"Engine"
+				"Engine",
+				"UMG",
+				"CoreUObject"
 			]
-		},
-		{
-			"Name": "PlayerDataInterface",
-			"Type": "Runtime",
-			"LoadingPhase": "Default"
 		},
 		{
 			"Name": "DreamEditor",

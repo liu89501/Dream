@@ -59,8 +59,7 @@ public:
 
     UPROPERTY(EditAnywhere, Category = CharacterBase)
     TMap<FName, float> WeakPoint;
-    
-    
+
     UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
     float GetHealth() const;
     UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
@@ -74,17 +73,42 @@ public:
     UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
     float GetCriticalDamage() const;
 
-
     FCharacterDeathSignature OnCharacterDeath;
 
     virtual void HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle);
 
+    virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+
+    FORCEINLINE int32 GetCharacterLevel() const
+    {
+        return Level;
+    }
+
+    void SetCharacterLevel(int32 NewLevel);
+
+protected:
+
+    UPROPERTY(EditAnywhere, Replicated, Category = CharacterBase)
+    int32 Level;
+
+protected:
+
     UFUNCTION(BlueprintImplementableEvent, meta = (DisplayName = "OnHandleDamage", ScriptName = "OnHandleDamage"))
     void BP_HandleDamage(float Damage, const FHitResult& HitResult, ADCharacterBase* SourceCharacter);
 
-    virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
+    UFUNCTION(BlueprintCallable, Category = CharacterBase)
+    float GetHealthPercent() const;
+
+    UFUNCTION(BlueprintCallable, Category = CharacterBase)
+    float GetShieldPercent() const;
+
+    UFUNCTION(BlueprintImplementableEvent, Category = CharacterBase, meta = (DisplayName = "OnHealthChanged", ScriptName = "OnHealthChanged"))
+    void BP_OnHealthChanged();
 
 protected:
+
+    UFUNCTION(Server, Reliable, WithValidation)
+    void ServerSetCharacterLevel(int32 NewLevel);
 
     virtual void HealthChanged(const FOnAttributeChangeData& AttrData);
 
@@ -106,19 +130,8 @@ protected:
     /** 当血量为0时触发 */
     virtual void OnDeath(const AActor* Causer);
 
-    virtual FDamageResult CalculationDamage(float Damage, AActor* DamageCauser);
-
-    virtual float TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator,
-                             AActor* DamageCauser) override;
+    virtual float TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
-    UFUNCTION(BlueprintCallable, Category = CharacterBase)
-    float GetHealthPercent() const;
-
-    UFUNCTION(BlueprintCallable, Category = CharacterBase)
-    float GetShieldPercent() const;
-
-    UFUNCTION(BlueprintImplementableEvent, Category = CharacterBase, meta = (DisplayName = "OnHealthChanged", ScriptName = "OnHealthChanged"))
-    void BP_OnHealthChanged();
+    
 };

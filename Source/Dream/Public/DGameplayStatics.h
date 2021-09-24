@@ -3,12 +3,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DPropsType.h"
+#include "DModuleBase.h"
 #include "DreamType.h"
 #include "GameplayEffectTypes.h"
 #include "GameplayAbilityTypes.h"
+#include "HoldState.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "Kismet/KismetSystemLibrary.h"
+#include "PDI/PlayerDataInterfaceType.h"
+
 #include "DGameplayStatics.generated.h"
 
 class APlayerController;
@@ -30,24 +33,10 @@ public:
 	static FString GetClassPathName(TSubclassOf<UObject> ObjectClass);
 
 	UFUNCTION(BlueprintPure, Category = DreamStatics)
-	static const FPropsInfo& GetPropsInfoFromClassName(const FString& ClassString);
-	/** 通过UClass获取道具信息 */
-	UFUNCTION(BlueprintPure, Category = DreamStatics)
-    static const FPropsInfo& GetPropsInfoFromClass(UClass* PropsClass);
-	
-	UFUNCTION(BlueprintPure, Category = DreamStatics)
-	static const FEquipmentAttributes& GetEquipmentAttributesFromClassName(const FString& ClassString);
-	UFUNCTION(BlueprintPure, Category = DreamStatics)
-	static const FEquipmentAttributes& GetEquipmentAttributesFromClass(UClass* PropsClass);
-
-	UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject"), Category = DreamStatics)
-	static FLinearColor GetGameThemeColor(UObject* WorldContextObject);
+	static const FLinearColor& GetGameThemeColor();
 
 	UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject"), Category = DreamStatics)
 	static bool GetQualityInfo(UObject* WorldContextObject, EPropsQuality Quality, FQualityInfo& QualityInfo);
-
-	UFUNCTION(BlueprintPure, Category = DreamStatics)
-	static FLinearColor ParseColorFromString(const FString& ColorString);
 
 	UFUNCTION(BlueprintCallable, Category = DreamStatics)
 	static bool ContainsActionKey(APlayerController* PlayerController, FKey Key, FName ActionName);
@@ -66,13 +55,13 @@ public:
 	* 获取默认的重力值
 	*/
 	UFUNCTION(BlueprintPure, meta = (WorldContext = "WorldContextObject"), Category = DreamStatics)
-    static float GetDefaultGravityZ(UObject* WorldContextObject);
+	static float GetDefaultGravityZ(UObject* WorldContextObject);
 
 	UFUNCTION(BlueprintCallable, meta=(WorldContext="WorldContextObject"), Category = DreamStatics)
-    static void AddIconToPlayerMinimap(UObject* WorldContextObject, AActor* Actor);
-	
+	static void AddIconToPlayerMinimap(UObject* WorldContextObject, AActor* Actor);
+
 	UFUNCTION(BlueprintCallable, meta=(WorldContext="WorldContextObject"), Category = DreamStatics)
-    static void RemoveIconToPlayerMinimap(UObject* WorldContextObject, AActor* Actor);
+	static void RemoveIconInPlayerMinimap(UObject* WorldContextObject, AActor* Actor);
 
 	/**
 	* 	替换widget中的子项
@@ -116,19 +105,27 @@ public:
 	 */
 	UE_DEPRECATED(4.26, "暂时弃用")
 	UFUNCTION(BlueprintCallable, Category = "DreamStatics|Abilities")
-	static void SpawnDamageWidgets(AActor* TargetActor, const struct FGameplayCueParameters& Parameters, bool bHealthSteal);
+	static void SpawnDamageWidgets(AActor* TargetActor, const struct FGameplayCueParameters& Parameters,
+	                               bool bHealthSteal);
 
-	
-	static struct FDreamGameplayEffectContext* MakeDreamEffectContext(AActor* SourceActor, float DamageFalloff, const FHitResult& Hit, const FVector& Origin);
-
-	UFUNCTION(BlueprintPure, Category = "DreamStatics|Abilities")
-	static FGameplayEffectContextHandle MakeDreamEffectContextHandle(AActor* SourceActor, float DamageFalloff, const FHitResult& Hit, const FVector& Origin);
+	static struct FDreamGameplayEffectContext* MakeDreamEffectContext(AActor* SourceActor, float DamageFalloff,
+	                                                                  const FHitResult& Hit, const FVector& Origin);
 
 	UFUNCTION(BlueprintPure, Category = "DreamStatics|Abilities")
-    static class UDGameplayEffectUIData* GetGameplayUIData(TSubclassOf<class UDreamGameplayAbility> AbilityClass);
+	static FGameplayEffectContextHandle MakeDreamEffectContextHandle(AActor* SourceActor, float DamageFalloff,
+	                                                                 const FHitResult& Hit, const FVector& Origin);
 
-	UFUNCTION(BlueprintCallable, Category = "DreamStatics|Abilities", meta = (HidePin="Ability", DefaultToSelf = "Ability"))
-    static bool ApplyGameplayEffectToAllActors(class UGameplayAbility* Ability, const FGameplayEventData& EventData, TSubclassOf<class UGameplayEffect> EffectClass);
+	UFUNCTION(BlueprintPure, Category = "DreamStatics|Abilities")
+	static class UDGameplayEffectUIData* GetGameplayUIData(const FSoftClassPath& AbilityClass);
+
+	UFUNCTION(BlueprintCallable, Category = "DreamStatics|Abilities",
+		meta = (HidePin="Ability", DefaultToSelf = "Ability"))
+	static bool ApplyGameplayEffectToAllActors(class UGameplayAbility* Ability, const FGameplayEventData& EventData,
+	                                           TSubclassOf<class UGameplayEffect> EffectClass);
+
+	UFUNCTION(BlueprintCallable, Category = "DreamStatics|Abilities")
+	static void ApplyModToAttribute(AActor* Source, FGameplayAttribute Attribute,
+	                                TEnumAsByte<EGameplayModOp::Type> ModifierOp, float ModifierMagnitude);
 
 	/**
 	 *  获取Actor玩家控制器, 如果没找到会返回null
@@ -142,9 +139,7 @@ public:
 
 
 	UFUNCTION(BlueprintPure, Category = DreamStatics)
-	static void CalculateFBDirection(const FVector& Velocity, const FRotator& BaseRotation, float& Angle,
-	                                 bool& bIsBackward);
-
+	static void CalculateFBDirection(const FVector& Velocity, const FRotator& BaseRotation, float& Angle, bool& bIsBackward);
 
 	static void SpawnWeaponTrailParticles(UObject* WorldContextObject, const FWeaponTrailVFX& TrailVfx,
 	                                      const FVector& StartLocation, const FVector& EndLocation);
@@ -152,4 +147,27 @@ public:
 	UFUNCTION(BlueprintPure, Category = DreamStatics)
 	static int32 GetWidgetZOrder(TEnumAsByte<EWidgetOrder::Type> Type);
 
+	UFUNCTION(BlueprintPure, Category = DreamStatics)
+	static USceneComponent* GetAttachComponentFromSocketName(USceneComponent* ParentComponent, const FName& SocketName);
+
+	UFUNCTION(BlueprintCallable, Category = DreamStatics)
+	static void ForceDestroyComponent(UActorComponent* Component);
+
+	UFUNCTION(BlueprintPure, meta=(CompactNodeTitle = "->", BlueprintAutocast), Category = "DreamStatics|PDI")
+	static UItemDataWeapon* WeaponCastToExInformation(const FPlayerWeapon& Weapon);
+
+	UFUNCTION(BlueprintPure, meta=(CompactNodeTitle = "->", BlueprintAutocast), Category = "DreamStatics|PDI")
+	static UItemDataModule* ModuleCastToExInformation(const FPlayerModule& Module);
+
+	UFUNCTION(BlueprintPure, Category = "DreamStatics|PDI")
+	static const FPlayerProperties& GetCachedPlayerProperties();
+
+	UFUNCTION(BlueprintPure, meta=(CompactNodeTitle = "->", BlueprintAutocast), Category = DreamStatics)
+	static TSubclassOf<class AShootWeapon> SoftClassPathToWeaponClass(const FSoftClassPath& SoftClassPath);
+
+	UFUNCTION(BlueprintPure, meta=(CompactNodeTitle = "->", BlueprintAutocast), Category = DreamStatics)
+	static TSubclassOf<class UDModuleBase> SoftClassPathToModuleClass(const FSoftClassPath& SoftClassPath);
+
+	UFUNCTION(BlueprintCallable, Category="DreamStatics|DreamTask")
+	static void ClearHoldStateHandle(UObject* WorldContextObject, const FHoldStateHandle& Handle);
 };

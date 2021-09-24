@@ -13,9 +13,6 @@
 #include "GameplayTagContainer.h"
 #include "ShootWeapon.generated.h"
 
-struct FBulletHitInfoStructContainer;
-static const FBulletHitInfoStructContainer& StructContainer();
-
 USTRUCT()
 struct FBulletHitInfo
 {
@@ -140,8 +137,6 @@ public:
 		Data = TSharedPtr<FBulletHitInfo>(DataPtr);
 	}
 
-	
-
 	template<typename Type>
     Type* Get() const;
 
@@ -179,16 +174,16 @@ public:
 		return ScriptStructPtr ? *ScriptStructPtr : nullptr;
 	}
 
+	static const FBulletHitInfoStructContainer& StructContainer()
+	{
+		static FBulletHitInfoStructContainer StructContainer;
+		return StructContainer;
+	}
+
 private:
 
 	TMap<uint8, UScriptStruct*> ScriptStructCache;
 };
-
-static const FBulletHitInfoStructContainer& StructContainer()
-{
-	static FBulletHitInfoStructContainer StructContainer;
-	return StructContainer;
-}
 
 
 UENUM(BlueprintType)
@@ -197,6 +192,16 @@ enum class EFireMode : uint8
 	SemiAutomatic UMETA(DisplayName="半自动"),
 	FullyAutomatic UMETA(DisplayName="全自动"),
 	Accumulation UMETA(DisplayName="蓄力")
+};
+
+UENUM(BlueprintType)
+enum class EWeaponType : uint8
+{
+	AssaultRifle UMETA(DisplayName="突击步枪"),
+	GrenadeLaunch UMETA(DisplayName="榴弹发射器"),
+	Shotgun UMETA(DisplayName="霰弹枪"),
+	SniperRifle UMETA(DisplayName="狙击步枪"),
+	PrecisionRifle UMETA(DisplayName="精准步枪") 
 };
 
 USTRUCT(BlueprintType)
@@ -273,7 +278,10 @@ public:
 	class USkeletalMeshComponent* WeaponMesh;
 
 	UPROPERTY(BlueprintReadOnly, Category = Weapon)
-	int32 WeaponID;
+	int64 WeaponID;
+	
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
+	EWeaponType WeaponType;
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
 	FPropsInfo WeaponInfo;
@@ -306,8 +314,11 @@ public:
 	EAmmoType AmmoType;
 
 	/** 武器属性 */
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
+	UPROPERTY(BlueprintReadOnly, Category = Weapon)
 	FEquipmentAttributes WeaponAttribute;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Weapon)
+	FEquipmentAttributesAssign AttributesAssign;
 	
 	/** 瞄准时的摄像机FOV */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Weapon)
@@ -455,7 +466,8 @@ public:
 public:
 
 	virtual const FPropsInfo& GetPropsInfo() const override;
-	virtual const FEquipmentAttributes& GetEquipmentAttributes() const override;
+
+	virtual ERewardNotifyMode GetRewardNotifyMode() const override;
 
 	// ServerOnly
 	virtual void ApplyPointDamage(const FHitResult& HitInfo);

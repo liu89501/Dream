@@ -87,7 +87,6 @@ private:
 	FDelegateHandle Handle_JoinSessionComplete;
 	FDelegateHandle Handle_StartSessionComplete;
 	FDelegateHandle Handle_CreateSessionComplete;
-	FDelegateHandle Handle_RunServer;
 
 	/* 查询会话失败时的重试次数 */
 	uint8 FindRetryCount;

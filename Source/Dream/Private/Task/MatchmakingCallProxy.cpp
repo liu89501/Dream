@@ -2,8 +2,8 @@
 
 #include "MatchmakingCallProxy.h"
 #include "OnlineSubsystem.h"
-#include "PlayerDataInterface.h"
-#include "PlayerDataInterfaceModule.h"
+#include "PDI/PlayerDataInterface.h"
+#include "PDI/PlayerDataInterfaceStatic.h"
 #include "TimerManager.h"
 #include "DreamGameInstance.h"
 
@@ -94,11 +94,6 @@ void UMatchmakingCallProxy::ClearAllHandle()
 		SessionInt->ClearOnJoinSessionCompleteDelegate_Handle(Handle_JoinSessionComplete);
 		SessionInt->ClearOnStartSessionCompleteDelegate_Handle(Handle_StartSessionComplete);
 		SessionInt->ClearOnCreateSessionCompleteDelegate_Handle(Handle_CreateSessionComplete);
-	}
-
-	if (FPlayerDataInterface* PlayerDataInterface = FPlayerDataInterfaceModule::Get())
-	{
-		PlayerDataInterface->OnRunServerComplete.Remove(Handle_RunServer);
 	}
 }
 
@@ -228,15 +223,16 @@ void UMatchmakingCallProxy::WaitBeginTick(FNamedOnlineSession* Session)
 
 	if (Session->NumOpenPublicConnections == 0 || BeginWaitTime >= Begin_WaitTime)
 	{
-		if (FPlayerDataInterface* PDS = FPlayerDataInterfaceModule::Get())
+		if (FPlayerDataInterface* PDS = FPlayerDataInterfaceStatic::Get())
 		{
 			UDreamGameInstance* GI = World->GetGameInstance<UDreamGameInstance>();
-			Handle_RunServer = PDS->OnRunServerComplete.AddUObject(this, &UMatchmakingCallProxy::OnCreateServerComplete);
-			PDS->RunServer(FRunServerParameter(GI->GetMapFullName(MatchMapName), GameModeAlias));
+			FGetServerComplete Delegate;
+			Delegate.BindUObject(this, &UMatchmakingCallProxy::OnCreateServerComplete);
+			PDS->RunServer(FRunServerParameter(GI->GetMapFullName(MatchMapName), GameModeAlias), Delegate);
 		}
 		else
 		{
-			UE_LOG(LogOnline, Error, TEXT("LaunchDedicatedServer Fail FPlayerDataInterfaceModule Invalid"));
+			UE_LOG(LogOnline, Error, TEXT("LaunchDedicatedServer Fail FPlayerDataInterfaceStatic Invalid"));
 			OnFailure.Broadcast();
 		}
 
@@ -305,8 +301,6 @@ void UMatchmakingCallProxy::JoinLobbyGameServer(const FName& SessionName)
 
 void UMatchmakingCallProxy::OnCreateServerComplete(const FString& ServerAddress, const FString& ErrorMessage)
 {
-	FPlayerDataInterfaceModule::Get()->OnRunServerComplete.Remove(Handle_RunServer);
-	
 	if (!ErrorMessage.IsEmpty())
 	{
 		UE_LOG(LogOnline, Error, TEXT("CreateServer Fail"));
