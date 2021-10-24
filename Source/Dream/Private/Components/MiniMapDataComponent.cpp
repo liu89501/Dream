@@ -14,15 +14,21 @@ UMiniMapDataComponent::UMiniMapDataComponent()
 }
 
 
-FMiniMapData UMiniMapDataComponent::CalculationPosition(const FVector& TargetLocation, const FRotator& TargetRotation, float ScanRange) const
+void UMiniMapDataComponent::CalculationPosition(const FVector& TargetLocation, const FRotator& TargetRotation, float ScanRange, FMiniMapData& OutData)
 {
 	FVector Location = GetOwner()->GetActorLocation();
 	float Distance = FVector2D::Distance(FVector2D(TargetLocation), FVector2D(Location));
+
 	FRotator LocalRotation = (Location - TargetLocation).Rotation() - TargetRotation;
 	LocalRotation.Pitch = 0;
 	LocalRotation.Normalize();
-	
-	return FMiniMapData(FVector2D(LocalRotation.Vector().GetSafeNormal()), LocalRotation.Yaw, Distance / ScanRange, DrawType, DefaultSprite, OverflowSprite);
+
+	OutData.Yaw = bFixedSpriteDirection ? 0.f : LocalRotation.Yaw;
+	OutData.PosNormalize = FVector2D(LocalRotation.Vector().GetSafeNormal());
+	OutData.DistancePercentage = Distance / ScanRange;
+	OutData.DrawType = DrawType;
+	OutData.SpriteBrush = &DefaultSprite;
+	OutData.OverflowSpriteBrush = &OverflowSprite;
 }
 
 // Called when the game starts

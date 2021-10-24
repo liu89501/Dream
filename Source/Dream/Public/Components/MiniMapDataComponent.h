@@ -20,6 +20,11 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="MiniMapData")
 	EMiniMapDrawType DrawType;
+
+	/** 类型为sprite时 是否不让图标随着地图选择 */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="MiniMapData")
+	bool bFixedSpriteDirection;
+	
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="MiniMapData")
 	FSlateBrush DefaultSprite;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="MiniMapData")
@@ -27,8 +32,7 @@ public:
 
 public:
 
-	FMiniMapData CalculationPosition(const FVector& TargetLocation, const FRotator& TargetRotation, float ScanRange) const;
-	
+	void CalculationPosition(const FVector& TargetLocation, const FRotator& TargetRotation, float ScanRange, FMiniMapData& OutData);
 	
 protected:
 	// Called when the game starts

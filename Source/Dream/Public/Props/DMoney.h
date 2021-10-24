@@ -9,12 +9,14 @@
 /**
  * 
  */
-UCLASS()
+UCLASS(Blueprintable)
 class DREAM_API UDMoney : public UObject, public IPropsInterface
 {
 	GENERATED_BODY()
 
 public:
+
+	UDMoney();
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FPropsInfo PropsInformation;

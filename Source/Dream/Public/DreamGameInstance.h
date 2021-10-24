@@ -47,6 +47,8 @@ public:
 
 	const FSurfaceImpactEffect& GetSurfaceImpactEffect(EPhysicalSurface SurfaceType);
 
+	void LaunchDedicatedServer();
+	
 protected:
 
 	virtual void Init() override;

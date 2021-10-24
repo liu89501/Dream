@@ -33,7 +33,7 @@ public:
 
 	virtual void Initialize(FInitializeDelegate Delegate) override;
 	
-	virtual void AddPlayerRewards(const TArray<UItemData*>& Rewards, FCommonCompleteNotify Delegate) override;
+	virtual void AddPlayerRewards(UItemData* Rewards, FCommonCompleteNotify Delegate) override;
 	
 	virtual void EquipWeapon(int64 WeaponId, int32 EquipmentIndex, FCommonCompleteNotify Delegate) override;
 
@@ -56,13 +56,13 @@ public:
 	virtual void GetPlayerProperties(FGetPlayerPropertiesDelegate Delegate) override;
 
 	virtual void GetTasks(EGetTaskCondition Condition, FGetTasksDelegate Delegate) override;
-	virtual void IncreaseExperience(const FUserExperiencePair& UserExperience, FExperienceChangeDelegate Delegate) override;
 
-	virtual void DeliverTask(const int64& TaskId, FCommonCompleteNotify Delegate) override;
+	virtual void DeliverTask(const int64& TaskId, FTaskRewardDelegate Delegate) override;
+	virtual void AcceptTask(const int64& TaskId, FCommonCompleteNotify Delegate) override;
+	virtual void UpdateTaskState(const FQuestActionHandle& Handle) override;
 	
 	virtual void RegisterServer(int32 Port, int32 MaxPlayers, const FString& MapName, FRegisterServerComplete Delegate) override;
 	virtual void UnRegisterServer() override;
-
 	virtual void UpdateActivePlayers(bool bIncrement) override;
 
 	virtual void Login(FCommonCompleteNotify Delegate) override;
@@ -72,6 +72,8 @@ public:
 	virtual FString GetServerToken() const override;
 
 	virtual const FPlayerProperties& GetCachedProperties() const override;
+	
+	virtual void RefreshPlayerProperties() override;
 
 protected:
 

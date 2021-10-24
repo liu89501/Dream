@@ -21,7 +21,7 @@ void UBTService_StatusManager::TickNode(UBehaviorTreeComponent& OwnerComp, uint8
 	{
 		UBlackboardComponent* BlackboardComponent = OwnerComp.GetBlackboardComponent();
 
-		float HealthPercentage = EnemyOwner->GetHealth() / EnemyOwner->GetMaxHealth();
+		float HealthPercentage = EnemyOwner->GetHealthPercent();
 		if (HealthPercentage <= 0.1f)
 		{
 			BlackboardComponent->SetValueAsBool(NearDeathSelector.SelectedKeyName, true);
@@ -32,7 +32,7 @@ void UBTService_StatusManager::TickNode(UBehaviorTreeComponent& OwnerComp, uint8
 			float NewWalkSpeed = EnemyOwner->WalkSpeed;
 			
 			float Distance = FVector::Distance(Target->GetActorLocation(), EnemyOwner->GetActorLocation());
-			if (Distance <= ThresholdForWalking)
+			if (Distance > ThresholdForWalking)
 			{
 				NewWalkSpeed = EnemyOwner->JogSpeed;
 			}
@@ -41,10 +41,6 @@ void UBTService_StatusManager::TickNode(UBehaviorTreeComponent& OwnerComp, uint8
 			{
 				EnemyOwner->GetCharacterMovement()->MaxWalkSpeed = NewWalkSpeed;
 			}
-		}
-		else
-		{
-			BlackboardComponent->ClearValue(TargetPawnSelector.GetSelectedKeyID());
 		}
 	}
 }

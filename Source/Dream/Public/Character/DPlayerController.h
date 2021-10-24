@@ -124,6 +124,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category = DController, BlueprintAuthorityOnly)
     void ProcessRebornCharacter(const FTransform& SpawnTransform);
 
+	UFUNCTION(BlueprintCallable, Category = DController)
+	void SendClientRewardMessage(UItemData* Reward);
+
 	/* TEST ---------------------------------- */
 	UFUNCTION(Exec)
     void TestLoginServer();
@@ -142,8 +145,6 @@ public:
 	void ClientReceiveRewardMessage(const TArray<FRewardMessage>& RewardMessages);
 
 	bool AddWeaponAmmunition(EAmmoType AmmoType, int32 AmmunitionAmount);
-	UFUNCTION(Server, Reliable)
-	void ServerAddWeaponAmmunition(EAmmoType AmmoType, int32 AmmunitionAmount);
 
 	int32& GetWeaponAmmunition(EAmmoType AmmoType);
 	int32 GetWeaponAmmunition(EAmmoType AmmoType) const;
@@ -153,10 +154,8 @@ public:
 
 	int32 GetDefaultAmmunition(EAmmoType AmmoType) const;
 
-	FConfirmRebornCharacter& GetConfirmRebornDelegate()
-	{
-		return OnConfirmReborn;
-	}
+	UFUNCTION(Client, Reliable)
+	void ClientHandleKilledRewardsGenerate(UClass* EnemyClass);
 
 protected:
 
@@ -179,30 +178,23 @@ protected:
 	void SendMessageToPlayer(const FUniqueNetIdRepl& UserNetId, TEnumAsByte<EMessageType::Type> Type, const FString& Message);
 
 	UFUNCTION(NetMulticast, Reliable)
-	void NetMulticastMessage(EMessageType::Type Type, const FString& Message);
+	void NetMulticastMessage(const FTalkMessage& Message);
 	UFUNCTION(Server, Reliable)
-	void ServerMulticastMessage(EMessageType::Type Type, const FString& Message);
-	UFUNCTION(Client, Reliable)
-	void ClientReceiveMessage(EMessageType::Type Type, const FString& Message);
+	void ServerMulticastMessage(const FTalkMessage& Message);
 
 	/*
 		处理接受到的服务器数据
 	*/
 	virtual void HandleRawMessage(EMessageType::Type Type, const FString& Message);
 
-	void OnGetPlayerInfoComplete(const FPlayerInfo& PlayerInfo, const FString& ErrorMessage);
-
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 private:
+
+	void OnRewardsAddCompleted(const FString& ErrorMessage, UItemData* Rewards);
 
 	void RecvData(const TSharedPtr<class FArrayReader, ESPMode::ThreadSafe>& RawData, const FIPv4Endpoint& Endpoint);
 
 	class FUdpSocketReceiver* UdpReceiver;
 	class FSocket* ClientSocket;
-
-	FConfirmRebornCharacter OnConfirmReborn;
-	
-	/*UPROPERTY()
-	FPlayerInfo OnlinePlayerInfo;*/
 };

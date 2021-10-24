@@ -38,34 +38,19 @@ void ADCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 }
 
-float ADCharacterBase::GetHealth() const
+float ADCharacterBase::GetBaseHealth()
 {
-    return AttributeSet->GetHealth();
+    return AbilitySystem->GetNumericAttribute(AttributeSet->GetHealthAttribute());
 }
 
-float ADCharacterBase::GetMaxHealth() const
+float ADCharacterBase::GetBaseMaxHealth()
 {
-    return AttributeSet->GetMaxHealth();
+    return AbilitySystem->GetNumericAttribute(AttributeSet->GetMaxHealthAttribute());
 }
 
-float ADCharacterBase::GetShield() const
+bool ADCharacterBase::IsDeath() const
 {
-    return AttributeSet->GetShield();
-}
-
-float ADCharacterBase::GetMaxShield() const
-{
-    return AttributeSet->GetMaxShield();
-}
-
-float ADCharacterBase::GetCriticalRate() const
-{
-    return AttributeSet->GetCriticalRate();
-}
-
-float ADCharacterBase::GetCriticalDamage() const
-{
-    return AttributeSet->GetCriticalDamage();
+    return AttributeSet->GetHealth() == 0;
 }
 
 void ADCharacterBase::HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle)
@@ -80,7 +65,7 @@ void ADCharacterBase::HandleDamage(const float DamageDone, const FGameplayEffect
     const FHitResult* HitResult = Handle.GetHitResult();
     BP_HandleDamage(DamageDone, HitResult ? *HitResult : FHitResult(), LocalInstigator);
 
-    bool bDeath = GetHealth() == 0;
+    bool bDeath = IsDeath();
     LocalInstigator->HitEnemy(FDamageTargetInfo(DamageDone, bDeath, Handle), this);
 
     if (bDeath)
@@ -94,33 +79,11 @@ UAbilitySystemComponent* ADCharacterBase::GetAbilitySystemComponent() const
     return AbilitySystem;
 }
 
-void ADCharacterBase::SetCharacterLevel(int32 NewLevel)
-{
-    if (GetLocalRole() < ROLE_Authority)
-    {
-        ServerSetCharacterLevel(NewLevel);
-    }
-    else
-    {
-        Level = NewLevel;
-    }
-}
-
-void ADCharacterBase::ServerSetCharacterLevel_Implementation(int32 NewLevel)
-{
-    SetCharacterLevel(NewLevel);
-}
-
-bool ADCharacterBase::ServerSetCharacterLevel_Validate(int32 NewLevel)
-{
-    return NewLevel >= Level;
-}
-
 void ADCharacterBase::HealthChanged(const FOnAttributeChangeData& AttrData)
 {
     BP_OnHealthChanged();
 
-    if (GetHealth() == 0)
+    if (IsDeath())
     {
         Tags.Add(DreamActorTagName::Death);
         
@@ -141,7 +104,6 @@ void ADCharacterBase::BeginPlay()
     Super::BeginPlay();
 
     AbilitySystem->GetGameplayAttributeValueChangeDelegate(DreamAttrStatics().HealthProperty).AddUObject(this, &ADCharacterBase::HealthChanged);
-    AbilitySystem->GetGameplayAttributeValueChangeDelegate(DreamAttrStatics().ShieldProperty).AddUObject(this, &ADCharacterBase::HealthChanged);
 }
 
 void ADCharacterBase::SetGenericTeamId(const FGenericTeamId& NewTeamID)
@@ -167,10 +129,6 @@ FGenericTeamId ADCharacterBase::GetGenericTeamId() const
 
 float ADCharacterBase::GetHealthPercent() const
 {
-    return GetHealth() / GetMaxHealth();
-}
-
-float ADCharacterBase::GetShieldPercent() const
-{
-    return GetShield() / GetMaxShield();
+    float MaxHealth = AttributeSet->GetMaxHealth();
+    return MaxHealth > 0 ? AttributeSet->GetHealth() / MaxHealth : 0;
 }

@@ -9,20 +9,18 @@
 #include "Components/WidgetComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "AIController.h"
-#include "BrainComponent.h"
-#include "DAIGenerator.h"
+#include "DAIGeneratorBase.h"
 #include "DreamAttributeSet.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "PlayerDataInterface.h"
 #include "Perception/AISense_Damage.h"
 #include "DreamGameInstance.h"
-#include "EngineUtils.h"
-#include "GameplayTasksComponent.h"
 #include "HealthWidgetComponent.h"
 #include "Character/DPlayerController.h"
 #include "Character/DCharacterPlayer.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "DreamDropProps.h"
+#include "DRewardPool.h"
 #include "PlayerDataInterfaceStatic.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/BlackboardComponent.h"
@@ -36,12 +34,12 @@ ADEnemyBase::ADEnemyBase()
 	HealthUI = CreateDefaultSubobject<UHealthWidgetComponent>(TEXT("HealthUI"));
 	HealthUI->SetupAttachment(RootComponent);
 
-	TasksComponent = CreateDefaultSubobject<UGameplayTasksComponent>(TEXT("TasksComponent"));
-	
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	JogSpeed = 400.f;
+
+	//DREAM_NLOG(Error, TEXT("ADEnemyBase AttributeSet: %s"), *(AttributeSet ? FCoreTexts::Get().Yes : FCoreTexts::Get().No).ToString());
 }
 
 void ADEnemyBase::HealthChanged(const FOnAttributeChangeData& AttrData)
@@ -53,12 +51,12 @@ void ADEnemyBase::HealthChanged(const FOnAttributeChangeData& AttrData)
 		return;
 	}
 
-	if (GetHealth() == 0)
+	if (IsDeath())
 	{
-		TSubclassOf<ADreamDropProps> RandomProbability = FRandomProbability::RandomProbabilityEx<TSubclassOf<ADreamDropProps>>(Reward.AmmunitionReward);
-		if (RandomProbability)
+		// todo 放在这可能不太好
+		if (TSubclassOf<ADreamDropProps> DropMagazine = FRandomProbability::RandomProbabilityEx<TSubclassOf<ADreamDropProps>>(AmmunitionReward))
 		{
-			GetWorld()->SpawnActor<ADreamDropProps>(RandomProbability, FTransform(GetActorLocation()));
+			GetWorld()->SpawnActor<ADreamDropProps>(DropMagazine, FTransform(GetActorLocation()));
 		}
 
 		HealthUI->DestroyComponent();
@@ -76,9 +74,14 @@ AAIController* ADEnemyBase::GetAIController() const
 	return AIController;
 }
 
-void ADEnemyBase::SetAIGenerator(ADAIGenerator* Generator)
+void ADEnemyBase::SetAIGenerator(ADAIGeneratorBase* Generator)
 {
 	OwnerAIGenerator = Generator;
+}
+
+FRotator ADEnemyBase::GetReplicationControllerRotation() const
+{
+	return FRotator(ReplicatedCtrlRotation.X, ReplicatedCtrlRotation.Y, 0);
 }
 
 void ADEnemyBase::HiddenHealthUI()
@@ -88,7 +91,7 @@ void ADEnemyBase::HiddenHealthUI()
 
 void ADEnemyBase::UpdateHealthUI()
 {
-	HealthUI->UpdateStatus(GetHealthPercent(), GetShieldPercent());
+	HealthUI->UpdateStatus(GetHealthPercent());
 }
 
 void ADEnemyBase::BeginPlay()
@@ -103,7 +106,11 @@ void ADEnemyBase::BeginPlay()
 
 	if (GetLocalRole() == ROLE_Authority)
 	{
-		AIController->RunBehaviorTree(BehaviorTree);
+		if (BehaviorTree)
+		{
+			AIController->RunBehaviorTree(BehaviorTree);
+		}
+
 		AIPerception->OnTargetPerceptionUpdated.AddDynamic(this, &ADEnemyBase::OnTargetPerceptionUpdated0);
 
 		if (DefaultAttributes)
@@ -122,6 +129,10 @@ void ADEnemyBase::BeginPlay()
 	if (GetNetMode() != NM_DedicatedServer)
 	{
 		HiddenHealthUI();
+	}
+	else
+	{
+		HealthUI->DestroyComponent();
 	}
 }
 
@@ -153,54 +164,74 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 	{
 		AICtrl->StopMovement();
 		AICtrl->ClearFocus(EAIFocusPriority::Gameplay);
-		TasksComponent->Deactivate();
 		if (UBehaviorTreeComponent* BehaviorTreeComponent = Cast<UBehaviorTreeComponent>(AICtrl->BrainComponent))
 		{
 			BehaviorTreeComponent->StopTree(EBTStopMode::Forced);
 		}
 	}
 
-	TArray<UItemData*> FinalRewards;
+	TArray<AActor*> HostileActors;
+	AIPerception->GetHostileActors(HostileActors);
 
-	TMap<ADPlayerController*, TArray<UItemData*>> AllPlayerRewards;
-
-	for (TActorIterator<ADPlayerController> It(GetWorld()); It; ++It)
+	if (!FPlayerDataInterfaceStatic::IsLocalInterface())
 	{
-		for (FRewardProbabilityList& RewardProbabilities : Reward.Rewards)
+		UItemDataContainer* DataContainer = NewObject<UItemDataContainer>();
+		TMap<ADPlayerController*, UItemData*> AllPlayerRewards;
+
+		for (AActor* Hostile : HostileActors)
 		{
-			TArray<UItemData*> RewardsTemplate;
-			TArray<float> Probability;
-		
-			for (FRewardProbability RewardProbability : RewardProbabilities.RewardList)
+			ADPlayerController* PlayerController = nullptr;
+			
+			if (ADCharacterPlayer* HostileCharacter = Cast<ADCharacterPlayer>(Hostile))
 			{
-				RewardsTemplate.Add(RewardProbability.Reward);
-				Probability.Add(RewardProbability.Probability);
+				PlayerController = HostileCharacter->GetPlayerController();
 			}
 
-			int32 Index = FRandomProbability::RandomProbability(Probability);
-			if (Index > INDEX_NONE)
+			if (PlayerController == nullptr)
 			{
-				FinalRewards.Add(RewardsTemplate[Index]);
-				AllPlayerRewards.FindOrAdd(*It).Add(RewardsTemplate[Index]);
+				continue;
+			}
+
+			UItemData* Rewards = RewardPool->GenerateRewards();
+			if (Rewards->IsValidData())
+			{
+				AllPlayerRewards.Add(PlayerController, Rewards);
+				DataContainer->AddItem(Rewards);
+			}
+		}
+
+		if (DataContainer->IsValidData())
+		{
+			FCommonCompleteNotify Delegate;
+			Delegate.BindUObject(this, &ADEnemyBase::OnRewardsAddCompleted, AllPlayerRewards);
+			FPlayerDataInterfaceStatic::Get()->AddPlayerRewards(DataContainer, Delegate);
+		}
+	}
+	else
+	{
+		for (AActor* Hostile : HostileActors)
+		{
+			if (ADCharacterPlayer* HostileCharacter = Cast<ADCharacterPlayer>(Hostile))
+			{
+				if (ADPlayerController* PlayerController = HostileCharacter->GetPlayerController())
+				{
+					PlayerController->ClientHandleKilledRewardsGenerate(GetClass());
+				}
 			}
 		}
 	}
 
-	FCommonCompleteNotify Delegate;
-	Delegate.BindUObject(this, &ADEnemyBase::OnRewardsAddCompleted, AllPlayerRewards);
-	FPlayerDataInterfaceStatic::Get()->AddPlayerRewards(FinalRewards, Delegate);
-
 	SetLifeSpan(3.f);
 }
 
-void ADEnemyBase::OnRewardsAddCompleted(const FString& ErrorMessage, TMap<ADPlayerController*, TArray<UItemData*>> Rewards)
+void ADEnemyBase::OnRewardsAddCompleted(const FString& ErrorMessage, TMap<ADPlayerController*, UItemData*> Rewards)
 {
 	if (ErrorMessage.IsEmpty())
 	{
-		for (TPair<ADPlayerController*, TArray<UItemData*>> PlayerReward : Rewards)
+		for (TPair<ADPlayerController*, UItemData*> PlayerReward : Rewards)
 		{
 			TArray<FRewardMessage> RewardMessages;
-			for (UItemData* RewardItem : PlayerReward.Value)
+			for (UItemData* RewardItem : FItemDataRange(PlayerReward.Value))
 			{
 				FRewardMessage RewardMessage;
 				RewardMessage.RewardPropsClass = RewardItem->GetItemClass();
@@ -222,12 +253,15 @@ UAIPerceptionComponent* ADEnemyBase::GetPerceptionComponent()
 void ADEnemyBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(ADEnemyBase, CtrlYaw);
+	DOREPLIFETIME(ADEnemyBase, ReplicatedCtrlRotation);
 }
 
 void ADEnemyBase::ActivateHostile(ADCharacterBase* Hostile, bool bTriggerTeamStimulus)
 {
-	AIController->SetFocus(Hostile);
+	if (!bUseControllerRotationYaw)
+	{
+		AIController->SetFocus(Hostile);
+	}
 
 	if (bTriggerTeamStimulus)
 	{
@@ -239,9 +273,10 @@ void ADEnemyBase::ActivateHostile(ADCharacterBase* Hostile, bool bTriggerTeamSti
 	UBlackboardComponent* Blackboard = AIController->GetBlackboardComponent();
 	Blackboard->SetValueAsObject(BlackboardName_HostileTarget, Hostile);
 
-	if (!Hostile->OnCharacterDeath.IsBoundToObject(this))
+	FCharacterDeathSignature& Delegate = Hostile->GetCharacterDeathDelegate();
+	if (!Delegate.IsBoundToObject(this))
 	{
-		Hostile->OnCharacterDeath.AddUObject(this, &ADEnemyBase::HostileTargetDestroy);
+		Delegate.AddUObject(this, &ADEnemyBase::HostileTargetDestroy);
 	}
 }
 
@@ -267,8 +302,7 @@ void ADEnemyBase::LostAllHostileTarget()
 {
 	AIController->ClearFocus(EAIFocusPriority::Gameplay);
 	AIController->GetBlackboardComponent()->ClearValue(BlackboardName_HostileTarget);
-	GetCharacterMovement()->MaxWalkSpeed = GetClass()->GetDefaultObject<ADEnemyBase>()->GetCharacterMovement()->
-	                                                   MaxWalkSpeed;
+	GetCharacterMovement()->MaxWalkSpeed = GetClass()->GetDefaultObject<ADEnemyBase>()->GetCharacterMovement()->MaxWalkSpeed;
 }
 
 void ADEnemyBase::OnTargetPerceptionUpdated(ADCharacterBase* StimulusPawn, FAIStimulus Stimulus)
@@ -298,7 +332,7 @@ void ADEnemyBase::OnTargetPerceptionUpdated(ADCharacterBase* StimulusPawn, FAISt
 	{
 		if (Stimulus.WasSuccessfullySensed())
 		{
-			AActor* FocusEnemy = AIController->GetFocusActorForPriority(EAIFocusPriority::Gameplay);
+			AActor* FocusEnemy = Cast<AActor>(AIController->GetBlackboardComponent()->GetValueAsObject(BlackboardName_HostileTarget));
 
 			if (FocusEnemy == nullptr || FocusEnemy->IsPendingKill())
 			{
@@ -311,20 +345,24 @@ void ADEnemyBase::OnTargetPerceptionUpdated(ADCharacterBase* StimulusPawn, FAISt
 void ADEnemyBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	FRotator Rotation = GetControlRotation();
+	ReplicatedCtrlRotation.X = Rotation.Pitch;
+	ReplicatedCtrlRotation.Y = Rotation.Yaw;
+	ReplicatedCtrlRotation.Z = 0;
 
-	FRotator ControlRotation = GetControlRotation();
-	CtrlYaw = ControlRotation.Yaw;
-
-	FRotator ActorRotation = GetActorRotation();
-	float YawDelta = FMath::Abs(FRotator::NormalizeAxis(CtrlYaw - ActorRotation.Yaw));
-
-	if (FMath::IsNearlyZero(GetVelocity().Size2D()))
+	if (!bUseControllerRotationYaw)
 	{
-		if (YawDelta >= 60.f || bTurnInProgress)
-		{
-			SetActorRotation(FMath::RInterpTo(ActorRotation, FRotator(0, CtrlYaw, 0), DeltaSeconds, 10.f));
+		FRotator ActorRotation = GetActorRotation();
+		FRotator DeltaRotation = Rotation - ActorRotation;
+		DeltaRotation.Normalize();
 
-			if (FMath::IsNearlyZero(YawDelta, 1.f))
+		float YawAbs = FMath::Abs(DeltaRotation.Yaw);
+
+		if (YawAbs >= 60.f || bTurnInProgress)
+		{
+			SetActorRotation(FMath::RInterpTo(ActorRotation, FRotator(0, Rotation.Yaw, 0), DeltaSeconds, 10.f));
+
+			if (FMath::IsNearlyZero(YawAbs, 2.f))
 			{
 				bTurnInProgress = false;
 			}
@@ -332,13 +370,6 @@ void ADEnemyBase::Tick(float DeltaSeconds)
 			{
 				bTurnInProgress = true;
 			}
-		}
-	}
-	else
-	{
-		if (YawDelta > 40.f)
-		{
-			SetActorRotation(FMath::RInterpTo(ActorRotation, FRotator(0, CtrlYaw, 0), DeltaSeconds, 10.f));
 		}
 	}
 }
@@ -359,7 +390,7 @@ void ADEnemyBase::OnTargetPerceptionUpdated0(AActor* Actor, FAIStimulus Stimulus
 
 	if (ADCharacterBase* StimulusPawn = Cast<ADCharacterBase>(Actor->GetInstigator()))
 	{
-		if (StimulusPawn->GetHealth() == 0)
+		if (StimulusPawn->IsDeath())
 		{
 			// 死亡的敌人不用走后续逻辑
 			return;

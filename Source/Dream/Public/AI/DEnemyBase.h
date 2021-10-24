@@ -3,47 +3,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DreamType.h"
 #include "ShootWeapon.h"
 #include "Character/DCharacterBase.h"
 #include "Perception/AIPerceptionTypes.h"
 #include "Perception/AIPerceptionListenerInterface.h"
 #include "DEnemyBase.generated.h"
-
-USTRUCT(BlueprintType)
-struct FRewardProbability
-{
-	GENERATED_BODY()
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	float Probability;
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Instanced)
-	class UItemData* Reward;
-};
-
-USTRUCT(BlueprintType)
-struct FRewardProbabilityList
-{
-	GENERATED_BODY()
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	TArray<FRewardProbability> RewardList;
-};
-
-USTRUCT(BlueprintType)
-struct FReward
-{
-	GENERATED_USTRUCT_BODY()
-
-public:
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	TArray<FRewardProbabilityList> Rewards;
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	TMap<TSubclassOf<class ADreamDropProps>, float> AmmunitionReward;
-};
 
 /**
  * 
@@ -61,9 +25,6 @@ public:
 	class UAIPerceptionComponent* AIPerception;
 
 	UPROPERTY(VisibleAnywhere)
-	class UGameplayTasksComponent* TasksComponent;
-
-	UPROPERTY(VisibleAnywhere)
 	class UHealthWidgetComponent* HealthUI;
 	
 
@@ -74,7 +35,7 @@ public:
 	 * 被击杀时的奖励
 	 */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AISettings)
-	FReward Reward;
+	TMap<TSubclassOf<class ADreamDropProps>, float> AmmunitionReward;
 
 	UPROPERTY(EditAnywhere, Category = "AISettings|Abilities")
 	UDataTable* DefaultAttributes;
@@ -87,6 +48,9 @@ public:
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AISettings)
 	TArray<TSubclassOf<class UGameplayAbility>> OwningAbilities;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AISettings)
+	class UDRewardPool* RewardPool;
 
 	/**
 	 * 	AI最大的巡逻范围, 相对于 SpawnLocation
@@ -113,7 +77,10 @@ public:
 
 	class AAIController* GetAIController() const;
 
-	void SetAIGenerator(class ADAIGenerator* Generator);
+	void SetAIGenerator(class ADAIGeneratorBase* Generator);
+
+	UFUNCTION(BlueprintPure, Category=AIEnemy)
+	FRotator GetReplicationControllerRotation() const;
 
 protected:
 
@@ -149,13 +116,13 @@ protected:
 protected:
 
 	UPROPERTY()
-	ADAIGenerator* OwnerAIGenerator;
+	ADAIGeneratorBase* OwnerAIGenerator;
 
 	UPROPERTY()
 	class AAIController* AIController;
 
-	UPROPERTY(Replicated, BlueprintReadOnly)
-	float CtrlYaw;
+	UPROPERTY(Replicated)
+	FVector_NetQuantize10 ReplicatedCtrlRotation;
 
 	UPROPERTY(BlueprintReadOnly)
 	bool bTurnInProgress;
@@ -169,6 +136,6 @@ private:
 	UFUNCTION()
     void OnTargetPerceptionUpdated0(AActor* Actor, FAIStimulus Stimulus);
 
-	void OnRewardsAddCompleted(const FString& ErrorMessage, TMap<class ADPlayerController*, TArray<UItemData*>> Rewards);
+	void OnRewardsAddCompleted(const FString& ErrorMessage, TMap<class ADPlayerController*, class UItemData*> Rewards);
 	
 };

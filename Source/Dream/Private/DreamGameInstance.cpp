@@ -25,6 +25,17 @@ const FSurfaceImpactEffect& UDreamGameInstance::GetSurfaceImpactEffect(EPhysical
 	return EffectPtr ? *EffectPtr : EmptySurfaceImpactEffect;
 }
 
+void UDreamGameInstance::LaunchDedicatedServer()
+{
+	if (!IsRunningDedicatedServer())
+	{
+		return;
+	}
+	
+
+	//FPlatformProcess::ExecProcess("")
+}
+
 const FString& UDreamGameInstance::GetMapFullName(const FName& MapName) const
 {
 	static const FString Context = TEXT("UDreamGameInstance::GetMapFullName");

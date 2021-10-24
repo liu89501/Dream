@@ -1,9 +1,16 @@
 ﻿
 #include "CoreMinimal.h"
+
+
+#include "DEnemyShooter.h"
+#include "DMoney.h"
 #include "Misc/AutomationTest.h"
 #include "DreamType.h"
 #include "JsonObjectConverter.h"
 #include "PlayerDataInterfaceType.h"
+#include "PlayerGameData.h"
+#include "ShootWeapon.h"
+#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDreamTests, "Dream.Default", EAutomationTestFlags::EditorContext | EAutomationTestFlags::SmokeFilter)
@@ -87,16 +94,73 @@ bool FDreamTests::RunTest(const FString& Parameters)
 		DREAM_NLOG(Log, TEXT("Name: %s, Result: %f"), *Pair.Key, (float)Pair.Value / TestCount);
 	}
 
-	DREAM_NLOG(Log, TEXT("----------- 随机工具测试 结束 -------------"));
+	DREAM_NLOG(Log, TEXT("----------- <><><><><><><> -------------"));
 
-	DREAM_NLOG(Log, TEXT("----------- 随机数测试 开始 -------------"));
-
-	for (int32 i = 0; i < 10; i++)
+	TMap<FString, int32> Result2;
+	for (int32 i = 0; i < TestCount; i++)
 	{
-		DREAM_NLOG(Log, TEXT("Number: %lld"), UKismetMathLibrary::RandomInteger64(0xFFFFFFFFFFFFF));
+		if (UKismetMathLibrary::RandomBoolWithWeight(0.01))
+		{
+			Result2.FindOrAdd(TEXT("百分之1"))++;
+		}
+
+		if (UKismetMathLibrary::RandomBoolWithWeight(0.2))
+		{
+			Result2.FindOrAdd(TEXT("百分之20"))++;
+		}
+		
+		if (UKismetMathLibrary::RandomBoolWithWeight(0.1))
+		{
+			Result2.FindOrAdd(TEXT("百分之10"))++;
+		}
 	}
 
-	DREAM_NLOG(Log, TEXT("----------- 随机数测试 结束 -------------"));
+	for (TPair<FString, int32> Pair : Result2)
+	{
+		DREAM_NLOG(Log, TEXT("Name: %s, Result: %f"), *Pair.Key, (float)Pair.Value / TestCount);
+	}
+
+	DREAM_NLOG(Log, TEXT("----------- 随机工具测试 结束 -------------"));
+
+	DREAM_NLOG(Log, TEXT("----------- 其他测试 开始 -------------"));
+
+	/*UTaskData* LoadGameFromSlot = Cast<UTaskData>(UGameplayStatics::LoadGameFromSlot(TEXT("TestSaveGame"), 0));
+
+	if (LoadGameFromSlot)
+	{
+		UDQuestCondition_KillTarget* KillTarget = Cast<UDQuestCondition_KillTarget>(LoadGameFromSlot->TaskList[0].CompleteCondition.Get());
+		DREAM_NLOG(Log, TEXT("Load CurrentKilled: %d"), KillTarget->CurrentKilled);
+		DREAM_NLOG(Log, TEXT("Load KillNum: %d"), KillTarget->KillNum);
+		DREAM_NLOG(Log, TEXT("Load TargetType: %s"), *KillTarget->TargetType->GetPathName());
+
+		KillTarget->CurrentKilled++;
+
+		UGameplayStatics::SaveGameToSlot(LoadGameFromSlot, TEXT("TestSaveGame"), 0);
+	}
+	else
+	{
+		UTaskData* TaskDataTest = NewObject<UTaskData>();
+		FTaskInformationSaveGame Information;
+		Information.TaskId = 10;
+		Information.TaskMark = ETaskMark::Completed;
+
+		Information.CompletedReward = UItemDataMoney::StaticClass()->GetDefaultObject<UItemDataMoney>();
+
+		UDQuestCondition_KillTarget* KillTarget = NewObject<UDQuestCondition_KillTarget>();
+		KillTarget->KillNum = 10;
+		KillTarget->CurrentKilled = 1;
+		KillTarget->TargetType = ADEnemyShooter::StaticClass();
+
+		Information.CompleteCondition = FQuestConditionHandle(KillTarget);
+
+		TaskDataTest->TaskList.Add(Information);
+
+		UGameplayStatics::SaveGameToSlot(TaskDataTest, TEXT("TestSaveGame"), 0);
+
+		DREAM_NLOG(Log, TEXT("Save TaskDataTest: %s"), *TaskDataTest->GetFullName());
+	}*/
+
+	DREAM_NLOG(Log, TEXT("----------- 其他测试 结束 -------------"));
 
 	return true;
 }

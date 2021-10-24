@@ -8,14 +8,64 @@
 #include "PlayerGameData.generated.h"
 
 #define DEFAULT_SLOT TEXT("GameData")
-#define DEFAULT_SLOT_INDEX 0
-
 #define STORE_SLOT TEXT("Store")
-
 #define TASK_SLOT TEXT("Task")
-#define TASK_SLOT_INDEX 0
 
 #define MAX_ITEM_NUM 40
+
+USTRUCT()
+struct FTaskInformationSaveGame
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	int64 TaskId;
+
+	UPROPERTY()
+	FSoftObjectPath TaskDescription;
+
+	UPROPERTY()
+	FQuestConditionHandle CompleteCondition;
+
+	UPROPERTY()
+	FItemDataHandle CompletedReward;
+
+	UPROPERTY()
+	ETaskMark TaskMark;
+
+	FTaskInformationSaveGame& operator=(const FTaskInformation& Information)
+	{
+		TaskId = Information.TaskId;
+		TaskDescription = Information.TaskDescription;
+		CompletedReward = FItemDataHandle(Information.CompletedReward);
+		TaskMark = Information.TaskMark;
+		CompleteCondition = FQuestConditionHandle(Information.CompleteCondition);
+		return *this;
+	}
+
+	FTaskInformationSaveGame(const FTaskInformation& Other)
+		: TaskId(Other.TaskId),
+		  TaskDescription(Other.TaskDescription),
+		  CompleteCondition(Other.CompleteCondition),
+		  CompletedReward(Other.CompletedReward),
+		  TaskMark(Other.TaskMark)
+	{
+	}
+
+	FTaskInformationSaveGame() = default;
+
+	FTaskInformation CastToInformation() const
+	{
+		FTaskInformation Information;
+
+		Information.TaskId = TaskId;
+		Information.TaskDescription = TaskDescription;
+		Information.CompletedReward = CompletedReward.Get();
+		Information.TaskMark = TaskMark;
+		Information.CompleteCondition = CompleteCondition.Get();
+		return Information;
+	}
+};
 
 /**
  * 
@@ -34,11 +84,32 @@ public:
 	TArray<FPlayerWeapon> Weapons;
 
 	UPROPERTY()
-	TArray<FPlayerModule> Modules;
+	TMap<EModuleCategory, FPlayerModuleList> Modules;
 
 	UPROPERTY()
 	TArray<FTalentInfo> TalentList;
 
+	UPROPERTY()
+	FSoftObjectPath CharacterMesh;
+
+};
+
+USTRUCT()
+struct FItemList
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Instanced)
+	TArray<UItemData*> Items;
+};
+
+USTRUCT()
+struct FItemListSaveGame
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TArray<FItemDataHandle> Items;
 };
 
 UCLASS()
@@ -49,7 +120,7 @@ class UStoreData : public USaveGame
 public:
 
 	UPROPERTY()
-	TArray<UItemData*> Items;
+	TMap<int32, FItemListSaveGame> Stores;
 };
 
 UCLASS()
@@ -60,19 +131,7 @@ class UTaskData : public USaveGame
 public:
 
 	UPROPERTY()
-	TArray<FTaskInformation> TaskList;
-};
-
-USTRUCT()
-struct FStoreDataInfo
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere)
-	int32 StoreId;
-
-	UPROPERTY(EditAnywhere, Instanced)
-	TArray<UItemData*> Items;
+	TArray<FTaskInformationSaveGame> TaskList;
 };
 
 UCLASS()
@@ -83,7 +142,7 @@ class UStoreList : public UDataAsset
 public:
 
 	UPROPERTY(EditAnywhere)
-	TArray<FStoreDataInfo> Stores;
+	TMap<int32, FItemList> Stores;
 };
 
 UCLASS()

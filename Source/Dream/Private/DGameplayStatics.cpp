@@ -1,6 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
+// ReSharper disable CppExpressionWithoutSideEffects
 #include "DGameplayStatics.h"
 
 #include "AbilitySystemBlueprintLibrary.h"
@@ -29,8 +30,11 @@
 #include "GameFramework/PhysicsVolume.h"
 #include "PhysicsEngine/PhysicsSettings.h"
 #include "NiagaraComponent.h"
+#include "NiagaraDataInterfaceSpline.h"
 #include "NiagaraFunctionLibrary.h"
 #include "PlayerDataInterfaceStatic.h"
+#include "SViewport.h"
+#include "GameFramework/GameModeBase.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 
@@ -148,8 +152,7 @@ int32 UDGameplayStatics::GetJoinedPlayerNum()
 	return 0;
 }
 
-void UDGameplayStatics::ApplyModToAttribute(AActor* Source, FGameplayAttribute Attribute,
-                                            TEnumAsByte<EGameplayModOp::Type> ModifierOp, float ModifierMagnitude)
+void UDGameplayStatics::ApplyModToAttribute(AActor* Source, FGameplayAttribute Attribute, TEnumAsByte<EGameplayModOp::Type> ModifierOp, float ModifierMagnitude)
 {
 	if (UAbilitySystemComponent* AbilitySystem = UAbilitySystemBlueprintLibrary::GetAbilitySystemComponent(Source))
 	{
@@ -333,17 +336,21 @@ FGameplayEffectContextHandle UDGameplayStatics::MakeDreamEffectContextHandle(
 	return FGameplayEffectContextHandle(MakeDreamEffectContext(SourceActor, DamageFalloff, Hit, Origin));
 }
 
-UDGameplayEffectUIData* UDGameplayStatics::GetGameplayUIData(const FSoftClassPath& AbilityClass)
+UDGameplayEffectUIData* UDGameplayStatics::GetGameplayUIData(const TSubclassOf<UDreamGameplayAbility>& AbilityClass)
 {
-	UClass* Class = AbilityClass.TryLoadClass<UDreamGameplayAbility>();
-	if (Class)
+	if (AbilityClass)
 	{
-		if (UDreamGameplayAbility* CDO = Class->GetDefaultObject<UDreamGameplayAbility>())
+		if (UDreamGameplayAbility* CDO = AbilityClass->GetDefaultObject<UDreamGameplayAbility>())
 		{
 			return CDO->AbilityUIData;
 		}
 	}
 	return nullptr;
+}
+
+TSubclassOf<UDreamGameplayAbility> UDGameplayStatics::SoftClassToDAbility(const FSoftClassPath& SoftClassPath)
+{
+	return SoftClassPath.TryLoadClass<UDreamGameplayAbility>();
 }
 
 bool UDGameplayStatics::ApplyGameplayEffectToAllActors(UGameplayAbility* Ability, const FGameplayEventData& EventData,
@@ -369,8 +376,7 @@ bool UDGameplayStatics::ApplyGameplayEffectToAllActors(UGameplayAbility* Ability
 		return false;
 	}
 
-	UAbilitySystemComponent* SourceComponent = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(
-		EventData.Instigator);
+	UAbilitySystemComponent* SourceComponent = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(EventData.Instigator);
 	if (!SourceComponent)
 	{
 		DREAM_NLOG(Verbose, TEXT("SourceComponent Invalid"));
@@ -523,6 +529,26 @@ int32 UDGameplayStatics::GetWidgetZOrder(TEnumAsByte<EWidgetOrder::Type> Type)
 	return static_cast<uint8>(Type.GetValue());
 }
 
+void UDGameplayStatics::FocusOnViewport(UWidget* Widget)
+{
+	if (Widget == nullptr)
+	{
+		return;
+	}
+
+	if (UGameViewportClient* ViewportClient = Widget->GetWorld()->GetGameViewport())
+	{
+		TSharedPtr<SViewport> ViewportWidget = ViewportClient->GetGameViewportWidget();
+		APlayerController* PlayerController = Widget->GetOwningPlayer();
+			
+		if (ViewportWidget.IsValid() && PlayerController)
+		{
+			FReply& SlateOperations = PlayerController->GetLocalPlayer()->GetSlateOperations();
+			SlateOperations.SetUserFocus(ViewportWidget.ToSharedRef());
+		}
+	}
+}
+
 USceneComponent* UDGameplayStatics::GetAttachComponentFromSocketName(USceneComponent* ParentComponent,
                                                                      const FName& SocketName)
 {
@@ -559,8 +585,7 @@ UItemDataWeapon* UDGameplayStatics::WeaponCastToExInformation(const FPlayerWeapo
 	ItemDataWeapon->WeaponClass = Weapon.WeaponClass;
 	ItemDataWeapon->Attributes = Weapon.Attributes;
 	ItemDataWeapon->ItemId = Weapon.WeaponId;
-	ItemDataWeapon->ItemPrice = 0.f;
-	ItemDataWeapon->InitializeProperties();
+	ItemDataWeapon->InitializeExtraProperties();
 	return ItemDataWeapon;
 }
 
@@ -570,14 +595,60 @@ UItemDataModule* UDGameplayStatics::ModuleCastToExInformation(const FPlayerModul
 	ItemDataModule->ModuleClass = Module.ModuleClass;
 	ItemDataModule->Attributes = Module.Attributes;
 	ItemDataModule->ItemId = Module.ModuleId;
-	ItemDataModule->ItemPrice = 0.f;
-	ItemDataModule->InitializeProperties();
+	ItemDataModule->InitializeExtraProperties();
 	return ItemDataModule;
 }
 
 const FPlayerProperties& UDGameplayStatics::GetCachedPlayerProperties()
 {
 	return FPlayerDataInterfaceStatic::Get()->GetCachedProperties();
+}
+
+void UDGameplayStatics::BindMoneyChangedDelegate(UObject* Object, FName FunctionName, FMulticastDelegateHandle& Handle)
+{
+	Handle.Handle = FPlayerDataInterfaceStatic::Get()->GetPlayerDataDelegate().OnMoneyChanged.AddUFunction(Object, FunctionName);
+}
+
+void UDGameplayStatics::BindExperienceChangedDelegate(UObject* Object, FName FunctionName, FMulticastDelegateHandle& Handle)
+{
+	Handle.Handle = FPlayerDataInterfaceStatic::Get()->GetPlayerDataDelegate().OnExperienceChanged.AddUFunction(Object, FunctionName);
+}
+
+void UDGameplayStatics::RemoveExperienceDelegateHandle(const FMulticastDelegateHandle& MulticastDelegateHandle)
+{
+	FPlayerDataInterfaceStatic::Get()->GetPlayerDataDelegate().OnExperienceChanged.Remove(MulticastDelegateHandle.Handle);
+}
+
+void UDGameplayStatics::RemoveMoneyDelegateHandle(const FMulticastDelegateHandle& MulticastDelegateHandle)
+{
+	FPlayerDataInterfaceStatic::Get()->GetPlayerDataDelegate().OnMoneyChanged.Remove(MulticastDelegateHandle.Handle);
+}
+
+void UDGameplayStatics::GroupModules(const TArray<FPlayerModule>& Modules, TMap<EModuleCategory, FPlayerModuleList>& GroupModules)
+{
+	for (const FPlayerModule& PM : Modules)
+	{
+		GroupModules.FindOrAdd(PM.Category).Modules.Add(PM);
+	}
+}
+
+void UDGameplayStatics::GetEquippedModule(const TArray<FPlayerModule>& Modules, TArray<FPlayerModule>& EquippedModules)
+{
+	for (const FPlayerModule& PM : Modules)
+	{
+		if (PM.bEquipped)
+		{
+			EquippedModules.Add(PM);
+		}
+	}
+}
+
+void UDGameplayStatics::GetAllItems(UItemData* ItemData, TArray<UItemData*>& Items)
+{
+	for (UItemData* Item : FItemDataRange(ItemData))
+	{
+		Items.Add(Item);
+	}
 }
 
 TSubclassOf<AShootWeapon> UDGameplayStatics::SoftClassPathToWeaponClass(const FSoftClassPath& SoftClassPath)
@@ -590,6 +661,16 @@ TSubclassOf<UDModuleBase> UDGameplayStatics::SoftClassPathToModuleClass(const FS
 	return SoftClassPath.TryLoadClass<UDModuleBase>();
 }
 
+UObject* UDGameplayStatics::TryLoadObject(const FSoftObjectPath& ObjectPath)
+{
+	return ObjectPath.TryLoad();
+}
+
+UDQuestDescription* UDGameplayStatics::SoftObjectToDQuestDescription(const FSoftObjectPath& ObjectPath)
+{
+	return Cast<UDQuestDescription>(ObjectPath.TryLoad());
+}
+
 void UDGameplayStatics::ClearHoldStateHandle(UObject* WorldContextObject, const FHoldStateHandle& Handle)
 {
 	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
@@ -597,6 +678,47 @@ void UDGameplayStatics::ClearHoldStateHandle(UObject* WorldContextObject, const 
 		if (Handle.Handle_Task.IsValid())
 		{
 			World->GetTimerManager().ClearTimer(*Handle.Handle_Task);
+		}
+	}
+}
+
+void UDGameplayStatics::PlayImpactAnim(ACharacter* Character, const FImpactMontages& HitMontages, float RotationYaw)
+{
+	float AbsYaw = FMath::Abs(RotationYaw);
+	if (AbsYaw < 45.f)
+	{
+		Character->PlayAnimMontage(HitMontages.FHitMontage);
+	}
+	else if (AbsYaw < 90.f)
+	{
+		if (RotationYaw > 0)
+		{
+			Character->PlayAnimMontage(HitMontages.RHitMontage);
+		}
+		else
+		{
+			Character->PlayAnimMontage(HitMontages.LHitMontage);
+		}
+	}
+	else
+	{
+		Character->PlayAnimMontage(HitMontages.BHitMontage);
+	}
+}
+
+void UDGameplayStatics::OverrideSystemUserVariableSplineComponent(UNiagaraComponent* NiagaraSystem, const FString& OverrideName, USplineComponent* SplineComponent)
+{
+	if (NiagaraSystem)
+	{
+		const FNiagaraParameterStore& OverrideParameters = NiagaraSystem->GetOverrideParameters();
+		FNiagaraVariable Variable(FNiagaraTypeDefinition(UNiagaraDataInterfaceSpline::StaticClass()), *OverrideName);
+
+		const int32 Index = OverrideParameters.IndexOf(Variable);
+		if (Index != INDEX_NONE)
+		{
+			UNiagaraDataInterfaceSpline* InterfaceSpline = Cast<UNiagaraDataInterfaceSpline>(OverrideParameters.GetDataInterface(Index));
+			InterfaceSpline->Source = SplineComponent->GetOwner();
+			InterfaceSpline->SourceComponent = SplineComponent;
 		}
 	}
 }

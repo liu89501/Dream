@@ -24,5 +24,5 @@ class DREAM_API IHealthUIInterface
 public:
 
 	UFUNCTION(BlueprintImplementableEvent, Category = HealthUI)
-	void UpdateUI(float HealthPercent, float ShieldPercent);
+	void UpdateUI(float HealthPercent);
 };

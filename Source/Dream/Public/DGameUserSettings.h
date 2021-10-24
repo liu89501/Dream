@@ -9,30 +9,42 @@
 /**
  * 
  */
-UCLASS()
+UCLASS(BlueprintType)
 class DREAM_API UDGameUserSettings : public UGameUserSettings
 {
 	GENERATED_BODY()
 
 public:
 
-	UDGameUserSettings(): ThemeColor(FLinearColor(0.097667f, 0.643387f, 0.677083f))
+	UDGameUserSettings()
 	{
 	}
 
-	const FLinearColor& GetThemeColor() const
-	{
-		return ThemeColor;
-	}
+	UFUNCTION(BlueprintPure, Category=DreamUserSettings)
+	const FLinearColor& GetThemeColor() const;
 
-	void SetThemeColor(const FLinearColor& InThemeColor)
+	UFUNCTION(BlueprintCallable, Category=DreamUserSettings)
+	void SetThemeColor(const FLinearColor& InThemeColor);
+
+	UFUNCTION(BlueprintPure, Category=DreamUserSettings)
+	int32 GetMouseSensitivity() const;
+	
+	FORCEINLINE int32 GetCalculatedMouseSensitivity() const
 	{
-		ThemeColor = InThemeColor;
+		// MouseSensitivity 1 ~ 15   *   3
+		return MouseSensitivity * 3;
 	}
+	
+
+	UFUNCTION(BlueprintCallable, Category=DreamUserSettings)
+	void SetMouseSensitivity(int32 InMouseSensitivity);
 
 private:
 
 	UPROPERTY(config)
 	FLinearColor ThemeColor;
+
+	UPROPERTY(config)
+	int32 MouseSensitivity;
 
 };

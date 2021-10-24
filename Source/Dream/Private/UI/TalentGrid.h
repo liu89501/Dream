@@ -35,6 +35,8 @@ public:
 
 	virtual void OnWidgetRebuilt() override;
 
+	
+
 	FTalentItemLearnedCompleted& GetLearnedCompleted()
 	{
 		return LearnedCompleted;

@@ -34,18 +34,18 @@ int32 UMiniMap::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
         if (SpriteData.DrawType != EMiniMapDrawType::Warning)
         {
             float DistancePercentage = FMath::Min(SpriteData.DistancePercentage, SpriteOverflowThreshold);
-            const FSlateBrush& SpriteBrush = DistancePercentage == SpriteOverflowThreshold
+            const FSlateBrush* SpriteBrush = DistancePercentage == SpriteOverflowThreshold
                                                  ? SpriteData.OverflowSpriteBrush
                                                  : SpriteData.SpriteBrush;
 
-            if (SpriteBrush.HasUObject())
+            if (SpriteBrush && SpriteBrush->HasUObject())
             {
                 const FVector2D& GeometryLocalSize = AllottedGeometry.GetLocalSize();
-                FVector2D CenterPos = (GeometryLocalSize * 0.5f - SpriteBrush.ImageSize * 0.5f);
+                FVector2D CenterPos = (GeometryLocalSize * 0.5f - SpriteBrush->ImageSize * 0.5f);
                 FVector2D Position = (SpriteData.PosNormalize * -1.f) * (DistancePercentage * GeometryLocalSize.X * 0.5f);
                 FVector2D FinalPos(CenterPos.Y - Position.Y, CenterPos.X + Position.X);
 
-                FPaintGeometry Geometry = AllottedGeometry.ToPaintGeometry(SpriteBrush.ImageSize,
+                FPaintGeometry Geometry = AllottedGeometry.ToPaintGeometry(SpriteBrush->ImageSize,
                                                                            FSlateLayoutTransform(FinalPos),
                                                                            FSlateRenderTransform(FQuat2D(FMath::DegreesToRadians(SpriteData.Yaw))));
 
@@ -53,9 +53,9 @@ int32 UMiniMap::NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeo
                     OutDrawElements,
                     LayerId,
                     Geometry,
-                    &SpriteBrush,
+                    SpriteBrush,
                     ESlateDrawEffect::None,
-                    SpriteBrush.TintColor.GetSpecifiedColor());
+                    SpriteBrush->TintColor.GetSpecifiedColor());
             }
         }
         else

@@ -2,6 +2,8 @@
 
 
 #include "DItemPreview.h"
+
+#include "DCharacterPlayer.h"
 #include "Components/SkyLightComponent.h"
 #include "Components/DirectionalLightComponent.h"
 
@@ -65,13 +67,6 @@ USkeletalMeshComponent* ADItemPreview::AddPreviewSkeletalMeshFromComponent(USkel
 	Body->SetAnimClass(CharacterMesh->GetAnimClass());
 	ProcessMeshComponents(Body, CharacterMesh);
 	return Body;
-}
-
-AActor* ADItemPreview::AddPreviewActorFromClass(TSubclassOf<AActor> ActorClass)
-{
-	AActor* Actor = GetWorld()->SpawnActor(ActorClass);
-	Actor->AttachToComponent(PreviewActorRoot, FAttachmentTransformRules::KeepRelativeTransform);
-	return Actor;
 }
 
 // Called when the game starts or when spawned

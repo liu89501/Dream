@@ -9,7 +9,7 @@ void FPlayerDataInterfaceStatic::Startup()
 {
 	if (Singleton == nullptr)
 	{
-		if (FPlayerDataInterface::IsLocalInterface())
+		if (FPlayerDataInterfaceStatic::IsLocalInterface())
 		{
 			Singleton = new FPlayerLocalDataInterface();
 		}
@@ -31,4 +31,17 @@ void FPlayerDataInterfaceStatic::Shutdown()
 FPlayerDataInterface* FPlayerDataInterfaceStatic::Get()
 {
 	return Singleton;
+}
+
+bool IsLocal()
+{
+	FString PDI;
+	GConfig->GetString(TEXT("MySettings"), TEXT("PDI"), PDI, GEngineIni);
+	return PDI.Equals(PDI_LOCAL, ESearchCase::IgnoreCase);
+}
+
+bool FPlayerDataInterfaceStatic::IsLocalInterface()
+{
+	static bool IsLocalPDI = IsLocal();
+	return IsLocalPDI;
 }

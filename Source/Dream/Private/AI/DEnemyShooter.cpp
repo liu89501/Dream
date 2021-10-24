@@ -54,7 +54,7 @@ void ADEnemyShooter::HealthChanged(const FOnAttributeChangeData& AttrData)
 {
 	Super::HealthChanged(AttrData);
 
-	if (GetHealth() == 0)
+	if (IsDeath())
 	{
 		WeaponMesh->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
 		WeaponMesh->SetSimulatePhysics(true);

@@ -9,13 +9,19 @@
 
 void UEQC_PlayerContext::ProvideContext(FEnvQueryInstance& QueryInstance, FEnvQueryContextData& ContextData) const
 {
-	AActor* QuerierActor = Cast<AActor>(QueryInstance.Owner.Get());
-	if (QuerierActor == nullptr)
+	if (QueryInstance.World == nullptr)
 	{
 		return;
 	}
 
-	TArray<AActor*> OutActors;
-	UGameplayStatics::GetAllActorsOfClass(QuerierActor, ADCharacterPlayer::StaticClass(), OutActors);
-	UEnvQueryItemType_Actor::SetContextHelper(ContextData, OutActors);
+	TArray<AActor*> PlayerCharacters;
+	for (FConstPlayerControllerIterator It = QueryInstance.World->GetPlayerControllerIterator(); It; ++It)
+	{
+		if (APawn* Pawn = It->Get()->GetPawn())
+		{
+			PlayerCharacters.Add(Pawn);
+		}
+	}
+
+	UEnvQueryItemType_Actor::SetContextHelper(ContextData, PlayerCharacters);
 }

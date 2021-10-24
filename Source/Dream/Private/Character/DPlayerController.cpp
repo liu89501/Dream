@@ -13,13 +13,12 @@
 #include "UnrealNetwork.h"
 #include "DreamGameInstance.h"
 #include "DreamGameMode.h"
+#include "DRewardPool.h"
 #include "OnlineSubsystem.h"
 #include "OnlineSubsystemTypes.h"
 #include "OnlineSessionSettings.h"
 #include "Character/DCharacterPlayer.h"
 #include "PlayerDataInterfaceStatic.h"
-#include "PDI/PlayerDataInterface.h"
-#include "PDI/PlayerDataInterfaceStatic.h"
 
 #define LOCTEXT_NAMESPACE "Player.Controller"
 
@@ -77,7 +76,7 @@ void ADPlayerController::BeginPlay()
 
     if (IsLocalController())
     {
-        if (ISocketSubsystem* SocketSystem = ISocketSubsystem::Get())
+        if (ISocketSubsystem* SocketSystem = ISocketSubsystem::Get(STEAM_SUBSYSTEM))
         {
             ClientSocket = SocketSystem->CreateSocket(TEXT("SteamClientSocket"), TEXT("LocalSteamClientSocket"));
             FTimespan ThreadWaitTime = FTimespan::FromMilliseconds(1000);
@@ -121,16 +120,6 @@ void ADPlayerController::ProcessRebornCharacter(const FTransform& SpawnTransform
     Possess(RiseCharacter);
 }
 
-void ADPlayerController::OnGetPlayerInfoComplete(const FPlayerInfo& PlayerInfo, const FString& ErrorMessage)
-{
-    //OnlinePlayerInfo = PlayerInfo;
-    
-    if (!ErrorMessage.IsEmpty())
-    {
-        ReturnToMainMenuWithTextReason(LOCTEXT("PlayerInfo_Invalid", "玩家数据获取失败"));
-    }
-}
-
 void ADPlayerController::ReturnToMainMenuWithTextReason(const FText& ErrorMessage)
 {
     ClientReturnToMainMenuWithTextReason(ErrorMessage);
@@ -151,7 +140,7 @@ void ADPlayerController::TestLoginServer()
 {
     if (FPlayerDataInterface* PDS = FPlayerDataInterfaceStatic::Get())
     {
-        PDS->Login(FCommonCompleteNotify());
+        PDS->Login();
     }
 }
 
@@ -296,19 +285,17 @@ void ADPlayerController::SendMessageToPlayer(const FUniqueNetIdRepl& UserNetId, 
     }
 }
 
-void ADPlayerController::ServerMulticastMessage_Implementation(EMessageType::Type Type, const FString& Message)
+void ADPlayerController::ServerMulticastMessage_Implementation(const FTalkMessage& Message)
 {
-    NetMulticastMessage(Type, Message);
+    if (!IsLocalController() && GetNetMode() != NM_DedicatedServer)
+    {
+        NetMulticastMessage(Message);
+    }
 }
 
-void ADPlayerController::ClientReceiveMessage_Implementation(EMessageType::Type Type, const FString& Message)
+void ADPlayerController::NetMulticastMessage_Implementation(const FTalkMessage& Message)
 {
-    HandleRawMessage(Type, Message);
-}
-
-void ADPlayerController::NetMulticastMessage_Implementation(EMessageType::Type Type, const FString& Message)
-{
-    HandleRawMessage(Type, Message);
+    BP_OnReceiveTalkMessage(Message);
 }
 
 void ADPlayerController::SendTeamUpApply(APlayerState* TargetPlayerState)
@@ -341,10 +328,10 @@ void ADPlayerController::SendKillMessage(const FKillMessage& Message)
 
 void ADPlayerController::SendTalkMessage(const FTalkMessage& Message)
 {
-    FString JsonMessage;
-    FJsonObjectConverter::UStructToJsonObjectString(Message, JsonMessage, 0, 0, 0, nullptr, false);
+    //FString JsonMessage;
+    //FJsonObjectConverter::UStructToJsonObjectString(Message, JsonMessage, 0, 0, 0, nullptr, false);
     //SendMulticastMessage(EMessageType::Talk_Message, JsonMessage);
-    ServerMulticastMessage(EMessageType::Talk_Message, JsonMessage);
+    ServerMulticastMessage(Message);
 }
 
 void ADPlayerController::ExitGame()
@@ -354,7 +341,7 @@ void ADPlayerController::ExitGame()
 
 void ADPlayerController::BeginGame()
 {
-    FPlayerDataInterfaceStatic::Get()->Login(FCommonCompleteNotify());
+    FPlayerDataInterfaceStatic::Get()->Login();
 }
 
 void ADPlayerController::HandleTeamApply()
@@ -389,8 +376,56 @@ int32 ADPlayerController::GetDefaultAmmunition(EAmmoType AmmoType) const
                : CDO->LevelThreeAmmunition;
 }
 
+void ADPlayerController::ClientHandleKilledRewardsGenerate_Implementation(UClass* EnemyClass)
+{
+    if (EnemyClass == nullptr)
+    {
+        return;
+    }
+
+    ADEnemyBase* Enemy = EnemyClass->GetDefaultObject<ADEnemyBase>();
+
+    UItemData* GenerateRewards = Enemy->RewardPool->GenerateRewards();
+    if (GenerateRewards->IsValidData())
+    {
+        FCommonCompleteNotify Delegate;
+        Delegate.BindUObject(this, &ADPlayerController::OnRewardsAddCompleted, GenerateRewards);
+        FPlayerDataInterfaceStatic::Get()->AddPlayerRewards(GenerateRewards, Delegate);
+    }
+}
+
+void ADPlayerController::OnRewardsAddCompleted(const FString& ErrorMessage, UItemData* Rewards)
+{
+    if (ErrorMessage.IsEmpty())
+    {
+        SendClientRewardMessage(Rewards);
+    }
+    else
+    {
+        DREAM_NLOG(Error, TEXT("Rewards Generate Error: %s"), *ErrorMessage);
+    }
+}
+
+void ADPlayerController::SendClientRewardMessage(UItemData* Reward)
+{
+    TArray<FRewardMessage> Messages;
+    for (UItemData* ItemData : FItemDataRange(Reward))
+    {
+        FRewardMessage RewardMessage;
+        RewardMessage.RewardPropsClass = ItemData->GetItemClass();
+        RewardMessage.RewardNum = ItemData->GetItemAmount();
+				
+        Messages.Add(RewardMessage);
+    }
+			
+    ClientReceiveRewardMessage(Messages);
+}
+
 void ADPlayerController::ClientReceiveRewardMessage_Implementation(const TArray<FRewardMessage>& RewardMessages)
 {
+    // 刷新数据
+    FPlayerDataInterfaceStatic::Get()->RefreshPlayerProperties();
+    
     for (const FRewardMessage& RewardMessage : RewardMessages)
     {
         if (RewardMessage.RewardPropsClass)
@@ -432,13 +467,6 @@ bool ADPlayerController::AddWeaponAmmunition(EAmmoType AmmoType, int32 Ammunitio
     }
 
     return bSuccess;
-}
-
-void ADPlayerController::ServerAddWeaponAmmunition_Implementation(EAmmoType AmmoType, int32 AmmunitionAmount)
-{
-    int32 DAmmunition = GetDefaultAmmunition(AmmoType);
-    int32& Ammunition = GetWeaponAmmunition(AmmoType);
-    Ammunition = FMath::Min(Ammunition + AmmunitionAmount, DAmmunition);
 }
 
 void ADPlayerController::SetWeaponAmmunition(EAmmoType AmmoType, int32 NewValue)

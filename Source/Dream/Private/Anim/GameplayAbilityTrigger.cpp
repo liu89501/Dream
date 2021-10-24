@@ -8,16 +8,17 @@
 
 void UGameplayAbilityTrigger::Notify(USkeletalMeshComponent* MeshComp, UAnimSequenceBase* Animation)
 {
-	if (!MeshComp)
+	if (!MeshComp || !MeshComp->GetOwner())
 	{
 		return;
 	}
+	
 	FVector RotateVector = MeshComp->GetComponentRotation().RotateVector(EffectRelativeLocation);
 	FVector Location = MeshComp->GetComponentLocation() + RotateVector;
 
 	EDrawDebugTrace::Type DrawDebugTrace = EDrawDebugTrace::None;
 
-#if WITH_EDITOR
+#if WITH_EDITORONLY_DATA
 
 	if (bDebugSphere)
 	{

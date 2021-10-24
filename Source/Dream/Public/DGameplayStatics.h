@@ -8,13 +8,29 @@
 #include "GameplayEffectTypes.h"
 #include "GameplayAbilityTypes.h"
 #include "HoldState.h"
+#include "PlayerDataInterface.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
+#include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
-#include "PDI/PlayerDataInterfaceType.h"
-
 #include "DGameplayStatics.generated.h"
 
 class APlayerController;
+class ACharacter;
+
+USTRUCT(BlueprintType)
+struct FImpactMontages
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere)
+	UAnimMontage* FHitMontage;
+	UPROPERTY(EditAnywhere)
+	UAnimMontage* BHitMontage;
+	UPROPERTY(EditAnywhere)
+	UAnimMontage* LHitMontage;
+	UPROPERTY(EditAnywhere)
+	UAnimMontage* RHitMontage;
+};
 
 /**
  * 
@@ -116,16 +132,16 @@ public:
 	                                                                 const FHitResult& Hit, const FVector& Origin);
 
 	UFUNCTION(BlueprintPure, Category = "DreamStatics|Abilities")
-	static class UDGameplayEffectUIData* GetGameplayUIData(const FSoftClassPath& AbilityClass);
+	static class UDGameplayEffectUIData* GetGameplayUIData(const TSubclassOf<UDreamGameplayAbility>& AbilityClass);
 
-	UFUNCTION(BlueprintCallable, Category = "DreamStatics|Abilities",
-		meta = (HidePin="Ability", DefaultToSelf = "Ability"))
-	static bool ApplyGameplayEffectToAllActors(class UGameplayAbility* Ability, const FGameplayEventData& EventData,
-	                                           TSubclassOf<class UGameplayEffect> EffectClass);
+	UFUNCTION(BlueprintPure, meta=(CompactNodeTitle = "SoftClassToAbilityClass"), Category = "DreamStatics|Abilities")
+	static TSubclassOf<UDreamGameplayAbility> SoftClassToDAbility(const FSoftClassPath& SoftClassPath);
 
-	UFUNCTION(BlueprintCallable, Category = "DreamStatics|Abilities")
-	static void ApplyModToAttribute(AActor* Source, FGameplayAttribute Attribute,
-	                                TEnumAsByte<EGameplayModOp::Type> ModifierOp, float ModifierMagnitude);
+	UFUNCTION(BlueprintCallable, Category = "DreamStatics|Abilities", meta = (HidePin="Ability", DefaultToSelf = "Ability"))
+	static bool ApplyGameplayEffectToAllActors(class UGameplayAbility* Ability, const FGameplayEventData& EventData, TSubclassOf<class UGameplayEffect> EffectClass);
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "DreamStatics|Abilities")
+	static void ApplyModToAttribute(AActor* Source, FGameplayAttribute Attribute, TEnumAsByte<EGameplayModOp::Type> ModifierOp, float ModifierMagnitude);
 
 	/**
 	 *  获取Actor玩家控制器, 如果没找到会返回null
@@ -144,8 +160,11 @@ public:
 	static void SpawnWeaponTrailParticles(UObject* WorldContextObject, const FWeaponTrailVFX& TrailVfx,
 	                                      const FVector& StartLocation, const FVector& EndLocation);
 
-	UFUNCTION(BlueprintPure, Category = DreamStatics)
+	UFUNCTION(BlueprintPure, Category = "DreamStatics|Widget")
 	static int32 GetWidgetZOrder(TEnumAsByte<EWidgetOrder::Type> Type);
+
+	UFUNCTION(BlueprintCallable, Meta = (DefaultToSelf="Widget", HidePin="Widget"), Category = "DreamStatics|Widget")
+	static void FocusOnViewport(UWidget* Widget);
 
 	UFUNCTION(BlueprintPure, Category = DreamStatics)
 	static USceneComponent* GetAttachComponentFromSocketName(USceneComponent* ParentComponent, const FName& SocketName);
@@ -162,12 +181,48 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DreamStatics|PDI")
 	static const FPlayerProperties& GetCachedPlayerProperties();
 
+	UFUNCTION(BlueprintCallable, Meta = (DefaultToSelf="Object", HidePin = "Object"), Category = "DreamStatics|PDI|Delegate")
+	static void BindMoneyChangedDelegate(UObject* Object, FName FunctionName, FMulticastDelegateHandle& Handle);
+	
+	UFUNCTION(BlueprintCallable, Meta = (DefaultToSelf="Object", HidePin = "Object"), Category = "DreamStatics|PDI|Delegate")
+	static void BindExperienceChangedDelegate(UObject* Object, FName FunctionName, FMulticastDelegateHandle& Handle);
+	
+	UFUNCTION(BlueprintCallable, Category = "DreamStatics|PDI|Delegate")
+	static void RemoveExperienceDelegateHandle(const FMulticastDelegateHandle& MulticastDelegateHandle);
+	
+	UFUNCTION(BlueprintCallable, Category = "DreamStatics|PDI|Delegate")
+	static void RemoveMoneyDelegateHandle(const FMulticastDelegateHandle& MulticastDelegateHandle);
+	
+	UFUNCTION(BlueprintCallable, Category = "DreamStatics|PDI")
+	static void GroupModules(const TArray<FPlayerModule>& Modules, TMap<EModuleCategory, FPlayerModuleList>& GroupModules);
+
+	UFUNCTION(BlueprintCallable, Category = "DreamStatics|PDI")
+	static void GetEquippedModule(const TArray<FPlayerModule>& Modules, TArray<FPlayerModule>& EquippedModules);
+
+	UFUNCTION(BlueprintPure, Meta=(CompactNodeTitle = "GetAllItems"), Category="DreamStatics|PDI")
+    static void GetAllItems(UItemData* ItemData, TArray<UItemData*>& Items);
+
 	UFUNCTION(BlueprintPure, meta=(CompactNodeTitle = "->", BlueprintAutocast), Category = DreamStatics)
 	static TSubclassOf<class AShootWeapon> SoftClassPathToWeaponClass(const FSoftClassPath& SoftClassPath);
 
 	UFUNCTION(BlueprintPure, meta=(CompactNodeTitle = "->", BlueprintAutocast), Category = DreamStatics)
 	static TSubclassOf<class UDModuleBase> SoftClassPathToModuleClass(const FSoftClassPath& SoftClassPath);
 
+	UFUNCTION(BlueprintPure, meta=(CompactNodeTitle = "->", BlueprintAutocast), Category = DreamStatics)
+	static UObject* TryLoadObject(const FSoftObjectPath& ObjectPath);
+	
+	UFUNCTION(BlueprintPure, meta=(CompactNodeTitle = "SoftObjectToDescription"), Category = DreamStatics)
+	static class UDQuestDescription* SoftObjectToDQuestDescription(const FSoftObjectPath& ObjectPath);
+
 	UFUNCTION(BlueprintCallable, Category="DreamStatics|DreamTask")
 	static void ClearHoldStateHandle(UObject* WorldContextObject, const FHoldStateHandle& Handle);
+
+
+	UFUNCTION(BlueprintCallable, Meta = (DefaultToSelf="Character", HidePin="Character"), Category="DreamStatics")
+	static void PlayImpactAnim(ACharacter* Character, const FImpactMontages& HitMontages, float RotationYaw);
+
+	/** Sets a Niagara StaticMesh parameter by name, overriding locally if necessary.*/
+	UFUNCTION(BlueprintCallable, Category = "DreamStatics|Niagara", meta = (DisplayName = "Set Niagara Spline Component"))
+    static void OverrideSystemUserVariableSplineComponent(class UNiagaraComponent* NiagaraSystem, const FString& OverrideName, class USplineComponent* SplineComponent);
+	
 };

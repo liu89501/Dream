@@ -3,6 +3,8 @@
 #include "CoreMinimal.h"
 #include "DPropsType.generated.h"
 
+class UDreamGameplayAbility;
+
 UENUM(BlueprintType)
 namespace EItemType
 {
@@ -73,8 +75,8 @@ struct FPerkPool
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = ( MetaClass = "DreamGameplayAbility" ))
-	TArray<FSoftClassPath> Perks;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TArray<TSubclassOf<UDreamGameplayAbility>> Perks;
 
 	FPerkPool& operator+=(const FPerkPool& Rhs)
 	{
@@ -88,9 +90,9 @@ struct FEquipmentAttributes
 {
 	GENERATED_BODY()
 
-
 	FEquipmentAttributes()
         : AttackPower(0),
+		  MaxHealth(0),
           CriticalDamage(0),
           CriticalRate(0),
           HealthSteal(0),
@@ -101,12 +103,32 @@ struct FEquipmentAttributes
 	}
 
 	FEquipmentAttributes& operator+=(const FEquipmentAttributes& RHS);
+	FEquipmentAttributes& operator+=(const FEquipmentAttributes&& RHS);
+	
+	FEquipmentAttributes& operator+=(const struct FBaseAttributes& RHS);
+
+	FEquipmentAttributes operator-(const FEquipmentAttributes& RHS) const;
+	
+	FEquipmentAttributes& operator-=(const FEquipmentAttributes& RHS);
+
+	FEquipmentAttributes(FEquipmentAttributes&& Other) noexcept;
+	FEquipmentAttributes(const FEquipmentAttributes& Other);
+	
+	FEquipmentAttributes& operator=(const FEquipmentAttributes& Other);
+
+	FEquipmentAttributes& operator=(FEquipmentAttributes&& Other) noexcept;
 
 	/**
 	* 攻击力
 	*/
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
 	int32 AttackPower;
+
+	/**
+	* 暴击伤害
+	*/
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
+	float MaxHealth;
 
 	/**
 	* 暴击伤害
@@ -147,8 +169,22 @@ struct FEquipmentAttributes
 	/**
 	* 装备Perk属性
 	*/
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, meta = ( MetaClass = "DreamGameplayAbility" ), Category = Attribute)
-	TArray<FSoftClassPath> Perks;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
+	TArray<TSubclassOf<UDreamGameplayAbility>> Perks;
+
+	friend FArchive& operator<<(FArchive& Ar, FEquipmentAttributes& Attr)
+	{
+		Ar << Attr.AttackPower;
+		Ar << Attr.Defense;
+		Ar << Attr.MaxHealth;
+		Ar << Attr.Penetration;
+		Ar << Attr.CriticalDamage;
+		Ar << Attr.CriticalRate;
+		Ar << Attr.DamageReduction;
+		Ar << Attr.HealthSteal;
+		Ar << Attr.Perks;
+		return Ar;
+	}
 };
 
 USTRUCT(BlueprintType)
@@ -159,6 +195,12 @@ struct FEquipmentAttributesAssign
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
 	TArray<int32> AttackPower;
 
+	/**
+	* 生命值
+	*/
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
+	TArray<float> MaxHealth;
+	
 	/**
 	* 暴击伤害
 	*/

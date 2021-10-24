@@ -276,9 +276,6 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, VisibleAnywhere)
 	class USkeletalMeshComponent* WeaponMesh;
-
-	UPROPERTY(BlueprintReadOnly, Category = Weapon)
-	int64 WeaponID;
 	
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
 	EWeaponType WeaponType;
@@ -337,11 +334,6 @@ public:
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
 	FTransform WeaponHolsterSocketOffset;
 	
-	/*UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
-	FTransform LeftSocketOffset;
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
-	FTransform RightSocketOffset;*/
-
 	/** WeaponUI */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Weapon|UI")
 	FSlateBrush CrosshairBrush;
@@ -473,8 +465,8 @@ public:
 	virtual void ApplyPointDamage(const FHitResult& HitInfo);
 	virtual void ApplyRadialDamage(const FRadialDamageProjectileInfo& RadialDamage);
 
-	FSlateBrush GetDynamicCrosshairBrush();
-	FSlateBrush GetDynamicMagazineBrush();
+	const FSlateBrush& GetDynamicCrosshairBrush();
+	const FSlateBrush& GetDynamicMagazineBrush();
 
 	virtual void SetWeaponAim(bool NewAimed);
 

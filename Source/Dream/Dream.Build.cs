@@ -32,6 +32,7 @@ public class Dream : ModuleRules
             "GameplayAbilities",
             "Niagara",
             "UMG",
+            "NavigationSystem",
             "Sockets",
             "Networking",
             "JsonUtilities",

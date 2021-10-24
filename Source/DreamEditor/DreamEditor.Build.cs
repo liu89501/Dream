@@ -27,12 +27,14 @@ public class DreamEditor : ModuleRules
         PrivateDependencyModuleNames.AddRange(new string[] {
             "Core",
             "CoreUObject",
+            "InputCore",
+            "SlateCore",
+            "Slate",
             "Engine",
+            "EditorStyle",
             "PropertyEditor",
             "ContentBrowser",
             "Dream",
-            "Slate",
-            "SlateCore",
             "UnrealEd",
             "BlueprintGraph",
             "AIModule"

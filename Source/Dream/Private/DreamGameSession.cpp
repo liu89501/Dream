@@ -10,12 +10,10 @@
 
 void ADreamGameSession::RegisterServer()
 {
-    if (FPlayerDataInterface* PDS = FPlayerDataInterfaceStatic::Get())
-    {
-        int32 Port = GetNetDriver()->GetLocalAddr()->GetPort();
-        PDS->RegisterServer(Port, MaxPlayers, GetWorld()->GetMapName(), FRegisterServerComplete());
-    }
+	int32 Port = GetNetDriver()->GetLocalAddr()->GetPort();
+	FPlayerDataInterfaceStatic::Get()->RegisterServer(Port, MaxPlayers, GetWorld()->GetMapName(), FRegisterServerComplete());
 
+	// 不把他注册到steam上 
 	/*if (IOnlineSubsystem* OSS = IOnlineSubsystem::Get())
 	{
 		IOnlineSessionPtr SessionInt = OSS->GetSessionInterface();

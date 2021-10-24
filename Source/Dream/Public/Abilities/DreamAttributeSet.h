@@ -40,14 +40,6 @@ public:
 	UPROPERTY(BlueprintReadOnly, Category = "Health", ReplicatedUsing=OnRep_MaxHealth)
 	FGameplayAttributeData MaxHealth;
 	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, MaxHealth)
-	
-	UPROPERTY(BlueprintReadOnly, Category = "Shield", ReplicatedUsing=OnRep_Shield)
-	FGameplayAttributeData Shield;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, Shield)
-
-	UPROPERTY(BlueprintReadOnly, Category = "Shield", ReplicatedUsing=OnRep_MaxShield)
-	FGameplayAttributeData MaxShield;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, MaxShield)
 
 	/** AttackPower of the attacker is multiplied by the base Damage to reduce health, so 1.0 means no bonus */
 	UPROPERTY(BlueprintReadOnly, Category = "Damage", ReplicatedUsing = OnRep_AttackPower)
@@ -98,19 +90,13 @@ public:
 
 protected:
 	/** Helper function to proportionally adjust the value of an attribute when it's associated max attribute changes. (i.e. When MaxHealth increases, Health increases by an amount that maintains the same percentage as before) */
-	void AdjustAttributeForMaxChange(FGameplayAttributeData& AffectedAttribute, const FGameplayAttributeData& MaxAttribute, float NewMaxValue, const FGameplayAttribute& AffectedAttributeProperty);
+	void AdjustAttributeForMaxChange(FGameplayAttributeData& AffectedAttribute, const FGameplayAttributeData& MaxAttribute, float NewMaxValue, const FGameplayAttribute& AffectedAttributeProperty) const;
 	
 	UFUNCTION()
 	virtual void OnRep_Health(const FGameplayAttributeData& OldValue);
 
 	UFUNCTION()
 	virtual void OnRep_MaxHealth(const FGameplayAttributeData& OldValue);
-
-	UFUNCTION()
-	virtual void OnRep_Shield(const FGameplayAttributeData& OldValue);
-
-	UFUNCTION()
-	virtual void OnRep_MaxShield(const FGameplayAttributeData& OldValue);
 
 	UFUNCTION()
 	virtual void OnRep_AttackPower(const FGameplayAttributeData& OldValue);
@@ -145,7 +131,6 @@ struct DreamAttributeStatics
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(CriticalDamage);
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(Health);
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(MaxHealth);
-	D_DECLARE_ATTRIBUTE_CAPTUREDEF(Shield);
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(IncreaseAtkPowPercentage);
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(HealthSteal);
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(HealthStealPercentage);
@@ -168,8 +153,6 @@ struct DreamAttributeStatics
 		
 		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, MaxHealth, Source, false);
 		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, Health, Source, false);
-		
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, Shield, Source, false);
 		
 		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, IncreaseAtkPowPercentage, Source, true);
 		

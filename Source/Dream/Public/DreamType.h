@@ -19,6 +19,8 @@ DECLARE_LOG_CATEGORY_EXTERN(LogDream, Log, All);
 #define DNUMBER_ZERO (0)
 #define DNUMBER_ONE (1)
 
+#define PROBABILITY_UINT 100
+
 namespace DreamActorTagName
 {
 	extern const FName Teammate;
@@ -32,13 +34,15 @@ namespace EWidgetOrder
 	enum Type
 	{
 		None,
-		PlayerCtrl,
-		PlayerCtrlPopup,
 		Player,
 		PlayerPopup,
-		WeaponUI,
+		PlayerOuter,
+		PlayerCtrl,
+		PlayerCtrlPopup,
+		PlayerCtrlOuter,
 		InteractiveUI,
-		LoadingPop
+		RewardPopup,
+		LoadingPopup
 	};
 }
 
@@ -122,7 +126,6 @@ namespace ETalkType
 		World,
 		Team,
 		Private,
-		Reward,
 		NONE
 	};
 }
@@ -160,18 +163,22 @@ struct FWeaponTrailVFX
 struct FMiniMapData
 {
 public:
-	FMiniMapData() : PosNormalize(FVector2D::ZeroVector), Yaw(0), DistancePercentage(0),
-	                 DrawType(EMiniMapDrawType::Warning)
+	FMiniMapData() : PosNormalize(FVector2D::ZeroVector),
+					 Yaw(0),
+					 DistancePercentage(0),
+	                 DrawType(EMiniMapDrawType::Warning),
+	                 SpriteBrush(nullptr),
+	                 OverflowSpriteBrush(nullptr)
 	{
-	};
+	}
 
 	FMiniMapData(
 		const FVector2D& InPosNormalize,
 		float InYaw,
 		float InDistancePercentage,
 		EMiniMapDrawType InDrawType,
-		const FSlateBrush& InSprite,
-		const FSlateBrush& InOverflowSprite)
+		FSlateBrush* InSprite,
+		FSlateBrush* InOverflowSprite)
 		:
 		PosNormalize(InPosNormalize),
 		Yaw(InYaw),
@@ -186,8 +193,8 @@ public:
 	float Yaw;
 	float DistancePercentage;
 	EMiniMapDrawType DrawType;
-	FSlateBrush SpriteBrush;
-	FSlateBrush OverflowSpriteBrush;
+	FSlateBrush* SpriteBrush;
+	FSlateBrush* OverflowSpriteBrush;
 };
 
 USTRUCT()
@@ -370,15 +377,18 @@ struct FMapInfo : public FTableRowBase
 	FText DisplayName;
 };
 
-struct FHitResultKeyFuncs : DefaultKeyFuncs<FHitResult>
+UCLASS()
+class UCharacterMesh : public UDataAsset
 {
-	static FORCEINLINE uint32 GetKeyHash(FHitResult const& Key)
-	{
-		AActor* ActorPtr = Key.GetActor();
-		return ActorPtr ? reinterpret_cast<uint64>(ActorPtr) : 0;
-	}
+	GENERATED_BODY()
 
-	static FORCEINLINE bool Matches(FHitResult const& A, FHitResult const& B) { return (A.GetActor() == B.GetActor()); }
+public:
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	USkeletalMesh* MasterMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TArray<USkeletalMesh*> SlaveMeshs;
 };
 
 /*
@@ -388,9 +398,9 @@ struct FRandomProbability
 {
 public:
 
-	static int32 RandomProbability(const TArray<float>& Probability, int32 ProbabilityRange = 1000.f)
+	static int32 RandomProbability(const TArray<float>& Probability, int32 Unit = 100)
 	{
-		float RandomValue = FMath::FRandRange(0, ProbabilityRange);
+		float RandomValue = FMath::FRandRange(0, Unit);
 
 		int32 Index = INDEX_NONE;
 
@@ -410,14 +420,14 @@ public:
 	}
 
 	template <typename SourceType>
-	static SourceType RandomProbabilityEx(const TMap<SourceType, float>& ProbabilitySource, int32 ProbabilityRange = 1000.f)
+	static SourceType RandomProbabilityEx(const TMap<SourceType, float>& ProbabilitySource, int32 Unit = 100)
 	{
 		TArray<SourceType> Values;
 		TArray<float> Probability;
-		
+
 		GetArrayPair(ProbabilitySource, Values, Probability);
 
-		int32 Index = RandomProbability(Probability, ProbabilityRange);
+		int32 Index = RandomProbability(Probability, Unit);
 
 		if (Index == INDEX_NONE)
 		{
@@ -430,7 +440,8 @@ public:
 private:
 
 	template <typename SourceType>
-    static void GetArrayPair(const TMap<SourceType, float>& ProbabilitySource, TArray<SourceType>& Sources, TArray<float>& Probability)
+	static void GetArrayPair(const TMap<SourceType, float>& ProbabilitySource, TArray<SourceType>& Sources,
+	                         TArray<float>& Probability)
 	{
 		for (TPair<SourceType, float> Pair : ProbabilitySource)
 		{
@@ -438,7 +449,7 @@ private:
 			Probability.Add(Pair.Value);
 		}
 	}
-	
+
 	static float Sum(const TArray<float>& Array, int32 EndIndex, int32 StartIndex = 0)
 	{
 		float SumResult = 0.f;
@@ -448,6 +459,16 @@ private:
 		}
 		return SumResult;
 	}
+};
+
+struct FHitResultKeyFuncs : DefaultKeyFuncs<FHitResult>
+{
+	static FORCEINLINE uint32 GetKeyHash(FHitResult const& Key)
+	{
+		return Key.Actor.IsValid() ? reinterpret_cast<uint64>(Key.Actor.Get()) : 0;
+	}
+
+	static FORCEINLINE bool Matches(FHitResult const& A, FHitResult const& B) { return (A.GetActor() == B.GetActor()); }
 };
 
 template <typename ElementType, typename SetKeyFunc = DefaultKeyFuncs<ElementType>>
@@ -471,11 +492,15 @@ struct FArrayDistinctIterator
 
 	FORCEINLINE void operator++()
 	{
-		for (bool bIsAlreadyInSet = true; bIsAlreadyInSet && this; Exist.Add(*Ptr, &bIsAlreadyInSet))
+		bool bIsAlreadyInSet = true;
+		do
 		{
 			++Ptr;
 			++CurrentIndex;
+
+			Exist.Add(*Ptr, &bIsAlreadyInSet);
 		}
+		while (bIsAlreadyInSet && *this);
 	}
 
 	FORCEINLINE const ElementType& operator*() const

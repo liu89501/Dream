@@ -33,10 +33,7 @@ public:
 	void SetCrossHairBrush(const FSlateBrush& InSlateBrush);
 
 	UFUNCTION(BlueprintImplementableEvent, Category=PlayerHUD)
-	void SetHealth(float Health, float HealthPercent);
-	
-	UFUNCTION(BlueprintImplementableEvent, Category=PlayerHUD)
-	void SetShield(float Shield, float ShieldPercent);
+	void SetHealth(float HealthPercent);
 
 	UFUNCTION(BlueprintImplementableEvent, Category=PlayerHUD)
 	void AddBuffIcon(const FGameplayTag& EffectOwningTag, UTexture2D* Icon, int32 StackCount, float Duration);
@@ -46,4 +43,10 @@ public:
 	
 	UFUNCTION(BlueprintImplementableEvent, Category=PlayerHUD)
 	void RemoveBuffIcon(const FGameplayTag& EffectOwningTag);
+
+	UFUNCTION(BlueprintImplementableEvent, Category=PlayerHUD)
+	void AddInteractiveUI(UWidget* Widget);
+
+	UFUNCTION(BlueprintCallable, Meta = (DisplayName="AppendToInteractiveUI", ScriptName="AppendToInteractiveUI"), Category=PlayerHUD)
+    void BP_AddInteractiveUI(UWidget* Widget);
 };

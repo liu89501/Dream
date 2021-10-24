@@ -88,13 +88,21 @@ void FPlayerServerDataInterface::Initialize(FInitializeDelegate Delegate)
 	Delegate.ExecuteIfBound(true);
 }
 
-void FPlayerServerDataInterface::AddPlayerRewards(const TArray<UItemData*>& Rewards, FCommonCompleteNotify Delegate)
+void FPlayerServerDataInterface::AddPlayerRewards(UItemData* Rewards, FCommonCompleteNotify Delegate)
 {
 }
 
-void FPlayerServerDataInterface::DeliverTask(const int64& TaskId, FCommonCompleteNotify Delegate)
+void FPlayerServerDataInterface::DeliverTask(const int64& TaskId, FTaskRewardDelegate Delegate)
 {
 	
+}
+
+void FPlayerServerDataInterface::AcceptTask(const int64& TaskId, FCommonCompleteNotify Delegate)
+{
+}
+
+void FPlayerServerDataInterface::UpdateTaskState(const FQuestActionHandle& Handle)
+{
 }
 
 void FPlayerServerDataInterface::RegisterServer(int32 Port, int32 MaxPlayers, const FString& MapName, FRegisterServerComplete Delegate)
@@ -208,6 +216,10 @@ const FPlayerProperties& FPlayerServerDataInterface::GetCachedProperties() const
 	return CachedProperties;
 }
 
+void FPlayerServerDataInterface::RefreshPlayerProperties()
+{
+}
+
 void FPlayerServerDataInterface::EquipModule(int64 ModuleId, EModuleCategory ModuleCategory, FCommonCompleteNotify Delegate)
 {
 }
@@ -305,10 +317,6 @@ void FPlayerServerDataInterface::GetPlayerProperties(FGetPlayerPropertiesDelegat
 }
 
 void FPlayerServerDataInterface::GetTasks(EGetTaskCondition Condition, FGetTasksDelegate Delegate)
-{
-}
-
-void FPlayerServerDataInterface::IncreaseExperience(const FUserExperiencePair& UserExperience, FExperienceChangeDelegate Delegate)
 {
 }
 

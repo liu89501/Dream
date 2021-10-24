@@ -1,8 +1,7 @@
 // ReSharper disable CppExpressionWithoutSideEffects
 #include "PDI/PlayerLocalDataInterface.h"
-#include "DQuestCondition.h"
 #include "PDI/PlayerGameData.h"
-#include "Kismet/GameplayStatics.h"
+#include "DGameplayStatics.h"
 
 #define FilterPlayerData(DataType, CPropName, DataArray, Condition, Out) for (DataType _PData : DataArray) \
     { \
@@ -35,11 +34,12 @@ struct FTalentPredicate
 	}
 };
 
-struct FTaskPredicate
+template <typename STRUCT>
+struct FUniversalPredicate
 {
-	bool operator()(const FTaskInformation& A, const FTaskInformation& B) const
+	bool operator()(const STRUCT& A, const STRUCT& B) const
 	{
-		return A.TaskId < B.TaskId;
+		return A.GetSortNum() < B.GetSortNum();
 	}
 };
 
@@ -49,42 +49,23 @@ int32 GetMaxExperienceForLevel(int32 Level)
 }
 
 
-FPlayerLocalDataInterface::FPlayerLocalDataInterface(): GameData(nullptr),TaskData(nullptr)
+FPlayerLocalDataInterface::FPlayerLocalDataInterface(): GameData(nullptr),TaskData(nullptr),StoreData(nullptr)
 {
+	LoadCounter.Set(3);
+	bInitCompleted = true;
 }
 
 void FPlayerLocalDataInterface::Initialize(FInitializeDelegate Delegate)
 {
-	FAsyncLoadGameFromSlotDelegate LoadGameDelegate;
-	LoadGameDelegate.BindRaw(this, &FPlayerLocalDataInterface::AsyncLoadGameData, Delegate);
-	UGameplayStatics::AsyncLoadGameFromSlot(DEFAULT_SLOT, DEFAULT_SLOT_INDEX, LoadGameDelegate);
-	
-	if (!IFileManager::Get().FileExists(*FString::Printf(TEXT("%sSaveGames/%s.sav"), *FPaths::ProjectSavedDir(), STORE_SLOT)))
+	if (IFileManager::Get().FileExists(*FString::Printf(TEXT("%sSaveGames/%s.sav"), *FPaths::ProjectSavedDir(), DEFAULT_SLOT)))
 	{
-		UStoreList* StoreList = LoadObject<UStoreList>(GetTransientPackage(), TEXT("/Game/Main/Asset/Test/DA_StoreList"));
-
-		for (const FStoreDataInfo& Data : StoreList->Stores)
-		{
-			UStoreData* StoreData = NewObject<UStoreData>(GetTransientPackage());
-			for (UItemData* ItemData : Data.Items)
-			{
-				ItemData->InitializeProperties();
-			}
-			StoreData->Items.Append(Data.Items);
-			UGameplayStatics::AsyncSaveGameToSlot(StoreData, STORE_SLOT, Data.StoreId);
-		}
+		FAsyncLoadGameFromSlotDelegate LoadGameDelegate;
+		LoadGameDelegate.BindRaw(this, &FPlayerLocalDataInterface::AsyncLoadGameData, Delegate);
+		UGameplayStatics::AsyncLoadGameFromSlot(DEFAULT_SLOT, 0, LoadGameDelegate);
 	}
-}
-
-void FPlayerLocalDataInterface::AsyncLoadGameData(const FString& Slot, const int32 Index, USaveGame* SaveGame, FInitializeDelegate Delegate)
-{
-	GameData = Cast<UPlayerGameData>(SaveGame);
-
-	//UE_LOG(LogTemp, Error, TEXT("GameData: %s"), GameData ? TEXT("Y") : TEXT("N"));
-
-	if (GameData == nullptr)
+	else
 	{
-		GameData = Cast<UPlayerGameData>(UGameplayStatics::CreateSaveGameObject(UPlayerGameData::StaticClass()));
+		GameData = NewObject<UPlayerGameData>();
 
 		FPlayerProperties Properties;
 		Properties.Money = 666666;
@@ -93,23 +74,30 @@ void FPlayerLocalDataInterface::AsyncLoadGameData(const FString& Slot, const int
 
 		GameData->Properties = Properties;
 
-		UWeaponDataAsset* WeaponList = LoadObject<UWeaponDataAsset>(GetTransientPackage(), TEXT("/Game/Main/Asset/Test/DA_WeaponList"));
+		GameData->CharacterMesh = FSoftObjectPath(TEXT("/Game/Main/Asset/Skin3"));
+
+		UWeaponDataAsset* WeaponList = LoadObject<UWeaponDataAsset>(GetTransientPackage(), TEXT("/Game/Main/Asset/Local/DA_Init_Weapons"));
 		check(WeaponList);
 
-		for (const FPlayerWeapon& Weapon : WeaponList->Weapons)
+		for (int N = 0; N < WeaponList->Weapons.Num(); N++)
 		{
+			FPlayerWeapon Weapon = WeaponList->Weapons[N];
+
+			Weapon.WeaponId = N + 1;
 			GameData->Weapons.Add(Weapon);
 		}
 
-		UModuleDataAsset* ModuleList = LoadObject<UModuleDataAsset>(GetTransientPackage(), TEXT("/Game/Main/Asset/Test/DA_ModuleList"));
+		UModuleDataAsset* ModuleList = LoadObject<UModuleDataAsset>(GetTransientPackage(), TEXT("/Game/Main/Asset/Local/DA_Init_Modules"));
 		check(ModuleList);
 
-		for (const FPlayerModule& Module : ModuleList->Modules)
+		for (int N = 0; N < ModuleList->Modules.Num(); N++)
 		{
-			GameData->Modules.Add(Module);
+			FPlayerModule Module = ModuleList->Modules[N];
+			Module.ModuleId = N + 1;
+			GameData->Modules.FindOrAdd(Module.Category).Modules.Add(Module);
 		}
 
-		UTalentDataAsset* TalentList = LoadObject<UTalentDataAsset>(GetTransientPackage(), TEXT("/Game/Main/Asset/Test/DA_TalentList"));
+		UTalentDataAsset* TalentList = LoadObject<UTalentDataAsset>(GetTransientPackage(), TEXT("/Game/Main/Asset/Local/DA_TalentList"));
 		check(ModuleList);
 
 		for (const FTalentInfo& Talent : TalentList->Talents)
@@ -117,52 +105,103 @@ void FPlayerLocalDataInterface::AsyncLoadGameData(const FString& Slot, const int
 			GameData->TalentList.Add(Talent);
 		}
 
-		UGameplayStatics::AsyncSaveGameToSlot(GameData, DEFAULT_SLOT, DEFAULT_SLOT_INDEX);
+		UGameplayStatics::AsyncSaveGameToSlot(GameData, DEFAULT_SLOT, 0);
 	}
 
-	FAsyncLoadGameFromSlotDelegate LoadDelegate;
-	LoadDelegate.BindRaw(this, &FPlayerLocalDataInterface::AsyncTaskData, Delegate);
-	UGameplayStatics::AsyncLoadGameFromSlot(TASK_SLOT, TASK_SLOT_INDEX, LoadDelegate);
+	if (IFileManager::Get().FileExists(*FString::Printf(TEXT("%sSaveGames/%s.sav"), *FPaths::ProjectSavedDir(), TASK_SLOT)))
+	{
+		FAsyncLoadGameFromSlotDelegate LoadDelegate;
+		LoadDelegate.BindRaw(this, &FPlayerLocalDataInterface::AsyncTaskData, Delegate);
+		UGameplayStatics::AsyncLoadGameFromSlot(TASK_SLOT, 0, LoadDelegate);
+	}
+	else
+	{
+		UTaskDataAsset* TaskList = LoadObject<UTaskDataAsset>(GetTransientPackage(), TEXT("/Game/Main/Asset/Local/DA_TaskList"));
+		TaskData = NewObject<UTaskData>(GetTransientPackage());
+
+		int64 Id = 1;
+		for (FTaskInformation Information : TaskList->Tasks)
+		{
+			Information.TaskId = Id++;
+
+			Information.CompleteCondition = NewObject<UDQuestCondition>(GetTransientPackage(),
+				Information.CompleteCondition->GetClass(), NAME_None, RF_NoFlags, Information.CompleteCondition);
+
+			Information.CompletedReward = NewObject<UItemData>(GetTransientPackage(),
+                Information.CompletedReward->GetClass(), NAME_None, RF_NoFlags, Information.CompletedReward);
+			
+			TaskData->TaskList.Add(Information);
+		}
+		
+		UGameplayStatics::AsyncSaveGameToSlot(TaskData, TASK_SLOT, 0);
+	}
+	
+	if (IFileManager::Get().FileExists(*FString::Printf(TEXT("%sSaveGames/%s.sav"), *FPaths::ProjectSavedDir(), STORE_SLOT)))
+	{
+		FAsyncLoadGameFromSlotDelegate LoadDelegate;
+		LoadDelegate.BindRaw(this, &FPlayerLocalDataInterface::AsyncStoreData, Delegate);
+		UGameplayStatics::AsyncLoadGameFromSlot(STORE_SLOT, 0, LoadDelegate);
+	}
+	else
+	{
+		UStoreList* StoreList = LoadObject<UStoreList>(GetTransientPackage(), TEXT("/Game/Main/Asset/Local/DA_StoreList"));
+		StoreData = NewObject<UStoreData>(GetTransientPackage());
+			
+		int32 ItemId = 1;
+		for (const TPair<int32, FItemList>& Data : StoreList->Stores)
+		{
+			FItemListSaveGame NewList;
+			for (UItemData* ItemData : Data.Value.Items)
+			{
+				UItemData* DupItemData = NewObject<UItemData>(GetTransientPackage(), ItemData->GetClass(), NAME_None, RF_NoFlags, ItemData);
+				DupItemData->InitializeExtraProperties();
+				DupItemData->ItemId = ItemId++;
+				NewList.Items.Add(FItemDataHandle(DupItemData));
+			}
+
+			StoreData->Stores.Add(Data.Key, NewList);
+		}
+		UGameplayStatics::AsyncSaveGameToSlot(StoreData, STORE_SLOT, 0);
+	}
+}
+
+void FPlayerLocalDataInterface::AsyncLoadGameData(const FString& Slot, const int32 Index, USaveGame* SaveGame, FInitializeDelegate Delegate)
+{
+	//UE_LOG(LogTemp, Error, TEXT("GameData: %s"), GameData ? TEXT("Y") : TEXT("N"));
+	GameData = Cast<UPlayerGameData>(SaveGame);
+	AttemptExecuteInitializeDelegate(Delegate, GameData ? true : false);
 }
 
 void FPlayerLocalDataInterface::AsyncTaskData(const FString& Slot, const int32 Index, USaveGame* SaveGame, FInitializeDelegate Delegate)
 {
 	TaskData = Cast<UTaskData>(SaveGame);
-
-	if (TaskData == nullptr)
-	{
-		UTaskDataAsset* TaskList = LoadObject<UTaskDataAsset>(GetTransientPackage(), TEXT("/Game/Main/Asset/Test/DA_TaskList"));
-		TaskData = NewObject<UTaskData>(GetTransientPackage());
-		TaskData->TaskList.Append(TaskList->Tasks);
-		TaskData->TaskList.Sort(FTaskPredicate());
-		UGameplayStatics::AsyncSaveGameToSlot(TaskData, TASK_SLOT, TASK_SLOT_INDEX);
-	}
-
-	Delegate.ExecuteIfBound(true);
+	AttemptExecuteInitializeDelegate(Delegate, TaskData ? true : false);
 }
 
-TMap<EModuleCategory, FPlayerModuleList> FPlayerLocalDataInterface::GetModuleFromCategory() const
+void FPlayerLocalDataInterface::AsyncStoreData(const FString& Slot, const int32 Index, USaveGame* SaveGame, FInitializeDelegate Delegate)
 {
-	TMap<EModuleCategory, FPlayerModuleList> Modules;
-
-	for (FPlayerModule& Module : GameData->Modules)
-	{
-		Modules.FindOrAdd(Module.Category).Modules.Add(Module);
-	}
-
-	return Modules;
+	StoreData = Cast<UStoreData>(SaveGame);
+	AttemptExecuteInitializeDelegate(Delegate, TaskData ? true : false);
 }
 
-
-void FPlayerLocalDataInterface::AddPlayerRewards(const TArray<UItemData*>& Rewards, FCommonCompleteNotify Delegate)
+void FPlayerLocalDataInterface::AttemptExecuteInitializeDelegate(FInitializeDelegate Delegate, bool bCompleted)
 {
-	for (UItemData* ItemData : Rewards)
+	bInitCompleted.AtomicSet(bInitCompleted & bCompleted);
+	if (LoadCounter.Decrement() == 0)
+	{
+		Delegate.ExecuteIfBound(bInitCompleted);
+	}
+}
+
+void FPlayerLocalDataInterface::AddPlayerRewards(UItemData* Rewards, FCommonCompleteNotify Delegate)
+{
+	for (UItemData* ItemData : FItemDataRange(Rewards))
 	{
 		DoAddItem(ItemData);
 	}
 	
 	Delegate.ExecuteIfBound(MSG_SUCCESS);
-	UGameplayStatics::AsyncSaveGameToSlot(GameData, DEFAULT_SLOT, DEFAULT_SLOT_INDEX);
+	UGameplayStatics::AsyncSaveGameToSlot(GameData, DEFAULT_SLOT, 0);
 }
 
 void FPlayerLocalDataInterface::DoAddItem(UItemData* ItemData) const
@@ -185,9 +224,7 @@ void FPlayerLocalDataInterface::DoAddItem(UItemData* ItemData) const
 	}
 	else if (UItemDataModule* ModuleData = Cast<UItemDataModule>(ItemData))
 	{
-		TMap<EModuleCategory, FPlayerModuleList> Modules = GetModuleFromCategory();
-
-		int32 CNum = Modules.Find(ModuleData->Category)->Modules.Num();
+		int32 CNum = GameData->Modules.Find(ModuleData->Category)->Modules.Num();
 
 		if (CNum == MAX_ITEM_NUM)
 		{
@@ -197,17 +234,28 @@ void FPlayerLocalDataInterface::DoAddItem(UItemData* ItemData) const
 		{
 			ModuleData->AttemptAssignAttributes();
 			FPlayerModule Module(ModuleData);
-			Module.ModuleId = GameData->Modules.Num() + 1;
-			GameData->Modules.Add(Module);
+
+			int32 Num = 0;
+			for (TPair<EModuleCategory, FPlayerModuleList>& ModulePair : GameData->Modules)
+			{
+				Num += ModulePair.Value.Modules.Num();
+			}
+			
+			Module.ModuleId = Num + 1;
+			GameData->Modules.FindChecked(ModuleData->Category).Modules.Add(Module);
 		}
 	}
 	else if (UItemDataExperience* ExperienceData = Cast<UItemDataExperience>(ItemData))
 	{
 		DoIncreaseExperience(ExperienceData->ExperienceAmount);
+		
+		PlayerDataDelegate.OnExperienceChanged.Broadcast(
+			GameData->Properties.MaxExperience, GameData->Properties.CurrentExperience, GameData->Properties.Level);
 	}
 	else if (UItemDataMoney* ExperienceMoney = Cast<UItemDataMoney>(ItemData))
 	{
 		FPlatformAtomics::InterlockedAdd(&GameData->Properties.Money, ExperienceMoney->MoneyAmount);
+		PlayerDataDelegate.OnMoneyChanged.Broadcast(GameData->Properties.Money);
 	}
 }
 
@@ -218,21 +266,24 @@ void FPlayerLocalDataInterface::EquipModule(int64 ModuleId, EModuleCategory Modu
 		FPlayerModule* NewModule = nullptr;
 		FPlayerModule* OldModule = nullptr;
 
-		for (FPlayerModule& Module : GameData->Modules)
+		for (TPair<EModuleCategory, FPlayerModuleList>& Module : GameData->Modules)
 		{
-			if (ModuleId == Module.ModuleId)
+			for (FPlayerModule& PM : Module.Value.Modules)
 			{
-				NewModule = &Module;
-			}
+				if (ModuleId == PM.ModuleId)
+				{
+					NewModule = &PM;
+				}
 
-			if (ModuleCategory == Module.Category && Module.bEquipped)
-			{
-				OldModule = &Module;
-			}
+				if (ModuleCategory == PM.Category && PM.bEquipped)
+				{
+					OldModule = &PM;
+				}
 
-			if (OldModule && NewModule)
-			{
-				break;
+				if (OldModule && NewModule)
+				{
+					break;
+				}
 			}
 		}
 
@@ -247,7 +298,7 @@ void FPlayerLocalDataInterface::EquipModule(int64 ModuleId, EModuleCategory Modu
 		}
 
 		Delegate.ExecuteIfBound(MSG_SUCCESS);
-		UGameplayStatics::AsyncSaveGameToSlot(GameData, DEFAULT_SLOT, DEFAULT_SLOT_INDEX);
+		UGameplayStatics::AsyncSaveGameToSlot(GameData, DEFAULT_SLOT, 0);
 	}
 	else
 	{
@@ -296,7 +347,7 @@ void FPlayerLocalDataInterface::EquipWeapon(int64 WeaponId, int32 EquippedIndex,
 		}
 
 		Delegate.ExecuteIfBound(MSG_SUCCESS);
-		UGameplayStatics::AsyncSaveGameToSlot(GameData, DEFAULT_SLOT, DEFAULT_SLOT_INDEX);
+		UGameplayStatics::AsyncSaveGameToSlot(GameData, DEFAULT_SLOT, 0);
 	}
 	else
 	{
@@ -306,25 +357,21 @@ void FPlayerLocalDataInterface::EquipWeapon(int64 WeaponId, int32 EquippedIndex,
 
 void FPlayerLocalDataInterface::GetStoreItems(int32 StoreId, FGetStoreItemsComplete Delegate)
 {
-	FAsyncLoadGameFromSlotDelegate AsyncDelegate;
-
-	AsyncDelegate.BindLambda([Delegate, this](const FString& Slot, const int32 Index, USaveGame* SaveGame)
+	FStoreInformation StoreInformation;
+	if (FItemListSaveGame* ItemList = StoreData->Stores.Find(StoreId))
 	{
-		if (UStoreData* StoreData = Cast<UStoreData>(SaveGame))
+		for (const FItemDataHandle& Handle : ItemList->Items)
 		{
-			FStoreInformation StoreInformation;
-			StoreInformation.Items = StoreData->Items;
-			StoreInformation.PlayerMoneyAmount = GameData->Properties.Money;
-			Delegate.ExecuteIfBound(StoreInformation, MSG_SUCCESS);
+			StoreInformation.Items.Add(Handle.Get());
 		}
-		else
-		{
-			FStoreInformation Dummy;
-			Delegate.ExecuteIfBound(Dummy, MSG_ERROR);
-		}
-	});
-
-	UGameplayStatics::AsyncLoadGameFromSlot(STORE_SLOT, StoreId - 1, AsyncDelegate);
+		
+		StoreInformation.PlayerMoneyAmount = GameData->Properties.Money;
+		Delegate.ExecuteIfBound(StoreInformation, MSG_SUCCESS);
+	}
+	else
+	{
+		Delegate.ExecuteIfBound(StoreInformation, MSG_SUCCESS);
+	}
 }
 
 void FPlayerLocalDataInterface::RunServer(const FRunServerParameter& Parameter, FGetServerComplete Delegate)
@@ -333,41 +380,37 @@ void FPlayerLocalDataInterface::RunServer(const FRunServerParameter& Parameter, 
 
 void FPlayerLocalDataInterface::PayItem(int32 StoreId, int64 ItemId, FCommonCompleteNotify Delegate)
 {
-	FAsyncLoadGameFromSlotDelegate AsyncDelegate;
+	UItemDataTradable* BuyItem = nullptr;
 
-	AsyncDelegate.BindLambda([ItemId, Delegate, this](const FString& Slot, const int32 Index, USaveGame* SaveGame)
+	if (FItemListSaveGame* ItemList = StoreData->Stores.Find(StoreId))
 	{
-		if (UStoreData* StoreData = Cast<UStoreData>(SaveGame))
+		for (const FItemDataHandle& Information : ItemList->Items)
 		{
-			UItemData* BuyItem = nullptr;
-
-			for (UItemData* Information : StoreData->Items)
+			if (Information.Get()->ItemId == ItemId)
 			{
-				if (Information->ItemId == ItemId)
-				{
-					BuyItem = Information;
-					break;
-				}
-			}
-
-			if (BuyItem)
-			{
-				if (GameData->Properties.Money >= BuyItem->ItemPrice)
-				{
-					DoAddItem(BuyItem);
-
-					FPlatformAtomics::InterlockedExchange(&GameData->Properties.Money, GameData->Properties.Money - BuyItem->ItemPrice);
-					UGameplayStatics::AsyncSaveGameToSlot(GameData, DEFAULT_SLOT, DEFAULT_SLOT_INDEX);
-					Delegate.ExecuteIfBound(MSG_SUCCESS);
-					return;
-				}
+				BuyItem = Cast<UItemDataTradable>(Information.Get());
+				break;
 			}
 		}
+	}
 
-		Delegate.ExecuteIfBound(MSG_ERROR);
-	});
+	if (BuyItem)
+	{
+		if (GameData->Properties.Money >= BuyItem->ItemPrice)
+		{
+			DoAddItem(BuyItem);
 
-	UGameplayStatics::AsyncLoadGameFromSlot(STORE_SLOT, StoreId - 1, AsyncDelegate);
+			FPlatformAtomics::InterlockedAdd(&GameData->Properties.Money, -BuyItem->ItemPrice);
+			UGameplayStatics::AsyncSaveGameToSlot(GameData, DEFAULT_SLOT, 0);
+
+			PlayerDataDelegate.OnMoneyChanged.Broadcast(GameData->Properties.Money);
+					
+			Delegate.ExecuteIfBound(MSG_SUCCESS);
+			return;
+		}
+	}
+
+	Delegate.ExecuteIfBound(MSG_ERROR);
 }
 
 void FPlayerLocalDataInterface::GetPlayerWeapons(EGetEquipmentCondition Condition, FGetWeaponComplete Delegate)
@@ -391,10 +434,38 @@ void FPlayerLocalDataInterface::GetPlayerInfo(EGetEquipmentCondition Condition, 
 	if (GameData)
 	{
 		FilterPlayerData(FPlayerWeapon, bEquipped, GameData->Weapons, Condition, PlayerInfo.Weapons);
-		FilterPlayerData(FPlayerModule, bEquipped, GameData->Modules, Condition, PlayerInfo.Modules);
+		
 		FilterPlayerData(FTalentInfo, bLearned, GameData->TalentList, Condition, PlayerInfo.Talents);
 
+		for (TPair<EModuleCategory, FPlayerModuleList>& Module : GameData->Modules)
+		{
+			for (const FPlayerModule& PM : Module.Value.Modules)
+			{
+				if (Condition == EGetEquipmentCondition::All)
+				{
+					PlayerInfo.Modules.Add(PM);
+					continue;
+				}
+					
+				if (PM.bEquipped)
+				{
+					if (Condition == EGetEquipmentCondition::Equipped)
+					{
+						PlayerInfo.Modules.Add(PM);
+					}	
+				}
+				else
+				{
+					if (Condition == EGetEquipmentCondition::UnEquipped)
+					{
+						PlayerInfo.Modules.Add(PM);
+					}
+				}
+			}
+		}
+
 		PlayerInfo.Properties = GameData->Properties;
+		PlayerInfo.CharacterMesh = GameData->CharacterMesh;
 
 		Delegate.ExecuteIfBound(PlayerInfo, MSG_SUCCESS);
 	}
@@ -450,7 +521,7 @@ void FPlayerLocalDataInterface::LearningTalents(const TArray<int32>& TalentIdArr
 
 		Delegate.ExecuteIfBound(MSG_SUCCESS);
 
-		UGameplayStatics::AsyncSaveGameToSlot(GameData, DEFAULT_SLOT, DEFAULT_SLOT_INDEX);
+		UGameplayStatics::AsyncSaveGameToSlot(GameData, DEFAULT_SLOT, 0);
 	}
 	else
 	{
@@ -462,40 +533,10 @@ void FPlayerLocalDataInterface::GetTasks(EGetTaskCondition Condition, FGetTasksD
 {
 	if (TaskData)
 	{
-		if (Condition == EGetTaskCondition::All)
-		{
-			Delegate.ExecuteIfBound(TaskData->TaskList, MSG_SUCCESS);
-		}
-		else
-		{
-			TArray<FTaskInformation> FilterPostTask;
-			for (const FTaskInformation& TaskInformation : TaskData->TaskList)
-			{
-				if (Condition == EGetTaskCondition::Completed)
-				{
-					if (TaskInformation.bIsCompleted)
-					{
-						FilterPostTask.Add(TaskInformation);
-					}
-				}
-				else if (Condition == EGetTaskCondition::InProgress)
-				{
-					if (TaskInformation.bIsInProgress)
-					{
-						FilterPostTask.Add(TaskInformation);
-					}
-				}
-				else if (Condition == EGetTaskCondition::UnComplete)
-				{
-					if (!TaskInformation.bIsCompleted)
-					{
-						FilterPostTask.Add(TaskInformation);
-					}
-				}
-			}
+		TArray<FTaskInformation> FilterPostTask;
+		FilterTasks(Condition, FilterPostTask);
 
-			Delegate.ExecuteIfBound(FilterPostTask, MSG_SUCCESS);
-		}
+		Delegate.ExecuteIfBound(FilterPostTask, MSG_SUCCESS);
 	}
 	else
 	{
@@ -504,27 +545,69 @@ void FPlayerLocalDataInterface::GetTasks(EGetTaskCondition Condition, FGetTasksD
 	}
 }
 
-void FPlayerLocalDataInterface::DeliverTask(const int64& TaskId, FCommonCompleteNotify Delegate)
+void FPlayerLocalDataInterface::FilterTasks(EGetTaskCondition Condition, TArray<FTaskInformation>& Tasks) const
+{
+	for (const FTaskInformationSaveGame& TaskInformation : TaskData->TaskList)
+	{
+		if (Condition == EGetTaskCondition::Submitted)
+		{
+			if (TaskInformation.TaskMark == ETaskMark::Submitted)
+			{
+				Tasks.Add(TaskInformation.CastToInformation());
+			}
+		}
+		else if (Condition == EGetTaskCondition::UnSubmit)
+		{
+			if (TaskInformation.TaskMark == ETaskMark::Completed || TaskInformation.TaskMark == ETaskMark::Accepted)
+			{
+				Tasks.Add(TaskInformation.CastToInformation());
+			}
+		}
+		else if (Condition == EGetTaskCondition::NotAccept)
+		{
+			if (TaskInformation.TaskMark == ETaskMark::NotAccept)
+			{
+				Tasks.Add(TaskInformation.CastToInformation());
+			}
+		}
+		else
+		{
+			
+		}
+	}
+}
+
+void FPlayerLocalDataInterface::DeliverTask(const int64& TaskId, FTaskRewardDelegate Delegate)
 {
 	FString ErrorMessage;
 	
 	if (TaskData)
 	{
-		int64 Tid = FMath::Max(TaskId - 1, TaskId);
+		int64 Tid = TaskId - 1;
 		if (TaskData->TaskList.IsValidIndex(Tid))
 		{
-			FTaskInformation& Information = TaskData->TaskList[Tid];
-			if (Information.CompleteCondition->IsCompleted())
+			FTaskInformationSaveGame& Information = TaskData->TaskList[Tid];
+
+			bool bIsCompleted = Information.CompleteCondition.Get()->IsCompleted();
+			bool bIsNotSubmit = Information.TaskMark != ETaskMark::Submitted;
+
+			if (bIsCompleted && bIsNotSubmit)
 			{
-				for (UItemData* ItemData : Information.CompletedReward)
+				Information.TaskMark = ETaskMark::Submitted;
+				
+				for (UItemData* ItemData : FItemDataRange(Information.CompletedReward))
 				{
 					DoAddItem(ItemData);
 				}
+
+				Delegate.ExecuteIfBound(Information.CompletedReward.Get(), ErrorMessage);
+				
+				UGameplayStatics::AsyncSaveGameToSlot(TaskData, TASK_SLOT, 0);
+
+				return;
 			}
-			else
-			{
-				ErrorMessage = TEXT("Task UnComplete");
-			}
+			
+			ErrorMessage = TEXT("Task UnComplete");
 		}
 		else
 		{
@@ -536,20 +619,48 @@ void FPlayerLocalDataInterface::DeliverTask(const int64& TaskId, FCommonComplete
 		ErrorMessage = MSG_ERROR;
 	}
 
-	Delegate.ExecuteIfBound(ErrorMessage);
+	Delegate.ExecuteIfBound(nullptr, ErrorMessage);
 }
 
-void FPlayerLocalDataInterface::IncreaseExperience(const FUserExperiencePair& UserExperience, FExperienceChangeDelegate Delegate)
+void FPlayerLocalDataInterface::AcceptTask(const int64& TaskId, FCommonCompleteNotify Delegate)
 {
-	if (GameData)
+	if (TaskData)
 	{
-		DoIncreaseExperience(UserExperience.IncreaseExperienceAmount);
-		Delegate.ExecuteIfBound(GameData->Properties.Level, MSG_SUCCESS);
+		int64 Tid = TaskId - 1;
+		if (TaskData->TaskList.IsValidIndex(Tid))
+		{
+			TaskData->TaskList[Tid].TaskMark = ETaskMark::Accepted;
+		}
+
+		UGameplayStatics::AsyncSaveGameToSlot(TaskData, TASK_SLOT, 0);
+
+		Delegate.ExecuteIfBound(MSG_SUCCESS);
 	}
 	else
 	{
-		Delegate.ExecuteIfBound(0, MSG_ERROR);
+		Delegate.ExecuteIfBound(MSG_ERROR);
 	}
+}
+
+void FPlayerLocalDataInterface::UpdateTaskState(const FQuestActionHandle& Handle)
+{
+	for (FTaskInformationSaveGame& Information : TaskData->TaskList)
+	{
+		if (Information.TaskMark == ETaskMark::Accepted)
+		{
+			if (Information.CompleteCondition.Get()->UpdateCondition(Handle))
+			{
+				Information.TaskMark = ETaskMark::Completed;
+			}
+		}
+	}
+
+	UGameplayStatics::AsyncSaveGameToSlot(TaskData, TASK_SLOT, 0);
+
+	TArray<FTaskInformation> FilterPostTask;
+	FilterTasks(EGetTaskCondition::UnSubmit, FilterPostTask);
+
+	PlayerDataDelegate.OnTaskStateChanged.Broadcast(FilterPostTask);
 }
 
 void FPlayerLocalDataInterface::DoIncreaseExperience(int32 ExpAmount) const
@@ -613,4 +724,10 @@ void FPlayerLocalDataInterface::AddReferencedObjects(FReferenceCollector& Collec
 	// 如果不添加这行代码则无法预测GameData会在什么时候被GC掉而导致一系列BUG
 	Collector.AddReferencedObject(GameData);
 	Collector.AddReferencedObject(TaskData);
+	Collector.AddReferencedObject(StoreData);
+}
+
+void FPlayerLocalDataInterface::RefreshPlayerProperties()
+{
+	// 本地版本不需要处理
 }

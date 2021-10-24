@@ -14,6 +14,8 @@ public:
 	static void Shutdown();
 
 	static FPlayerDataInterface* Get();
+
+	static bool IsLocalInterface();
 	
 private:
 

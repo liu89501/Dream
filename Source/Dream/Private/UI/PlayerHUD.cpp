@@ -3,3 +3,7 @@
 
 #include "PlayerHUD.h"
 
+void UPlayerHUD::BP_AddInteractiveUI(UWidget* Widget)
+{
+	AddInteractiveUI(Widget);
+}

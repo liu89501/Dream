@@ -9,12 +9,14 @@
 /**
  * 
  */
-UCLASS()
+UCLASS(Blueprintable)
 class DREAM_API UDExperience : public UObject, public IPropsInterface
 {
 	GENERATED_BODY()
 
 public:
+
+	UDExperience();
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FPropsInfo PropsInformation;

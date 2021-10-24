@@ -12,8 +12,6 @@
 UDreamAttributeSet::UDreamAttributeSet()
 	: Health(1.f)
 	, MaxHealth(1.f)
-	, Shield(1.f)
-	, MaxShield(1.f)
 	, AttackPower(1.0f)
 	, DefensePower(1.0f)
 	, Damage(0.0f)
@@ -27,8 +25,6 @@ void UDreamAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 
 	DOREPLIFETIME(UDreamAttributeSet, Health);
 	DOREPLIFETIME(UDreamAttributeSet, MaxHealth);
-	DOREPLIFETIME(UDreamAttributeSet, Shield);
-	DOREPLIFETIME(UDreamAttributeSet, MaxShield);
 	DOREPLIFETIME(UDreamAttributeSet, AttackPower);
 	DOREPLIFETIME(UDreamAttributeSet, DefensePower);
 	DOREPLIFETIME(UDreamAttributeSet, CriticalRate);
@@ -43,16 +39,6 @@ void UDreamAttributeSet::OnRep_Health(const FGameplayAttributeData& OldValue)
 void UDreamAttributeSet::OnRep_MaxHealth(const FGameplayAttributeData& OldValue)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDreamAttributeSet, MaxHealth, OldValue);
-}
-
-void UDreamAttributeSet::OnRep_Shield(const FGameplayAttributeData& OldValue)
-{
-	GAMEPLAYATTRIBUTE_REPNOTIFY(UDreamAttributeSet, Shield, OldValue);
-}
-
-void UDreamAttributeSet::OnRep_MaxShield(const FGameplayAttributeData& OldValue)
-{
-	GAMEPLAYATTRIBUTE_REPNOTIFY(UDreamAttributeSet, MaxShield, OldValue);
 }
 
 void UDreamAttributeSet::OnRep_AttackPower(const FGameplayAttributeData& OldValue)
@@ -75,7 +61,7 @@ void UDreamAttributeSet::OnRep_CriticalDamage(const FGameplayAttributeData& OldV
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDreamAttributeSet, CriticalDamage, OldValue);
 }
 
-void UDreamAttributeSet::AdjustAttributeForMaxChange(FGameplayAttributeData& AffectedAttribute, const FGameplayAttributeData& MaxAttribute, float NewMaxValue, const FGameplayAttribute& AffectedAttributeProperty)
+void UDreamAttributeSet::AdjustAttributeForMaxChange(FGameplayAttributeData& AffectedAttribute, const FGameplayAttributeData& MaxAttribute, float NewMaxValue, const FGameplayAttribute& AffectedAttributeProperty) const
 {
 	UAbilitySystemComponent* AbilityComp = GetOwningAbilitySystemComponent();
 	const float CurrentMaxValue = MaxAttribute.GetCurrentValue();
@@ -85,7 +71,7 @@ void UDreamAttributeSet::AdjustAttributeForMaxChange(FGameplayAttributeData& Aff
 		const float CurrentValue = AffectedAttribute.GetCurrentValue();
 		float NewDelta = (CurrentMaxValue > 0.f) ? (CurrentValue * NewMaxValue / CurrentMaxValue) - CurrentValue : NewMaxValue;
 
-		AbilityComp->ApplyModToAttributeUnsafe(AffectedAttributeProperty, EGameplayModOp::Additive, NewDelta);
+		AbilityComp->ApplyModToAttribute(AffectedAttributeProperty, EGameplayModOp::Additive, NewDelta);
 	}
 }
 
@@ -98,17 +84,9 @@ void UDreamAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute,
 	{
 		AdjustAttributeForMaxChange(Health, MaxHealth, NewValue, GetHealthAttribute());
 	}
-	else if (Attribute == GetMaxShieldAttribute())
-	{
-		AdjustAttributeForMaxChange(Shield, MaxShield, NewValue, GetShieldAttribute());
-	}
 	else if (Attribute == GetHealthAttribute())
 	{
-		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxHealth());
-	}
-	else if (Attribute == GetShieldAttribute())
-	{
-		NewValue = FMath::Clamp(NewValue, 0.f, GetMaxShield());
+		NewValue = FMath::Clamp(NewValue, 0.f, MaxHealth.GetBaseValue());
 	}
 }
 
@@ -144,29 +122,8 @@ void UDreamAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallb
 
 		if (LocalDamageDone > 0)
 		{
-			float CalcDamage = LocalDamageDone;
-
-			const float OldShield = GetShield();
-			if (OldShield > 0)
-			{
-				if (OldShield >= CalcDamage)
-				{
-					SetShield(OldShield - CalcDamage);
-					CalcDamage = 0;
-				}
-				else
-				{
-					SetShield(0);
-					CalcDamage -= OldShield; 
-				}
-			}
-
-			if (CalcDamage > 0)
-			{
-				// Apply the health change and then clamp it
-				const float OldHealth = GetHealth();
-				SetHealth(FMath::Clamp(OldHealth - CalcDamage, 0.0f, GetMaxHealth()));
-			}
+			const float OldHealth = GetHealth();
+			SetHealth(FMath::Clamp(OldHealth - LocalDamageDone, 0.0f, GetMaxHealth()));
 			
 			if (TargetCharacter)
 			{
@@ -180,24 +137,16 @@ void UDreamAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallb
 	}
 	else if (Data.EvaluatedData.Attribute == GetHealthStealAttribute())
 	{
-		if (GetHealth() == 0.f)
+		if (GetHealth() > 0.f)
 		{
-			return;
+			float CurrentHealth = GetHealth();
+
+			// 生命回复效果
+			float HealthStealValue = GetHealthSteal();
+
+			SetHealth(CurrentHealth + HealthStealValue);
+
+			SetHealthSteal(0.f);
 		}
-
-		float CurrentHealth = GetHealth();
-
-		// 生命回复效果
-		float HealthStealValue = GetHealthSteal();
-		float OverflowCureAmount = FMath::Max(0.f, HealthStealValue + CurrentHealth - GetMaxHealth());
-
-		SetHealth(CurrentHealth + HealthStealValue);
-		
-		if (OverflowCureAmount > 0.f)
-		{
-			SetShield(GetShield() + OverflowCureAmount);
-		}
-
-		SetHealthSteal(0.f);
 	}
 }

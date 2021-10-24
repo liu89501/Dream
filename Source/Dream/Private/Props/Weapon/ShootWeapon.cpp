@@ -7,7 +7,6 @@
 #include "DreamType.h"
 #include "Kismet/GameplayStatics.h"
 #include "UnrealNetwork.h"
-#include "NiagaraComponent.h"
 #include "Character/DCharacterPlayer.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Kismet/KismetMathLibrary.h"
@@ -590,7 +589,7 @@ void AShootWeapon::SetWeaponAim(bool NewAimed)
 }
 
 
-FSlateBrush AShootWeapon::GetDynamicCrosshairBrush()
+const FSlateBrush& AShootWeapon::GetDynamicCrosshairBrush()
 {
     if (UMaterialInterface* Material = Cast<UMaterialInterface>(CrosshairBrush.GetResourceObject()))
     {
@@ -606,7 +605,7 @@ FSlateBrush AShootWeapon::GetDynamicCrosshairBrush()
     return CrosshairBrush;
 }
 
-FSlateBrush AShootWeapon::GetDynamicMagazineBrush()
+const FSlateBrush& AShootWeapon::GetDynamicMagazineBrush()
 {
     if (!MagazineDynamic)
     {

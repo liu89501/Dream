@@ -19,5 +19,5 @@ public:
 
 	UHealthWidgetComponent();
 
-    void UpdateStatus(float HealthPercentage, float ShieldPercentage) const;
+    void UpdateStatus(float HealthPercentage) const;
 };

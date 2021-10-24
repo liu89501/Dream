@@ -77,8 +77,6 @@ void UTalentGrid::OnWidgetRebuilt()
 {
 	if (!IsDesignTime())
 	{
-		DREAM_NLOG(Error, TEXT("UTalentGrid::OnWidgetRebuilt"));
-		
 		for (UWidget* Widget : GetAllChildren())
 		{
 			if (UTalentItem* TalentItem = Cast<UTalentItem>(Widget))

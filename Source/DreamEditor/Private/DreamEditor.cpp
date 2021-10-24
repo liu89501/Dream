@@ -4,9 +4,9 @@
 
 void FDreamEditorModule::StartupModule()
 {
-	/*FPropertyEditorModule& PropertyModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
-	PropertyModule.RegisterCustomPropertyTypeLayout(TEXT("WeaponAttachToPreviewSkeletal"),
-		FOnGetPropertyTypeCustomizationInstance::CreateStatic(&FWeaponPreviewCustomization::MakeInstance));*/
+	FPropertyEditorModule& PropertyModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
+	PropertyModule.RegisterCustomPropertyTypeLayout(TEXT("TargetDelegate"),
+		FOnGetPropertyTypeCustomizationInstance::CreateStatic(&FTargetDelegateCustomization::MakeInstance));
 
 	WeaponMeshPreview = MakeShareable(new FWeaponMeshPreviewCustomizationMenu());
 	WeaponMeshPreview->LoadMenuContext();
@@ -14,8 +14,8 @@ void FDreamEditorModule::StartupModule()
 
 void FDreamEditorModule::ShutdownModule()
 {
-	/*FPropertyEditorModule& PropertyModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
-	PropertyModule.UnregisterCustomPropertyTypeLayout(TEXT("WeaponAttachToPreviewSkeletal"));*/
+	FPropertyEditorModule& PropertyModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
+	PropertyModule.UnregisterCustomPropertyTypeLayout(TEXT("TargetDelegate"));
 }
 
 bool FDreamEditorModule::IsGameModule() const

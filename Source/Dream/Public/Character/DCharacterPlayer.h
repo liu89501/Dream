@@ -7,13 +7,13 @@
 #include "DreamType.h"
 #include "DCharacterBase.h"
 #include "DModuleBase.h"
+#include "GameplayAbilitySpec.h"
 #include "DPlayerController.h"
 #include "PlayerDataInterfaceType.h"
 #include "GameFramework/Character.h"
 #include "DCharacterPlayer.generated.h"
 
 class AShootWeapon;
-class UDModuleBase;
 
 UENUM(BlueprintType)
 enum class EMovingDirection : uint8
@@ -26,18 +26,6 @@ enum class EMovingDirection : uint8
 	BL,
 	BR,
 	B
-};
-
-USTRUCT(BlueprintType)
-struct FCharacterMeshCustomize : public FTableRowBase
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	USkeletalMesh* MasterMesh;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	TArray<USkeletalMesh*> SlaveMeshs;
 };
 
 UCLASS()
@@ -59,12 +47,11 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	class UAudioComponent* AudioComponent;
 
-	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CharacterPlayer)
-	float BaseTurnRate;
-	/** Base look up/down rate, in deg/sec. Other scaling may affect final rate. */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CharacterPlayer)
-	float BaseLookUpRate;
+	/**
+	 * 这个character是否用作预览(会关掉一些不必要的功能)
+	 */
+	UPROPERTY(EditAnywhere, Category = CharacterPlayer)
+	bool bIsPreviewCharacter;
 
 	/** 人物的Yaw角度限制 超过这个范围会旋转自身 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CharacterPlayer)
@@ -132,17 +119,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|MiniMap")
 	TArray<TEnumAsByte<EObjectTypeQuery>> ScanObjectTypes;
 
-#if WITH_EDITOR
-
-	UPROPERTY(EditAnywhere, Category = CharacterPlayer)
-	UDataTable* TestInitAttributes;
-	
-#endif
+	/**
+	 * 默认属性值配置
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Attribute")
+	class UDBaseAttributesAsset* BaseAttributesSettings;
 
 public:
 
 	UFUNCTION(BlueprintCallable, Category = "CharacterPlayer")
 	AShootWeapon* GetActiveWeapon() const;
+
+	/**
+	 * 一般用于在交互时需要调用一下这个，避免出现在瞄准状态下打开商店时导致无法取消瞄准状态
+	 */
+	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
+	void ForceModifyStateToIdle();
 
 	/**
 	 * 获取当前玩家正在使用的是几号位的武器
@@ -244,9 +236,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	float GetCtrlYawDeltaCount() const;
-
-	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
-	void RefreshAttributeBaseValue();
 
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	void SetCombatStatus(bool bNewCombatStatus);
@@ -357,6 +346,8 @@ protected:
 	/** Called for side to side input */
 	void MoveRight(float Value);
 
+	void ReplicationServerMoveDirection();
+
 	/**
 	 * Called via input to turn at a given rate.
 	 * @param Rate	This is a normalized rate, i.e. 1.0 means 100% of desired turn rate
@@ -397,6 +388,8 @@ protected:
 	virtual void OnDeath(const AActor* Causer) override;
 
 	virtual void HealthChanged(const FOnAttributeChangeData& AttrData) override;
+	
+	//virtual void MaxHealthChanged(const FOnAttributeChangeData& AttrData);
 
 	virtual void HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle) override;
 
@@ -405,8 +398,6 @@ protected:
 	virtual void HitEnemy(const FDamageTargetInfo& DamageInfo, ADCharacterBase* HitTarget) override;
 
 	virtual int32 GetPickUpMagazineNumber(EAmmoType AmmoType) const;
-
-	void SetMeshLightChannel(int32 LightChannel = 0);
 
 	/* 尝试将Pawn状态修改未空闲 */
 	/*void AttemptSetStatusToRelax();
@@ -421,7 +412,15 @@ protected:
 
 	void OnInitPlayer(const FPlayerInfo& PlayerInfo, const FString& ErrorMessage);
 
-	void UpdateHealthUI();
+	void OnPlayerExperienceChanged(int32 MaxExp, int32 CrtExp, int32 NewLevel);
+
+	/** 属性相关 */
+	void AdditiveAttributes(const FEquipmentAttributes& Attributes);
+    void RefreshAttributeBaseValue();
+    void FastRefreshWeaponAttribute(const FEquipmentAttributes& PrevWeaponAttrs);
+	
+	UFUNCTION(Server, Reliable)
+    void ServerSetCharacterLevel(int32 NewLevel);
 
 	void RadarScanTick();
 
@@ -432,19 +431,19 @@ protected:
 	UFUNCTION(Client, Reliable)
 	void ClientResurrection(int32 ResurrectionTime);
 
-	UFUNCTION(Server, Reliable)
+	UFUNCTION(Server, UnReliable)
 	void ServerUpdateMovingInput(const FVector2D& NewMovingInput);
 
-	UFUNCTION()
-	void OnRep_CharacterMesh();
+	// todo 这里可能会有问题 试想如果一个人在视野之外这个RPC在其他客户端能否接收到，这是个问题需要测试
+	UFUNCTION(Server, Reliable)
+	void ServerUpdateCharacterMesh(UCharacterMesh* CharacterMesh);
+	UFUNCTION(NetMulticast, Reliable)
+	void MulticastUpdateCharacterMesh(UCharacterMesh* CharacterMesh);
+	void ProcessUpdateCharacterMesh(UCharacterMesh* CharacterMesh);
 
 	virtual void OnActiveGameplayEffectAdded(UAbilitySystemComponent* ASC, const FGameplayEffectSpec& Spec, FActiveGameplayEffectHandle Handle);
 	virtual void OnActiveGameplayEffectTimeChange(FActiveGameplayEffectHandle Handle, float NewStartTime, float NewDuration);
 	virtual void OnActiveGameplayEffectRemoved(const FActiveGameplayEffect& Effect);
-
-	UFUNCTION(BlueprintCallable)
-    void IncrementExperience(int32 Exp);
-	void DoSetLevel(int32 NewLevel, const FString& ErrMsg);
 
 protected:
 
@@ -457,21 +456,10 @@ protected:
 	UPROPERTY()
 	EWeaponStatus WeaponStatus;
 
-	UPROPERTY(BlueprintReadWrite, ReplicatedUsing = OnRep_CharacterMesh)
-	FCharacterMeshCustomize CharacterMesh;
-
 	UPROPERTY(Replicated)
 	FVector2D MovingInput;
 	
 	FVector2D PrevMovingInput;
-
-#if WITH_EDITOR
-	
-	UPROPERTY(BlueprintReadWrite)
-	bool EnableDebugView;
-	
-#endif
-
 	
 
 private:
@@ -481,6 +469,16 @@ private:
 
 private:
 
+	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
+	float BaseTurnRate;
+	/** Base look up/down rate, in deg/sec. Other scaling may affect final rate. */
+	float BaseLookUpRate;
+	
+	/**
+	 * 存放武器perk的Handle
+	 */
+	TArray<FGameplayAbilitySpecHandle> CacheWeaponPerkHandles;
+	
 	/**
 	 *  无视小地图扫描半径的Actor 将一直显示在小地图上 需要手动删除
 	 */
@@ -497,6 +495,7 @@ private:
 	class UPlayerHUD* PlayerHUD;
 
 	/** 当前正在使用的武器 在 WeaponInventory 的索引 */
+	UPROPERTY(Replicated)
 	int32 ActiveWeaponIndex;
 
 	/** 当前玩家已装备的武器 仅服务器有效 */
@@ -524,6 +523,8 @@ private:
 	FTimerHandle Handle_Shoot;
 	FTimerHandle Handle_Reload;
 	FTimerHandle Handle_Equip;
+
+	FDelegateHandle Handle_Exp;
 
 	/* 记录进入战斗状态的次数 */
 	FThreadSafeCounter CombatStatusCounter;

@@ -60,20 +60,18 @@ public:
     UPROPERTY(EditAnywhere, Category = CharacterBase)
     TMap<FName, float> WeakPoint;
 
-    UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
-    float GetHealth() const;
-    UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
-    float GetMaxHealth() const;
-    UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
-    float GetShield() const;
-    UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
-    float GetMaxShield() const;
-    UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
-    float GetCriticalRate() const;
-    UFUNCTION(BlueprintCallable, Category="CharacterBase|Attributes")
-    float GetCriticalDamage() const;
+public:
 
-    FCharacterDeathSignature OnCharacterDeath;
+    UFUNCTION(BlueprintCallable, Category = CharacterBase)
+    float GetBaseHealth();
+
+    UFUNCTION(BlueprintCallable, Category = CharacterBase)
+    float GetBaseMaxHealth();
+
+    UFUNCTION(BlueprintCallable, Category = CharacterBase)
+    float GetHealthPercent() const;
+
+    bool IsDeath() const;
 
     virtual void HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle);
 
@@ -84,31 +82,25 @@ public:
         return Level;
     }
 
-    void SetCharacterLevel(int32 NewLevel);
+    FCharacterDeathSignature& GetCharacterDeathDelegate()
+    {
+        return OnCharacterDeath;
+    }
 
 protected:
 
     UPROPERTY(EditAnywhere, Replicated, Category = CharacterBase)
     int32 Level;
 
+    FCharacterDeathSignature OnCharacterDeath;
+
 protected:
 
     UFUNCTION(BlueprintImplementableEvent, meta = (DisplayName = "OnHandleDamage", ScriptName = "OnHandleDamage"))
     void BP_HandleDamage(float Damage, const FHitResult& HitResult, ADCharacterBase* SourceCharacter);
 
-    UFUNCTION(BlueprintCallable, Category = CharacterBase)
-    float GetHealthPercent() const;
-
-    UFUNCTION(BlueprintCallable, Category = CharacterBase)
-    float GetShieldPercent() const;
-
     UFUNCTION(BlueprintImplementableEvent, Category = CharacterBase, meta = (DisplayName = "OnHealthChanged", ScriptName = "OnHealthChanged"))
     void BP_OnHealthChanged();
-
-protected:
-
-    UFUNCTION(Server, Reliable, WithValidation)
-    void ServerSetCharacterLevel(int32 NewLevel);
 
     virtual void HealthChanged(const FOnAttributeChangeData& AttrData);
 

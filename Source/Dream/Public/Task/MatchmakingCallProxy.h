@@ -9,6 +9,8 @@
 #include "Net/OnlineBlueprintCallProxyBase.h"
 #include "MatchmakingCallProxy.generated.h"
 
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSessionJoinNumberChange, int32, JoinNumber);
+
 class APlayerController;
 
 /**
@@ -30,11 +32,10 @@ public:
 	FEmptyOnlineDelegate OnFailure;
 
 	UPROPERTY(BlueprintAssignable)
-	FEmptyOnlineDelegate OnJoinedPlayerChanged;
+	FSessionJoinNumberChange OnJoinChanged;
 
-	UFUNCTION(BlueprintCallable, meta = (BlueprintInternalUseOnly = "true", WorldContext = "WorldContextObject"), Category = "Dream|Async")
+	UFUNCTION(BlueprintCallable, meta = (BlueprintInternalUseOnly = "true"), Category = "Dream|Async")
 	static UMatchmakingCallProxy* Matchmaking(
-		UObject* WorldContextObject, 
 		APlayerController* PlayerController, 
 		const FName& InMapName,
 		const FString& InGameMode,
@@ -49,7 +50,9 @@ public:
 
 private:
 
-	void Matching();
+	void FindLobby();
+
+	void CreateLobby();
 
 	// Internal callback when the join completes, calls out to the public success/failure callbacks
 	void OnSearchCompleted(bool bSuccessful);
@@ -60,7 +63,7 @@ private:
 
 	void OnCreateServerComplete(const FString& ServerAddress, const FString& ErrorMessage);
 
-	void WaitBeginTick(FNamedOnlineSession* Session);
+	void OnSessionTick(float DeltaTime);
 
 	void OnStartSessionComplete(FName SessionName, bool bWasSuccessful);
 
@@ -81,8 +84,9 @@ private:
 	TSharedPtr<FOnlineSessionSearch> SearchSettings;
 
 	/* 匹配期间可能会用到的所有任务句柄 */
-	FTimerHandle Handle_WaitBegin;
 	FTimerHandle Handle_RetryMatching;
+	FTimerHandle Handle_SessionTIck;
+	FDelegateHandle Handle_UpdateSessionsComplete;
 	FDelegateHandle Handle_FindSessionsComplete;
 	FDelegateHandle Handle_JoinSessionComplete;
 	FDelegateHandle Handle_StartSessionComplete;
@@ -92,7 +96,10 @@ private:
 	uint8 FindRetryCount;
 
 	/* 连接到会话后等待开始游戏的时间(会话的玩家人数未满时) */
-	float BeginWaitTime;
+	float WaitStartTime;
+
+	bool bCreatingServer;
 	
 	int32 PrevJoinedPlayerNum;
 };
+

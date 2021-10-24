@@ -32,7 +32,7 @@ public:
 	UPROPERTY(EditAnywhere, Category=AbilityTrigger)
 	FVector EffectRelativeLocation;
 
-#if WITH_EDITOR
+#if WITH_EDITORONLY_DATA
 
 	UPROPERTY(EditAnywhere, Category=AbilityTrigger)
 	bool bDebugSphere;

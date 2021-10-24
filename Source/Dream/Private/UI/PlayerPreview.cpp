@@ -6,7 +6,6 @@
 #include "EngineModule.h"
 #include "EngineUtils.h"
 #include "LegacyScreenPercentageDriver.h"
-#include "Components/SceneCaptureComponent2D.h"
 #include "Components/SkyLightComponent.h"
 #include "Engine/Canvas.h"
 #include "Engine/CanvasRenderTarget2D.h"
@@ -30,7 +29,7 @@ AActor* UPlayerPreview::SpawnPreviewActor(TSubclassOf<AActor> ActorClass)
 
 void UPlayerPreview::NativeOnInitialized()
 {
-	EWorldType::Type WorldType = WITH_EDITOR ? EWorldType::EditorPreview : EWorldType::GamePreview;
+	EWorldType::Type WorldType = IsRunningGame() ? EWorldType::GamePreview : EWorldType::EditorPreview;
 
 	PreviewWorld = NewObject<UWorld>(GetTransientPackage());
 	PreviewWorld->WorldType = WorldType;
@@ -39,9 +38,9 @@ void UPlayerPreview::NativeOnInitialized()
 
 	UWorld::InitializationValues WVars;
 	WVars.CreateNavigation(false)
-		.CreatePhysicsScene(false)
-		.ShouldSimulatePhysics(false)
-		.CreateAISystem(false);
+        .CreatePhysicsScene(false)
+        .ShouldSimulatePhysics(false)
+        .CreateAISystem(false);
 	
 	PreviewWorld->InitializeNewWorld(WVars);
 	PreviewWorld->InitializeActorsForPlay(FURL());
@@ -56,19 +55,14 @@ void UPlayerPreview::NativeOnInitialized()
 	TextureTarget->OnCanvasRenderTargetUpdate.AddDynamic(this, &UPlayerPreview::OnCanvasRenderTargetUpdate);
 	TextureTarget->UpdateResourceImmediate();
 
-	Super::NativeConstruct();
+	Super::NativeOnInitialized();
 }
 
 void UPlayerPreview::NativeDestruct()
 {
 	Super::NativeDestruct();
 
-	//DREAM_NLOG(Error, TEXT("PlayerPreview Destruct"));
-
-	if (TextureTarget)
-	{
-		TextureTarget->OnCanvasRenderTargetUpdate.Clear();
-	}
+	TextureTarget->OnCanvasRenderTargetUpdate.Clear();
 
 	ViewState.Destroy();
 
@@ -92,7 +86,7 @@ void UPlayerPreview::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 	
 	if (PreviewWorld)
 	{
-		PreviewWorld->Tick(LEVELTICK_All, InDeltaTime);
+		PreviewWorld->Tick(LEVELTICK_ViewportsOnly, InDeltaTime);
 	}
 
 	if (TextureTarget)

@@ -2,8 +2,12 @@
 
 #include "GameplayTags.h"
 
-namespace DGameplayTags
+namespace EffectTags
 {
+    extern const FGameplayTag GE_Buff_Weapon;
+    extern const FGameplayTag GE_Buff_Module;
+    extern const FGameplayTag GE_Buff_Talent;
+    extern const FGameplayTag GE_Buff_All;
 }
 
 namespace ConditionTags
