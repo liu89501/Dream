@@ -5,23 +5,9 @@
 
 UPDSAsync_GetWeapons* UPDSAsync_GetWeapons::PDI_GetWeapons(UObject* WorldContextObject, EGetEquipmentCondition Condition)
 {
-	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
-	{
-		UPDSAsync_GetWeapons* PDSGW = NewObject<UPDSAsync_GetWeapons>(WorldContextObject);
-
-		FTimerHandle Handle;
-		World->GetTimerManager().SetTimer(Handle, [Condition, PDSGW]
-        {
-			FGetWeaponComplete Delegate;
-            Delegate.BindUObject(PDSGW, &UPDSAsync_GetWeapons::OnLoadCompleted);
-			FPlayerDataInterfaceStatic::Get()->GetPlayerWeapons(Condition, Delegate);
-			
-        }, 0.001f, false);
-
-		return PDSGW;
-	}
-
-	return nullptr;
+	UPDSAsync_GetWeapons* PDSGW = NewObject<UPDSAsync_GetWeapons>(WorldContextObject);
+	PDSGW->T_Condition = Condition;
+	return PDSGW;
 }
 
 void UPDSAsync_GetWeapons::OnLoadCompleted(const TArray<FPlayerWeapon>& Weapons, const FString& ErrorMessage) const
@@ -34,5 +20,12 @@ void UPDSAsync_GetWeapons::OnLoadCompleted(const TArray<FPlayerWeapon>& Weapons,
 	{
 		OnFailure.Broadcast(Weapons);
 	}
+}
+
+void UPDSAsync_GetWeapons::Activate()
+{
+	FGetWeaponComplete Delegate;
+	Delegate.BindUObject(this, &UPDSAsync_GetWeapons::OnLoadCompleted);
+	FPlayerDataInterfaceStatic::Get()->GetPlayerWeapons(T_Condition, Delegate);
 }
 

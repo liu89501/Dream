@@ -24,4 +24,10 @@ public:
     static UPDSAsync_GetPlayerInfo* PDI_GetPlayerInformation(UObject* WorldContextObject, EGetEquipmentCondition Condition);
 
 	void OnLoadCompleted(const FPlayerInfo& PlayerInfo, const FString& ErrorMessage) const;
+
+	virtual void Activate() override;
+
+private:
+
+	EGetEquipmentCondition T_Condition;
 };

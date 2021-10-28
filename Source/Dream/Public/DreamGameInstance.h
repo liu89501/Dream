@@ -38,16 +38,12 @@ public:
 	 * 	关卡数据
 	 */
 	UPROPERTY(EditAnywhere, Category = "Settings")
-	UDataTable* Levels;
+	ULevelListAsset* Levels;
 
 	UPROPERTY(EditAnywhere, Category = "Settings")
 	TMap<TEnumAsByte<EPhysicalSurface>, FSurfaceImpactEffect> SurfaceImpactEffects;
 	
-	const FString& GetMapFullName(const FName& MapName) const;
-
 	const FSurfaceImpactEffect& GetSurfaceImpactEffect(EPhysicalSurface SurfaceType);
-
-	void LaunchDedicatedServer();
 	
 protected:
 

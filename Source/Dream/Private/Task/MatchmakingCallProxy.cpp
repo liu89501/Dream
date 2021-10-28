@@ -6,31 +6,26 @@
 #include "PDI/PlayerDataInterfaceStatic.h"
 #include "TimerManager.h"
 #include "DreamGameInstance.h"
-#include "OnlineIdentityInterface.h"
+#include "DreamGameMode.h"
+#include "GameMapsSettings.h"
+#include "OnlineSubsystemSessionSettings.h"
 #include "OnlineSubsystemUtils.h"
 
-THIRD_PARTY_INCLUDES_START
-#include "steam/steam_api.h"
-THIRD_PARTY_INCLUDES_END
-
-#define Begin_WaitTime 60
-#define FindSessionRetryCount 30
-#define MaxPlayerNum 4
-
-#define Dedicated_Server_Address TEXT("Dedicated_Server_Address")
+#define SESSION_WAIT_TIME 30
+#define SESSION_WAIT_TICK_INTERVAL 1
+#define FIND_SESSION_RETRY_COUNT 10
+#define FIND_SESSION_RETRY_INTERVAL 1
 
 
 UMatchmakingCallProxy* UMatchmakingCallProxy::Matchmaking(
 	APlayerController* PlayerController,
-	const FName& InMapName,
-	const FString& InGameMode,
+	const FLevelInformation& LevelInformation,
 	FMatchmakingHandle& OutHandle
 )
 {
 	UMatchmakingCallProxy* Proxy = NewObject<UMatchmakingCallProxy>(PlayerController);
 	Proxy->PlayerControllerWeakPtr = PlayerController;
-	Proxy->MatchMapName = InMapName;
-	Proxy->GameModeAlias = InGameMode;
+	Proxy->T_LevelInformation = LevelInformation;
 
 	FMatchmakingHandle Handle;
 	Handle.MatchmakingCallProxy = Proxy;
@@ -43,29 +38,33 @@ void UMatchmakingCallProxy::Activate()
 	SessionInt = Online::GetSessionInterface();
 	World = PlayerControllerWeakPtr->GetWorld();
 
+	MatchmakingSessionName = FName(NAME_PartySession);
+
+	if (UClass* GameModeClass = LoadClass<ADreamGameMode>(nullptr, *UGameMapsSettings::GetGameModeForName(T_LevelInformation.GameNodeClassAlias)))
+	{
+		MaxPlayers = GameModeClass->GetDefaultObject<ADreamGameMode>()->GetGameModeMaxPlayers();
+	}
+	else
+	{
+		MaxPlayers = ADreamGameMode::DEFAULT_MAX_PLAYERS;
+	}
+
 	if (PlayerControllerWeakPtr.IsValid() && SessionInt.IsValid() && World.IsValid())
 	{
-		PrevJoinedPlayerNum = 1;
 		FindRetryCount = 0;
-		//BeginWaitTime = 0.f;
+		WaitStartTime = 0;
 
 		SearchSettings = MakeShareable(new FOnlineSessionSearch);
 		SearchSettings->bIsLanQuery = false;
 		SearchSettings->MaxSearchResults = 1;
 		SearchSettings->QuerySettings.Set(SEARCH_PRESENCE, true, EOnlineComparisonOp::Equals);
-		SearchSettings->QuerySettings.Set(SETTING_MAPNAME, MatchMapName.ToString(), EOnlineComparisonOp::Equals);
-
-		/*Handle_UpdateSessionsComplete = SessionInt->AddOnUpdateSessionCompleteDelegate_Handle(
-			FOnUpdateSessionCompleteDelegate::CreateUObject(this, &UMatchmakingCallProxy::OnUpdateSessionComplete));*/
-
-		FTimerDelegate Delegate;
-		Delegate.BindUObject(this, &UMatchmakingCallProxy::OnSessionTick, 1.f);
-		World->GetTimerManager().SetTimer(Handle_SessionTIck, Delegate, 1.f, true);
+		SearchSettings->QuerySettings.Set(SETTING_MAPNAME, T_LevelInformation.Map.GetAssetName(), EOnlineComparisonOp::Equals);
 
 		FindLobby();
 	}
 	else
 	{
+		ClearAllHandle();
 		OnFailure.Broadcast();
 	}
 }
@@ -75,50 +74,117 @@ void UMatchmakingCallProxy::ClearAllHandle()
 	World->GetTimerManager().ClearTimer(Handle_RetryMatching);
 	World->GetTimerManager().ClearTimer(Handle_SessionTIck);
 
-	SessionInt->ClearOnUpdateSessionCompleteDelegate_Handle(Handle_UpdateSessionsComplete);
+	SessionInt->ClearOnUpdateSessionCompleteDelegate_Handle(Handle_UpdateSessionComplete);
 	SessionInt->ClearOnFindSessionsCompleteDelegate_Handle(Handle_FindSessionsComplete);
 	SessionInt->ClearOnJoinSessionCompleteDelegate_Handle(Handle_JoinSessionComplete);
 	SessionInt->ClearOnStartSessionCompleteDelegate_Handle(Handle_StartSessionComplete);
 	SessionInt->ClearOnCreateSessionCompleteDelegate_Handle(Handle_CreateSessionComplete);
 }
 
+void UMatchmakingCallProxy::Tick()
+{
+	FNamedOnlineSession* Session = SessionInt->GetNamedSession(MatchmakingSessionName);
+
+	switch (State)
+	{
+		case EMatchmakingState::WAITING_TEAM:
+			{
+				if (Session->NumOpenPublicConnections == 0 || WaitStartTime > SESSION_WAIT_TIME)
+				{
+					State = EMatchmakingState::CREATING_SERVER;
+
+					FRunServerComplete Delegate;
+					Delegate.BindUObject(this, &UMatchmakingCallProxy::OnCreateServerComplete);
+					FRunServerParameter Parameter(T_LevelInformation.Map.GetAssetName(),
+                        T_LevelInformation.GameNodeClassAlias, T_LevelInformation.Map.GetLongPackageName());
+			
+					FPlayerDataInterfaceStatic::Get()->RunNewDedicatedServer(Parameter, Delegate);
+				}
+				WaitStartTime += SESSION_WAIT_TICK_INTERVAL;
+			}
+		break;
+
+		case EMatchmakingState::WAITING_SERVER:
+			{
+				FGetServerComplete Delegate;
+				Delegate.BindUObject(this, &UMatchmakingCallProxy::OnServerReadyComplete);
+				FPlayerDataInterfaceStatic::Get()->GetAvailableDedicatedServer(CreatedServerID, Delegate);
+			}
+		break;
+
+		case EMatchmakingState::ATTEMPT_CONNECT_SERVER:
+			{
+				FString DedicatedServerAddress;
+				if (Session->SessionSettings.Get(SETTING_GAME_SESSION_URI, DedicatedServerAddress))
+				{
+					SessionInt->StartSession(MatchmakingSessionName);
+					PlayerControllerWeakPtr->ClientTravel(DedicatedServerAddress, ETravelType::TRAVEL_Absolute);
+					OnSuccess.Broadcast();
+					ClearAllHandle();
+				}
+			}
+		break;
+		
+		default:
+			break;
+	}
+}
+
 void UMatchmakingCallProxy::FindLobby()
 {
-	if (FindRetryCount == FindSessionRetryCount)
+	if (FindRetryCount > FIND_SESSION_RETRY_COUNT)
 	{
 		CreateLobby();
 	}
 	else
 	{
 		Handle_FindSessionsComplete = SessionInt->AddOnFindSessionsCompleteDelegate_Handle(
-                FOnFindSessionsCompleteDelegate::CreateUObject(this, &UMatchmakingCallProxy::OnSearchCompleted));
+			FOnFindSessionsCompleteDelegate::CreateUObject(this, &UMatchmakingCallProxy::OnSearchCompleted));
 		
 		SessionInt->FindSessions(0, SearchSettings.ToSharedRef());
 	}
 
-	FindRetryCount++;
+	FindRetryCount += FIND_SESSION_RETRY_INTERVAL;
 }
 
 void UMatchmakingCallProxy::OnSearchCompleted(bool bSuccessful)
 {
 	SessionInt->ClearOnFindSessionsCompleteDelegate_Handle(Handle_FindSessionsComplete);
-	
+
 	if (bSuccessful && SearchSettings->SearchResults.Num() > 0)
 	{
 		// 打印找到的会话信息
-		for (FOnlineSessionSearchResult Result : SearchSettings->SearchResults)
-		{
-			DumpSession(&Result.Session);
-		}
+		UE_LOG(LogOnline, Verbose, TEXT("OnSearchCompleted"));
 
 		Handle_JoinSessionComplete = SessionInt->AddOnJoinSessionCompleteDelegate_Handle(
             FOnJoinSessionCompleteDelegate::CreateUObject(this, &UMatchmakingCallProxy::OnJoinSessionCompleted));
 
-		SessionInt->JoinSession(0, GameSessionName, SearchSettings->SearchResults[0]);
+		SessionInt->JoinSession(0, MatchmakingSessionName, SearchSettings->SearchResults[0]);
 	}
 	else
 	{
-		World->GetTimerManager().SetTimer(Handle_RetryMatching, this, &UMatchmakingCallProxy::FindLobby, 1.f);
+		UE_LOG(LogOnline, Verbose, TEXT("OnSearchCompleted Retry - %d"), FindRetryCount);
+		World->GetTimerManager().SetTimer(Handle_RetryMatching, this, &UMatchmakingCallProxy::FindLobby, FIND_SESSION_RETRY_INTERVAL);
+	}
+}
+
+void UMatchmakingCallProxy::OnJoinSessionCompleted(FName SessionName, EOnJoinSessionCompleteResult::Type CompleteResult)
+{
+	SessionInt->ClearOnFindSessionsCompleteDelegate_Handle(Handle_JoinSessionComplete);
+	
+	if (CompleteResult == EOnJoinSessionCompleteResult::Success)
+	{
+		State = EMatchmakingState::ATTEMPT_CONNECT_SERVER;
+		World->GetTimerManager().SetTimer(Handle_SessionTIck, this, &UMatchmakingCallProxy::Tick, SESSION_WAIT_TICK_INTERVAL, true);
+		
+		UE_LOG(LogOnline, Verbose, TEXT("OnJoinSessionCompleted"));
+		DumpNamedSession(SessionInt->GetNamedSession(SessionName));
+	}
+	else
+	{
+		ClearAllHandle();
+		OnFailure.Broadcast();
+		UE_LOG(LogOnline, Error, TEXT("JoinSessions Fail SessionName: %s, Result: %d"), *SessionName.ToString(), CompleteResult);
 	}
 }
 
@@ -130,15 +196,15 @@ void UMatchmakingCallProxy::CreateLobby()
 	SessionSettings.bShouldAdvertise = true;
 	SessionSettings.bAllowInvites = true;
 	SessionSettings.bAllowJoinViaPresence = true;
-	SessionSettings.NumPublicConnections = MaxPlayerNum;
+	SessionSettings.NumPublicConnections = MaxPlayers;
 
-	SessionSettings.Set(SETTING_MAPNAME, MatchMapName.ToString(), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
-	SessionSettings.Set(SETTING_GAMEMODE, GameModeAlias, EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
+	SessionSettings.Set(SETTING_MAPNAME, T_LevelInformation.Map.GetAssetName(), EOnlineDataAdvertisementType::ViaOnlineService);
+	SessionSettings.Set(SETTING_GAMEMODE, T_LevelInformation.GameNodeClassAlias, EOnlineDataAdvertisementType::ViaOnlineService);
 
 	Handle_CreateSessionComplete = SessionInt->AddOnCreateSessionCompleteDelegate_Handle(
         FOnCreateSessionCompleteDelegate::CreateUObject(this, &UMatchmakingCallProxy::OnCreateSessionCompleted));
 
-	SessionInt->CreateSession(0, GameSessionName, SessionSettings);
+	SessionInt->CreateSession(0, MatchmakingSessionName, SessionSettings);
 }
 
 void UMatchmakingCallProxy::OnCreateSessionCompleted(FName SessionName, bool bSuccessful)
@@ -147,178 +213,77 @@ void UMatchmakingCallProxy::OnCreateSessionCompleted(FName SessionName, bool bSu
 
 	if (bSuccessful)
 	{
+		State = EMatchmakingState::WAITING_TEAM;
+		World->GetTimerManager().SetTimer(Handle_SessionTIck, this, &UMatchmakingCallProxy::Tick, SESSION_WAIT_TICK_INTERVAL, true);
+		
 		UE_LOG(LogOnline, Verbose, TEXT("OnCreateSessionCompleted"));
 		DumpNamedSession(SessionInt->GetNamedSession(SessionName));
 	}
 	else
 	{
 		UE_LOG(LogOnline, Error, TEXT("Create Session Fail SessionName: %s"), *SessionName.ToString());
+		ClearAllHandle();
+		OnFailure.Broadcast();
 	}
 }
 
-void UMatchmakingCallProxy::OnJoinSessionCompleted(FName SessionName, EOnJoinSessionCompleteResult::Type CompleteResult)
+void UMatchmakingCallProxy::OnCreateServerComplete(const FString& ServerID, const FString& ErrorMessage)
 {
-	SessionInt->ClearOnFindSessionsCompleteDelegate_Handle(Handle_JoinSessionComplete);
-	
-	if (CompleteResult == EOnJoinSessionCompleteResult::Success)
+	if (ErrorMessage.IsEmpty())
 	{
-		UE_LOG(LogOnline, Verbose, TEXT("OnJoinSessionCompleted"));
-		DumpNamedSession(SessionInt->GetNamedSession(SessionName));
+		CreatedServerID = ServerID;
+		State = EMatchmakingState::WAITING_SERVER;
+
+		UE_LOG(LogOnline, Verbose, TEXT("OnCreateServerComplete, ServerID: %s"), *CreatedServerID);
 	}
 	else
 	{
+		UE_LOG(LogOnline, Error, TEXT("CreateServer Failure: %s"), *ErrorMessage);
 		OnFailure.Broadcast();
-		UE_LOG(LogOnline, Error, TEXT("JoinSessions Fail SessionName: %s, Result: %d"), *SessionName.ToString(), CompleteResult);
+		ClearAllHandle();
 	}
 }
 
-void UMatchmakingCallProxy::OnSessionTick(float DeltaTime)
+void UMatchmakingCallProxy::OnServerReadyComplete(const FFindServerResult& Result, const FString& ErrorMessage)
 {
-	FNamedOnlineSession* Session = SessionInt->GetNamedSession(GameSessionName);
+	FNamedOnlineSession* Session = SessionInt->GetNamedSession(MatchmakingSessionName);
 
-	if (!Session)
-	{
-		return;
-	}
-
-	if (Session->SessionState == EOnlineSessionState::Pending)
-	{
-		OnJoinChanged.Broadcast(Session->SessionSettings.NumPublicConnections - Session->NumOpenPublicConnections);
-
-		if ((Session->NumOpenPublicConnections == 0 || WaitStartTime > Begin_WaitTime) && !bCreatingServer)
-		{
-			bCreatingServer = true;
-			
-			IOnlineIdentityPtr IdentityPtr = Online::GetIdentityInterfaceChecked();
-			if (Session->OwningUserId == IdentityPtr->GetUniquePlayerId(0))
-			{
-				FGetServerComplete Delegate;
-				Delegate.BindUObject(this, &UMatchmakingCallProxy::OnCreateServerComplete);
-
-				UDreamGameInstance* GI = World->GetGameInstance<UDreamGameInstance>();
-				FPlayerDataInterfaceStatic::Get()->RunServer(FRunServerParameter(GI->GetMapFullName(MatchMapName), GameModeAlias), Delegate);
-			}
-		}
+	bool bCheck = Session != nullptr && ErrorMessage.IsEmpty();
 	
-		WaitStartTime += DeltaTime;
-	}
-	else if (Session->SessionState == EOnlineSessionState::InProgress)
+	if (bCheck)
 	{
-		FString ConnectURL;
-		if (SessionInt->GetResolvedConnectString(GameSessionName, ConnectURL))
+		if (Result.ServerState == EServerState::IN_PROGRESS)
 		{
-			PlayerControllerWeakPtr->ClientTravel(ConnectURL, ETravelType::TRAVEL_Absolute);
+			State = EMatchmakingState::ATTEMPT_CONNECT_SERVER;
+			Handle_UpdateSessionComplete = SessionInt->AddOnUpdateSessionCompleteDelegate_Handle(
+            FOnUpdateSessionCompleteDelegate::CreateUObject(this, &UMatchmakingCallProxy::OnUpdateSessionComplete));
+
+			FOnlineSessionSettings NewSettings = Session->SessionSettings;
+			NewSettings.Set(SETTING_GAME_SESSION_URI, Result.ServerAddress, EOnlineDataAdvertisementType::ViaOnlineService);
+			SessionInt->UpdateSession(MatchmakingSessionName, NewSettings);
 		}
-	}
-}
-
-void UMatchmakingCallProxy::OnCreateServerComplete(const FString& ServerAddress, const FString& ErrorMessage)
-{
-	if (!ErrorMessage.IsEmpty())
-	{
-		UE_LOG(LogOnline, Error, TEXT("CreateServer Fail"));
-		OnFailure.Broadcast();
-		return;
-	}
-
-	FNamedOnlineSession* Session = SessionInt->GetNamedSession(GameSessionName);
-
-	FOnlineSessionSettings NewSettings = Session->SessionSettings;
-	NewSettings.Set(Dedicated_Server_Address, ServerAddress);
-	SessionInt->UpdateSession(GameSessionName, NewSettings);
-
-	if (Session)
-	{
-		TArray<FString> AddrArray;
-		ServerAddress.ParseIntoArray(AddrArray, TEXT(":"));
-
-		TArray<FString> IPSegment;
-		AddrArray[0].ParseIntoArray(IPSegment, TEXT("."));
-
-		uint32 ServerIP = (FCString::Atoi(*IPSegment[3]) & 255);
-		ServerIP |= (FCString::Atoi(*IPSegment[2]) & 255) << 8;
-		ServerIP |= (FCString::Atoi(*IPSegment[1]) & 255) << 16;
-		ServerIP |= (FCString::Atoi(*IPSegment[0]) & 255) << 24;
-
-		const uint16 Port = FCString::Atoi(*AddrArray[1]);
-
-		Handle_StartSessionComplete = SessionInt->AddOnStartSessionCompleteDelegate_Handle(
-            FOnStartSessionCompleteDelegate::CreateUObject(this, &UMatchmakingCallProxy::OnStartSessionComplete));
-
-		//SessionInt->CreateSession()
-		const CSteamID SteamLobbyId(FCString::Strtoui64(*Session->GetSessionIdStr(), nullptr, 10));
-		UE_LOG(LogOnline, Verbose, TEXT("CreateServerComplete SteamLobbyId: %llu"), SteamLobbyId.ConvertToUint64());
-
-		SteamMatchmaking()->SetLobbyGameServer(SteamLobbyId, ServerIP, Port, CSteamID());
 	}
 	else
 	{
-		UE_LOG(LogOnline, Error, TEXT("SetLobbyGameServer Fail Session Invalid"));
+		UE_LOG(LogOnline, Error, TEXT("ServerReady Failure: %s"), *ErrorMessage);
 		OnFailure.Broadcast();
+		ClearAllHandle();
 	}
 }
 
-void UMatchmakingCallProxy::OnStartSessionComplete(FName SessionName, bool bWasSuccessful)
+void UMatchmakingCallProxy::OnUpdateSessionComplete(FName SessionName, bool bWasSuccessful)
 {
-	SessionInt->ClearOnStartSessionCompleteDelegate_Handle(Handle_StartSessionComplete);
+	SessionInt->ClearOnUpdateSessionCompleteDelegate_Handle(Handle_UpdateSessionComplete);
 
 	if (bWasSuccessful)
 	{
-		JoinLobbyGameServer(SessionName);
+		UE_LOG(LogOnline, Verbose, TEXT("UpdateSessionComplete"));
+		//DumpNamedSession(SessionInt->GetNamedSession(SessionName));
 	}
 	else
 	{
-		UE_LOG(LogOnline, Error, TEXT("StartSession Fail SessionName: %s"), *SessionName.ToString());
+		UE_LOG(LogOnline, Error, TEXT("UpdateSession Failure"));
 		OnFailure.Broadcast();
+		ClearAllHandle();
 	}
 }
-
-void UMatchmakingCallProxy::JoinLobbyGameServer(const FName& SessionName)
-{
-	FNamedOnlineSession* Session = SessionInt->GetNamedSession(SessionName);
-	if (Session)
-	{
-		/*uint32 ServerIP;
-		uint16 Port;
-		CSteamID ServerSteamID;
-
-		const CSteamID SteamLobbyID(FCString::Strtoui64(*Session->SessionInfo->GetSessionId().ToString(), nullptr, 10));
-		if (SteamMatchmaking()->GetLobbyGameServer(SteamLobbyID, &ServerIP, &Port, &ServerSteamID))
-		{
-			FString ServerAddr;
-			ServerAddr.AppendInt(((ServerIP >> 24) & 255));
-			ServerAddr.AppendChar(TEXT('.'));
-			ServerAddr.AppendInt(((ServerIP >> 16) & 255));
-			ServerAddr.AppendChar(TEXT('.'));
-			ServerAddr.AppendInt(((ServerIP >> 8) & 255));
-			ServerAddr.AppendChar(TEXT('.'));
-			ServerAddr.AppendInt((ServerIP & 255));
-			ServerAddr.AppendChar(TEXT(':'));
-			ServerAddr.AppendInt(Port);
-
-			UE_LOG(LogOnline, Verbose, TEXT("GetLobbyGameServer ServerAddr: %s"), *ServerAddr);
-			OnSuccess.Broadcast();
-
-			PlayerControllerWeakPtr->ClientTravel(ServerAddr, ETravelType::TRAVEL_Absolute);
-
-		}
-		else
-		{
-			UE_LOG(LogOnline, Error, TEXT("GetLobbyGameServer Fail SessionName: %s"), *SessionName.ToString());
-			OnFailure.Broadcast();
-		}*/
-
-		FString ServerAddr;
-		SessionInt->GetResolvedConnectString(SessionName, ServerAddr);
-		UE_LOG(LogOnline, Verbose, TEXT("GetLobbyGameServer ServerAddr: %s"), *ServerAddr);
-		PlayerControllerWeakPtr->ClientTravel(ServerAddr, ETravelType::TRAVEL_Absolute);
-
-		OnSuccess.Broadcast();
-	}
-	else
-	{
-		UE_LOG(LogOnline, Error, TEXT("JoinLobbyGameServer Session Invalid: %s"), *SessionName.ToString());
-		OnFailure.Broadcast();
-	}
-}
-

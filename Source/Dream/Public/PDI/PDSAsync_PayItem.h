@@ -26,5 +26,11 @@ public:
 	UFUNCTION()
 	void OnLoadCompleted(const FString& ErrorMessage) const;
 
-	void Init(int32 StoreId, int64 ItemId) const;
+	virtual void Activate() override;
+
+private:
+
+	int32 T_StoreId;
+	int64 T_ItemId;
+	
 };

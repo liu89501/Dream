@@ -51,7 +51,7 @@ enum class EGameType : uint8
 {
 	PVE,
 	PVP,
-	SalePlace
+	Permanent
 };
 
 UENUM(BlueprintType)
@@ -360,12 +360,15 @@ public:
 };
 
 USTRUCT(BlueprintType)
-struct FMapInfo : public FTableRowBase
+struct FLevelInformation
 {
-	GENERATED_USTRUCT_BODY()
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Meta = (MetaClass = "World"), BlueprintReadOnly)
+	FSoftObjectPath Map;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	FString FullName;
+	FString GameNodeClassAlias;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	UTexture2D* MapIcon;
@@ -375,6 +378,17 @@ struct FMapInfo : public FTableRowBase
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FText DisplayName;
+};
+
+UCLASS(Blueprintable)
+class ULevelListAsset : public UDataAsset
+{
+	GENERATED_BODY()
+
+public:
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere)
+    TArray<FLevelInformation> Levels;
 };
 
 UCLASS()
@@ -390,6 +404,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	TArray<USkeletalMesh*> SlaveMeshs;
 };
+
+namespace IPTools
+{
+	uint32 IPV4StringToUint32(const FString& IpString);
+	FString IPV4Uint32ToString(uint32 IP);
+}
 
 /*
 	按几率随机

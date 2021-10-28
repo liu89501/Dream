@@ -7,27 +7,27 @@ UPDSAsync_LearnTalents* UPDSAsync_LearnTalents::PDI_LearnTalents(UObject* WorldC
 {
 	if (UPDSAsync_LearnTalents* PDSLT = NewObject<UPDSAsync_LearnTalents>(WorldContextObject))
 	{
-		FCommonCompleteNotify Delegate;
-		Delegate.BindUObject(PDSLT, &UPDSAsync_LearnTalents::OnCompleted);
-		FPlayerDataInterfaceStatic::Get()->LearningTalents(TalentIdArray, Delegate);
+		PDSLT->T_TalentIdArray = TalentIdArray;
 		return PDSLT;
 	}
 	return nullptr;
 }
 
+void UPDSAsync_LearnTalents::Activate()
+{
+	FCommonCompleteNotify Delegate;
+	Delegate.BindUObject(this, &UPDSAsync_LearnTalents::OnCompleted);
+	FPlayerDataInterfaceStatic::Get()->LearningTalents(T_TalentIdArray, Delegate);
+}
+
 void UPDSAsync_LearnTalents::OnCompleted(const FString& ErrorMessage) const
 {
-	FTimerHandle Handle;
-	GetWorld()->GetTimerManager().SetTimer(Handle, [this, ErrorMessage]
-    {
-        if (ErrorMessage.IsEmpty())
-        {
-            OnSuccess.Broadcast();
-        }
-        else
-        {
-            OnFailure.Broadcast();
-        }
-		
-    }, 0.001f, false);
+	if (ErrorMessage.IsEmpty())
+	{
+		OnSuccess.Broadcast();
+	}
+	else
+	{
+		OnFailure.Broadcast();
+	}
 }

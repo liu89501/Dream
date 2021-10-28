@@ -10,8 +10,6 @@
 #include "PDI/PlayerDataInterfaceStatic.h"
 #include "UserWidget.h"
 
-FString InvalidMap = TEXT("InvalidMap");
-
 UDreamGameInstance::UDreamGameInstance()
 {
 
@@ -23,32 +21,6 @@ const FSurfaceImpactEffect& UDreamGameInstance::GetSurfaceImpactEffect(EPhysical
 {
 	const FSurfaceImpactEffect* EffectPtr = SurfaceImpactEffects.Find(SurfaceType);
 	return EffectPtr ? *EffectPtr : EmptySurfaceImpactEffect;
-}
-
-void UDreamGameInstance::LaunchDedicatedServer()
-{
-	if (!IsRunningDedicatedServer())
-	{
-		return;
-	}
-	
-
-	//FPlatformProcess::ExecProcess("")
-}
-
-const FString& UDreamGameInstance::GetMapFullName(const FName& MapName) const
-{
-	static const FString Context = TEXT("UDreamGameInstance::GetMapFullName");
-	
-	if (Levels)
-	{
-		if (FMapInfo* MapInfo = Levels->FindRow<FMapInfo>(MapName, Context))
-		{
-			return MapInfo->FullName;
-		}
-	}
-
-	return InvalidMap;
 }
 
 void UDreamGameInstance::Init()

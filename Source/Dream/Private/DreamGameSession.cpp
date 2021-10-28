@@ -4,36 +4,50 @@
 #include "DreamGameSession.h"
 #include "OnlineSubsystem.h"
 #include "DreamGameMode.h"
+#include "OnlineSubsystemUtils.h"
 #include "PDI/PlayerDataInterface.h"
 #include "PDI/PlayerDataInterfaceStatic.h"
 #include "Interfaces/OnlineSessionInterface.h"
 
 void ADreamGameSession::RegisterServer()
 {
-	int32 Port = GetNetDriver()->GetLocalAddr()->GetPort();
-	FPlayerDataInterfaceStatic::Get()->RegisterServer(Port, MaxPlayers, GetWorld()->GetMapName(), FRegisterServerComplete());
+	FString GameModeName;
+	FParse::Value(FCommandLine::Get(), TEXT("Game="), GameModeName);
 
-	// 不把他注册到steam上 
-	/*if (IOnlineSubsystem* OSS = IOnlineSubsystem::Get())
+	ADreamGameMode* GameMode = Cast<ADreamGameMode>(GetWorld()->GetAuthGameMode());
+	MaxPlayers = GameMode->GetGameModeMaxPlayers();
+
+	FDedicatedServerInformation Information;
+	Information.Port = GetNetDriver()->GetLocalAddr()->GetPort();
+	Information.MapName = GetWorld()->GetMapName();
+	Information.MaxPlayers = MaxPlayers;
+	Information.GameModeName = GameModeName;
+	
+	FPlayerDataInterfaceStatic::Get()->RegisterServer(Information);
+
+	UE_LOG_ONLINE(Log, TEXT("MapName: %s"), *GetWorld()->GetMapName());
+	UE_LOG_ONLINE(Log, TEXT("GameModeName: %s"), *GameModeName);
+
+	/*IOnlineSessionPtr SessionInt = Online::GetSessionInterface();
+	if (SessionInt.IsValid())
 	{
-		IOnlineSessionPtr SessionInt = OSS->GetSessionInterface();
+		FString GameModeName;
+		FParse::Value(FCommandLine::Get(), TEXT("Game="), GameModeName);
+		
+		FOnlineSessionSettings SessionSettings;
+		SessionSettings.Set(SETTING_MAPNAME, GetWorld()->GetMapName());
+		SessionSettings.Set(SETTING_GAMEMODE, GameModeName);
+		SessionSettings.bUsesPresence = false;
+		SessionSettings.bIsLANMatch = false;
+		SessionSettings.bAllowInvites = true;
+		SessionSettings.bIsDedicated = true;
+		SessionSettings.bShouldAdvertise = true;
+		SessionSettings.bAllowJoinInProgress = true;
+		SessionSettings.NumPublicConnections = MaxPlayers;
 
-		if (SessionInt.IsValid())
-		{
-            HostSettings.Set(SETTING_MAPNAME, GetWorld()->GetMapName(), EOnlineDataAdvertisementType::ViaOnlineServiceAndPing);
-            HostSettings.bUsesPresence = false;
-            HostSettings.bIsLANMatch = false;
-            HostSettings.bAllowInvites = true;
-            HostSettings.bIsDedicated = true;
-            HostSettings.bShouldAdvertise = true;
-            HostSettings.bAllowJoinInProgress = true;
-            HostSettings.NumPublicConnections = MaxPlayers;
+		UE_LOG_ONLINE(Log, TEXT("RegisterServer: %s"), *SessionName.ToString());
+		UE_LOG_ONLINE(Log, TEXT("GameModeName: %s"), *GameModeName);
 
-            FName SessionName(GameSessionName);
-
-            UE_LOG_ONLINE(Log, TEXT("GameSessionName: %s"), *SessionName.ToString());
-
-            SessionInt->CreateSession(0, SessionName, HostSettings);
-		}
+		SessionInt->CreateSession(0, GameSessionName, SessionSettings);
 	}*/
 }

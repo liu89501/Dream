@@ -7,23 +7,16 @@
 
 UPDSAsync_GetStoreInformation* UPDSAsync_GetStoreInformation::PDI_GetStoreInformation(UObject* WorldContextObject, int32 StoreId)
 {
-	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
-	{
-		UPDSAsync_GetStoreInformation* Information = NewObject<UPDSAsync_GetStoreInformation>(WorldContextObject);
-		
-		FTimerHandle Handle;
-		World->GetTimerManager().SetTimer(Handle, [=]
-        {
-	        FGetStoreItemsComplete Delegate;
-            Delegate.BindUObject(Information, &UPDSAsync_GetStoreInformation::OnLoadCompleted);
-            FPlayerDataInterfaceStatic::Get()->GetStoreItems(StoreId, Delegate);
-			
-        }, 0.001f, false);
+	UPDSAsync_GetStoreInformation* Information = NewObject<UPDSAsync_GetStoreInformation>(WorldContextObject);
+	Information->T_StoreId = StoreId;
+	return Information;
+}
 
-		return Information;
-	}
-
-	return nullptr;
+void UPDSAsync_GetStoreInformation::Activate()
+{
+	FGetStoreItemsComplete Delegate;
+	Delegate.BindUObject(this, &UPDSAsync_GetStoreInformation::OnLoadCompleted);
+	FPlayerDataInterfaceStatic::Get()->GetStoreItems(T_StoreId, Delegate);
 }
 
 void UPDSAsync_GetStoreInformation::OnLoadCompleted(const FStoreInformation& StoreInfo, const FString& ErrorMessage) const

@@ -6,23 +6,9 @@
 
 UPDSAsync_GetPlayerInfo* UPDSAsync_GetPlayerInfo::PDI_GetPlayerInformation(UObject* WorldContextObject, EGetEquipmentCondition Condition)
 {
-	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
-	{
-		UPDSAsync_GetPlayerInfo* PDSGP = NewObject<UPDSAsync_GetPlayerInfo>(WorldContextObject);
-
-		FTimerHandle Handle;
-		World->GetTimerManager().SetTimer(Handle, [PDSGP, Condition]
-        {
-			FGetPlayerInfoComplete Delegate;
-            Delegate.BindUObject(PDSGP, &UPDSAsync_GetPlayerInfo::OnLoadCompleted);
-            FPlayerDataInterfaceStatic::Get()->GetPlayerInfo(Condition, Delegate);
-			
-        }, 0.001f, false);
-
-		return PDSGP;
-	}
-
-	return nullptr;
+	UPDSAsync_GetPlayerInfo* PDSGP = NewObject<UPDSAsync_GetPlayerInfo>(WorldContextObject);
+	PDSGP->T_Condition = Condition;
+	return PDSGP;
 }
 
 void UPDSAsync_GetPlayerInfo::OnLoadCompleted(const FPlayerInfo& PlayerInfo, const FString& ErrorMessage) const
@@ -35,5 +21,12 @@ void UPDSAsync_GetPlayerInfo::OnLoadCompleted(const FPlayerInfo& PlayerInfo, con
 	{
 		OnFailure.Broadcast(PlayerInfo, ErrorMessage);
 	}
+}
+
+void UPDSAsync_GetPlayerInfo::Activate()
+{
+	FGetPlayerInfoComplete Delegate;
+	Delegate.BindUObject(this, &UPDSAsync_GetPlayerInfo::OnLoadCompleted);
+	FPlayerDataInterfaceStatic::Get()->GetPlayerInfo(T_Condition, Delegate);
 }
 

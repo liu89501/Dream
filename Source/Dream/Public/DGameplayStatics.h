@@ -89,19 +89,17 @@ public:
 	static void StopMatchmaking(const FMatchmakingHandle& Handle);
 
 	UFUNCTION(BlueprintPure, Category = "DreamStatics|Matchmaking")
-	static int32 GetJoinedPlayerNum();
+	static int32 GetSessionPlayers();
+
+	UFUNCTION(BlueprintPure, Category = DreamStatics)
+    static USceneComponent* GetAttachComponentFromSocketName(USceneComponent* ParentComponent, const FName& SocketName);
 
 	/**
 	 * 线性检测后并且触发GameplayEvent
 	 */
 	UFUNCTION(BlueprintCallable, Category = "DreamStatics|Abilities")
-	static bool LineTraceAndSendEvent(
-		AActor* Source,
-		FGameplayTag InEventTag,
-		FVector TraceStart,
-		FVector TraceEnd,
-		ECollisionChannel Channel,
-		FHitResult& OutHit);
+	static bool LineTraceAndSendEvent(AActor* Source, FGameplayTag InEventTag, FVector TraceStart,
+		FVector TraceEnd, ECollisionChannel Channel, FHitResult& OutHit);
 
 	/**
 	 * 球体检测后并且触发GameplayEvent
@@ -163,11 +161,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DreamStatics|Widget")
 	static int32 GetWidgetZOrder(TEnumAsByte<EWidgetOrder::Type> Type);
 
+	/** 聚焦到viewport */
 	UFUNCTION(BlueprintCallable, Meta = (DefaultToSelf="Widget", HidePin="Widget"), Category = "DreamStatics|Widget")
 	static void FocusOnViewport(UWidget* Widget);
-
-	UFUNCTION(BlueprintPure, Category = DreamStatics)
-	static USceneComponent* GetAttachComponentFromSocketName(USceneComponent* ParentComponent, const FName& SocketName);
 
 	UFUNCTION(BlueprintCallable, Category = DreamStatics)
 	static void ForceDestroyComponent(UActorComponent* Component);
@@ -224,5 +220,10 @@ public:
 	/** Sets a Niagara StaticMesh parameter by name, overriding locally if necessary.*/
 	UFUNCTION(BlueprintCallable, Category = "DreamStatics|Niagara", meta = (DisplayName = "Set Niagara Spline Component"))
     static void OverrideSystemUserVariableSplineComponent(class UNiagaraComponent* NiagaraSystem, const FString& OverrideName, class USplineComponent* SplineComponent);
-	
+
+	UFUNCTION(BlueprintCallable, Category="DreamStatics|Misc")
+	static void CloseGame();
+
+	UFUNCTION(BlueprintPure, Meta = (WorldContext="WorldContextObject"), Category = "DreamStatics|Settings")
+    static ULevelListAsset* GetLevelList(UObject* WorldContextObject);
 };

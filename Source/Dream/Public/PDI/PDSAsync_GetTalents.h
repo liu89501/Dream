@@ -25,5 +25,11 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category="PDI")
     static UPDSAsync_GetTalents* PDI_GetTalents(UObject* WorldContextObject, TEnumAsByte<EPDTalentCategory::Type> Category);
 
+	virtual void Activate() override;
+	
 	void OnCompleted(const TArray<FTalentInfo>& Talents, const FString& ErrorMessage) const;
+
+private:
+
+	TEnumAsByte<EPDTalentCategory::Type> T_Category;
 };

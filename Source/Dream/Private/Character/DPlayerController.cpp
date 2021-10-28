@@ -183,9 +183,12 @@ void ADPlayerController::TestFindSession()
                 {
                     for (FOnlineSessionSearchResult Result : Search->SearchResults)
                     {
-                        DREAM_NLOG(Log, TEXT("Result, SessionId: %s, SessionInfo: %s"),
-                                   *Result.GetSessionIdStr(), *Result.Session.SessionInfo->ToDebugString());
+                        DumpSession(&Result.Session);
                     }
+                }
+                else
+                {
+                    DREAM_NLOG(Verbose, TEXT("Not Func Session"));
                 }
             }
         );

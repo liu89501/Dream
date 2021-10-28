@@ -5,23 +5,16 @@
 
 UPDSAsync_GetTalents* UPDSAsync_GetTalents::PDI_GetTalents(UObject* WorldContextObject, TEnumAsByte<EPDTalentCategory::Type> Category)
 {
-	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
-	{
-		UPDSAsync_GetTalents* PDSGT = NewObject<UPDSAsync_GetTalents>(WorldContextObject);
+	UPDSAsync_GetTalents* PDSGT = NewObject<UPDSAsync_GetTalents>(WorldContextObject);
+	PDSGT->T_Category = Category;
+	return PDSGT;
+}
 
-		FTimerHandle Handle;
-		World->GetTimerManager().SetTimer(Handle, [Category, PDSGT]
-        {
-			FGetTalentsComplete Delegate;
-            Delegate.BindUObject(PDSGT, &UPDSAsync_GetTalents::OnCompleted);
-            FPlayerDataInterfaceStatic::Get()->GetTalents(Category, Delegate);
-			
-        }, 0.001f, false);
-		
-		return PDSGT;
-	}
-	
-	return nullptr;
+void UPDSAsync_GetTalents::Activate()
+{
+	FGetTalentsComplete Delegate;
+	Delegate.BindUObject(this, &UPDSAsync_GetTalents::OnCompleted);
+	FPlayerDataInterfaceStatic::Get()->GetTalents(T_Category, Delegate);
 }
 
 void UPDSAsync_GetTalents::OnCompleted(const TArray<FTalentInfo>& Talents, const FString& ErrorMessage) const

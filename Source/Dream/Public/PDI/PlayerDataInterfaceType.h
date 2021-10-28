@@ -10,6 +10,15 @@ DECLARE_LOG_CATEGORY_EXTERN(LogPDS, Log, All);
 
 class AShootWeapon;
 
+namespace EServerState
+{
+	enum ServerState
+	{
+		PENDING,
+		IN_PROGRESS
+	};
+}
+
 UENUM(BlueprintType)
 namespace EPDTalentCategory
 {
@@ -132,7 +141,7 @@ class DREAM_API UDQuestDescription : public UDataAsset
 {
 	GENERATED_BODY()
 
-	public:
+public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FText QuestName;
@@ -737,12 +746,16 @@ struct FRunServerParameter
 	GENERATED_USTRUCT_BODY()
 
 	FRunServerParameter() = default;
-	FRunServerParameter(const FString& InMapName, const FString& InModeName) :
+	FRunServerParameter(const FString& InMapName, const FString& InModeName, const FString& InMapAssetPath) :
+		MapAssetPath(InMapAssetPath),
 		MapName(InMapName),
 		ModeName(InModeName)
 	{
 	}
 
+	UPROPERTY(BlueprintReadOnly, EditAnywhere)
+	FString MapAssetPath;
+	
 	UPROPERTY(BlueprintReadOnly, EditAnywhere)
 	FString MapName;
 
@@ -750,6 +763,32 @@ struct FRunServerParameter
 	FString ModeName;
 };
 
+USTRUCT()
+struct FFindServerResult
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString ServerAddress;
+
+	UPROPERTY()
+	int32 ServerState;
+};
+
+USTRUCT()
+struct FDedicatedServerInformation
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	int32 Port;
+	UPROPERTY()
+	int32 MaxPlayers;
+	UPROPERTY()
+	FString MapName;
+	UPROPERTY()
+	FString GameModeName;
+};
 
 USTRUCT(BlueprintType)
 struct FStoreInformation

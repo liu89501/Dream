@@ -18,6 +18,8 @@ public:
 
 	UDGameUserSettings()
 	{
+		MouseSensitivity = 3;
+		ThemeColor = FLinearColor(0.033755f, 0.372946f, 0.828125f);
 	}
 
 	UFUNCTION(BlueprintPure, Category=DreamUserSettings)
@@ -29,13 +31,6 @@ public:
 	UFUNCTION(BlueprintPure, Category=DreamUserSettings)
 	int32 GetMouseSensitivity() const;
 	
-	FORCEINLINE int32 GetCalculatedMouseSensitivity() const
-	{
-		// MouseSensitivity 1 ~ 15   *   3
-		return MouseSensitivity * 3;
-	}
-	
-
 	UFUNCTION(BlueprintCallable, Category=DreamUserSettings)
 	void SetMouseSensitivity(int32 InMouseSensitivity);
 

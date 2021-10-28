@@ -15,7 +15,7 @@ class DREAM_API ADAIGeneratorMultiple : public ADAIGeneratorBase
 
 public:
 
-	UPROPERTY(VisibleAnywhere)
+	UPROPERTY(VisibleDefaultsOnly)
 	class USplineComponent* GeneratePath;
 
 	/**

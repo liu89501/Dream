@@ -11,7 +11,9 @@
 #include "PDI/PlayerDataInterface.h"
 #include "PDI/PlayerDataInterfaceStatic.h"
 
-#define IdleShutdownTime 300 
+#define IdleShutdownTime 300
+
+int32 ADreamGameMode::DEFAULT_MAX_PLAYERS = 4;
 
 ADreamGameMode::ADreamGameMode()
 	: Super()
@@ -23,6 +25,8 @@ ADreamGameMode::ADreamGameMode()
 	PrimaryActorTick.TickInterval = 1.f;
 
 	PlayerResurrectionTime = 5.f;
+
+	MaxPlayers = 4;
 }
 
 AActor* ADreamGameMode::ChoosePlayerStart_Implementation(AController* Player)

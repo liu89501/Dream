@@ -23,5 +23,7 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category=PDI)
     static UPDSAsync_Login* PDI_Login(UObject* WorldContextObject);
 
+	virtual void Activate() override;
+
 	void OnCompleted(const FString& ErrorMessage) const;
 };

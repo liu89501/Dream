@@ -24,6 +24,24 @@ void FPlayerDataInterfaceStatic::Startup()
 
 void FPlayerDataInterfaceStatic::Shutdown()
 {
+#if WITH_EDITOR
+
+	if (Singleton == nullptr)
+	{
+		return;
+	}
+
+#endif
+	
+	if (IsRunningDedicatedServer())
+    {
+    	Singleton->UnRegisterServer();
+    }
+    else
+    {
+    	Singleton->Logout();
+    }
+
 	delete Singleton;
 	Singleton = nullptr;
 }

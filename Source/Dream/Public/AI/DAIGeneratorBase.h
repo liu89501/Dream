@@ -19,7 +19,7 @@ public:
 
 public:
 
-	UPROPERTY(VisibleAnywhere)
+	UPROPERTY(VisibleDefaultsOnly)
 	class UBillboardComponent* Billboard;
 
 	/**

@@ -3,7 +3,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "OnlineSessionSettings.h"
 #include "GameFramework/GameSession.h"
 #include "DreamGameSession.generated.h"
 
@@ -18,9 +17,5 @@ class DREAM_API ADreamGameSession : public AGameSession
 public:
 
 	virtual void RegisterServer() override;
-
-private:
-
-	//FOnlineSessionSettings HostSettings;
 	
 };

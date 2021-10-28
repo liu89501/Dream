@@ -5,6 +5,7 @@
 
 
 #include "DCharacterBase.h"
+#include "DGameplayTags.h"
 #include "DGE_DamageHealthSteal.h"
 #include "DreamGameplayType.h"
 #include "GenericTeamAgentInterface.h"
@@ -129,7 +130,7 @@ void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustom
     if (TreatmentAmount > 1.f)
     {
         FGameplayEffectSpec TreatmentEffectSpec(GetDefault<UDGE_DamageHealthSteal>(), SourceAbilitySystem->MakeEffectContext());
-        TreatmentEffectSpec.SetSetByCallerMagnitude(UDGE_DamageHealthSteal::HealthStealSetByCallerTag, TreatmentAmount);
+        TreatmentEffectSpec.SetSetByCallerMagnitude(CustomizeTags().HealthStealSetByCallerTag, TreatmentAmount);
         SourceAbilitySystem->ApplyGameplayEffectSpecToSelf(TreatmentEffectSpec);
     }
 

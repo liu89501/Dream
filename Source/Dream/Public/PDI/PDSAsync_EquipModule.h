@@ -24,8 +24,13 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category="PDI")
     static UPDSAsync_EquipModule* PDI_EquipModule(UObject* WorldContextObject, int64 ModuleId, EModuleCategory Category);
 
+	virtual void Activate() override;
+
 	UFUNCTION()
 	void OnCompleted(const FString& ErrorMessage) const;
 
-	void Init(int64 ModuleId, EModuleCategory Category) const;
+private:
+
+	int64 T_ModuleId;
+	EModuleCategory T_Category;
 };

@@ -26,6 +26,7 @@ public class Dream : ModuleRules
             "Core",
             "CoreUObject",
             "Engine",
+            "EngineSettings",
             "InputCore",
             "GameplayTags",
             "GameplayTasks",

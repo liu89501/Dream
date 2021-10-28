@@ -32,6 +32,7 @@
 #include "NiagaraComponent.h"
 #include "NiagaraDataInterfaceSpline.h"
 #include "NiagaraFunctionLibrary.h"
+#include "OnlineSubsystemUtils.h"
 #include "PlayerDataInterfaceStatic.h"
 #include "SViewport.h"
 #include "GameFramework/GameModeBase.h"
@@ -126,30 +127,53 @@ FText UDGameplayStatics::ToTimeText(int32 TotalSeconds)
 
 void UDGameplayStatics::StopMatchmaking(const FMatchmakingHandle& Handle)
 {
-	if (IOnlineSubsystem* OSS = IOnlineSubsystem::Get())
+	IOnlineSessionPtr SessionInterface = Online::GetSessionInterface();
+	if (SessionInterface.IsValid())
 	{
-		IOnlineSessionPtr SessionInt = OSS->GetSessionInterface();
-		SessionInt->CancelFindSessions();
-		SessionInt->DestroySession(GameSessionName);
+		SessionInterface->DestroySession(PartySessionName);
 	}
-
+	
 	if (Handle.IsValid())
 	{
 		Handle.MatchmakingCallProxy->ClearAllHandle();
 	}
 }
 
-int32 UDGameplayStatics::GetJoinedPlayerNum()
+int32 UDGameplayStatics::GetSessionPlayers()
 {
-	if (IOnlineSubsystem* OSS = IOnlineSubsystem::Get())
+	IOnlineSessionPtr SessionInterface = Online::GetSessionInterface();
+	if (SessionInterface.IsValid())
 	{
-		FNamedOnlineSession* Session = OSS->GetSessionInterface()->GetNamedSession(GameSessionName);
-		if (Session)
+		if (FNamedOnlineSession* NamedSession = SessionInterface->GetNamedSession(PartySessionName))
 		{
-			return Session->SessionSettings.NumPublicConnections - Session->NumOpenPublicConnections;
+			return NamedSession->SessionSettings.NumPublicConnections - NamedSession->NumOpenPublicConnections;
 		}
 	}
-	return 0;
+
+	// 默认为1 因为你自己也是个人
+	return 1;
+}
+
+USceneComponent* UDGameplayStatics::GetAttachComponentFromSocketName(USceneComponent* ParentComponent,
+                                                                     const FName& SocketName)
+{
+	USceneComponent* ChildComponent = nullptr;
+
+	if (ParentComponent)
+	{
+		const TArray<USceneComponent*> Components = ParentComponent->GetAttachChildren();
+
+		for (USceneComponent* Component : Components)
+		{
+			if (Component->GetAttachSocketName() == SocketName)
+			{
+				ChildComponent = Component;
+				break;
+			}
+		}
+	}
+
+	return ChildComponent;
 }
 
 void UDGameplayStatics::ApplyModToAttribute(AActor* Source, FGameplayAttribute Attribute, TEnumAsByte<EGameplayModOp::Type> ModifierOp, float ModifierMagnitude)
@@ -216,9 +240,8 @@ bool UDGameplayStatics::SphereTraceAndSendEvent(
 	IgnoredActors.Add(Source);
 
 	TArray<FHitResult> Hits;
-	bool bBlocking = UKismetSystemLibrary::SphereTraceMulti(Source, Origin,
-	                                                        (Origin + 10.f), Radius, TraceChannel, bTraceComplex,
-	                                                        IgnoredActors, DrawDebugType, Hits, true);
+	bool bBlocking = UKismetSystemLibrary::SphereTraceMulti(Source, Origin, Origin + 10.f,
+		Radius, TraceChannel, bTraceComplex, IgnoredActors, DrawDebugType, Hits, true);
 
 	if (!bBlocking)
 	{
@@ -549,26 +572,17 @@ void UDGameplayStatics::FocusOnViewport(UWidget* Widget)
 	}
 }
 
-USceneComponent* UDGameplayStatics::GetAttachComponentFromSocketName(USceneComponent* ParentComponent,
-                                                                     const FName& SocketName)
+ULevelListAsset* UDGameplayStatics::GetLevelList(UObject* WorldContextObject)
 {
-	USceneComponent* ChildComponent = nullptr;
-
-	if (ParentComponent)
+	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
 	{
-		const TArray<USceneComponent*> Components = ParentComponent->GetAttachChildren();
-
-		for (USceneComponent* Component : Components)
+		if (UDreamGameInstance* Instance = Cast<UDreamGameInstance>(World->GetGameInstance()))
 		{
-			if (Component->GetAttachSocketName() == SocketName)
-			{
-				ChildComponent = Component;
-				break;
-			}
+			return Instance->Levels;
 		}
 	}
 
-	return ChildComponent;
+	return nullptr;
 }
 
 void UDGameplayStatics::ForceDestroyComponent(UActorComponent* Component)
@@ -721,4 +735,9 @@ void UDGameplayStatics::OverrideSystemUserVariableSplineComponent(UNiagaraCompon
 			InterfaceSpline->SourceComponent = SplineComponent;
 		}
 	}
+}
+
+void UDGameplayStatics::CloseGame()
+{
+	FPlatformMisc::RequestExit(false);
 }

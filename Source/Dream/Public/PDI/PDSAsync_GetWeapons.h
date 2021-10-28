@@ -24,4 +24,10 @@ public:
     static UPDSAsync_GetWeapons* PDI_GetWeapons(UObject* WorldContextObject, EGetEquipmentCondition Condition);
 
 	void OnLoadCompleted(const TArray<FPlayerWeapon>& Weapons, const FString& ErrorMessage) const;
+
+	virtual void Activate() override;
+
+private:
+
+	EGetEquipmentCondition T_Condition;
 };

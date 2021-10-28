@@ -25,4 +25,6 @@ public:
     static UPDSAsync_GetPlayerProperties* PDI_GetPlayerProperties(UObject* WorldContextObject);
 
 	void OnLoadCompleted(const FPlayerProperties& Properties, const FString& ErrorMessage) const;
+
+	virtual void Activate() override;
 };

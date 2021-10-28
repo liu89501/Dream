@@ -1,13 +1,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "PlayerDataInterface.h"
+#include "PlayerDataInterfaceBase.h"
 #include "PlayerGameData.h"
 
-#define MSG_ERROR TEXT("Error")
-#define MSG_SUCCESS TEXT("")
-
-class FPlayerLocalDataInterface : public FPlayerDataInterface, public FGCObject
+class FPlayerLocalDataInterface : public FPlayerDataInterfaceBase, public FGCObject
 {
 	
 public:
@@ -21,7 +18,6 @@ public:
 	virtual void EquipModule(int64 ModuleId, EModuleCategory ModuleCategory, FCommonCompleteNotify Delegate) override;
 	virtual void LearningTalent(int32 TalentId, FCommonCompleteNotify Delegate) override;
 	virtual void GetStoreItems(int32 StoreId, FGetStoreItemsComplete Delegate) override;
-	virtual void RunServer(const FRunServerParameter& Parameter, FGetServerComplete Delegate) override;
 	virtual void PayItem(int32 StoreId, int64 ItemId, FCommonCompleteNotify Delegate) override;
 	virtual void GetPlayerWeapons(EGetEquipmentCondition Condition, FGetWeaponComplete Delegate) override;
 	virtual void GetPlayerInfo(EGetEquipmentCondition Condition, FGetPlayerInfoComplete Delegate) override;
@@ -35,13 +31,6 @@ public:
 	virtual void AcceptTask(const int64& TaskId, FCommonCompleteNotify Delegate) override;
 
 	virtual void UpdateTaskState(const FQuestActionHandle& Handle) override;
-	
-	virtual void RegisterServer(int32 Port, int32 MaxPlayers, const FString& MapName, FRegisterServerComplete Delegate) override;
-	virtual void UnRegisterServer() override;
-	virtual void UpdateActivePlayers(bool bIncrement) override;
-	virtual void Login(FCommonCompleteNotify Delegate) override;
-	virtual void Logout() override;
-	virtual FString GetServerToken() const override;
 
 	virtual const FPlayerProperties& GetCachedProperties() const override;
 

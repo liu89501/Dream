@@ -6,7 +6,8 @@
 UPDSAsync_PayItem* UPDSAsync_PayItem::PDI_BuyItem(UObject* WorldContextObject, int32 StoreId, int64 ItemId)
 {
 	UPDSAsync_PayItem* PDSPI = NewObject<UPDSAsync_PayItem>(WorldContextObject);
-	PDSPI->Init(StoreId, ItemId);
+	PDSPI->T_StoreId = StoreId;
+	PDSPI->T_ItemId = ItemId;
 	return PDSPI;
 }
 
@@ -22,15 +23,10 @@ void UPDSAsync_PayItem::OnLoadCompleted(const FString& ErrorMessage) const
 	}
 }
 
-void UPDSAsync_PayItem::Init(int32 StoreId, int64 ItemId) const
+void UPDSAsync_PayItem::Activate()
 {
-	FTimerHandle Handle;
-	GetWorld()->GetTimerManager().SetTimer(Handle, [=]
-    {
-        FCommonCompleteNotify Delegate;
-        Delegate.BindUObject(this, &UPDSAsync_PayItem::OnLoadCompleted);
-        FPlayerDataInterfaceStatic::Get()->PayItem(StoreId, ItemId, Delegate);
-		
-    }, 0.001f, false);
+	FCommonCompleteNotify Delegate;
+	Delegate.BindUObject(this, &UPDSAsync_PayItem::OnLoadCompleted);
+	FPlayerDataInterfaceStatic::Get()->PayItem(T_StoreId, T_ItemId, Delegate);
 }
 

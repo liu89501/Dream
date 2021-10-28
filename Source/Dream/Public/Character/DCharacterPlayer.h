@@ -243,6 +243,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
     UPlayerHUD* GetPlayerHUD() const;
 
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
+	void SetMouseInputScale(int32 Value);
+
 	bool GetMiniMapTips(TArray<FMiniMapData>& Data);
 
 	const struct FCharacterMontage* GetCurrentActionMontage() const;
@@ -258,7 +261,7 @@ public:
 	 *	@param Target Ability应用的目标 如果有的话 没有就是自身
 	 */
 	void TriggerAbilityFromTag(const FGameplayTag& Tag, AActor* Target);
-	
+
 protected:
 
 	/*UFUNCTION()
@@ -470,9 +473,9 @@ private:
 private:
 
 	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
-	float BaseTurnRate;
+	int32 BaseTurnRate;
 	/** Base look up/down rate, in deg/sec. Other scaling may affect final rate. */
-	float BaseLookUpRate;
+	int32 BaseLookUpRate;
 	
 	/**
 	 * 存放武器perk的Handle

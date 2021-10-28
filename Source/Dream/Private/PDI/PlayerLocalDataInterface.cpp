@@ -57,6 +57,13 @@ FPlayerLocalDataInterface::FPlayerLocalDataInterface(): GameData(nullptr),TaskDa
 
 void FPlayerLocalDataInterface::Initialize(FInitializeDelegate Delegate)
 {
+	FPlayerDataInterfaceBase::Initialize(Delegate);
+
+	if (IsRunningDedicatedServer())
+	{
+		return;
+	}
+	
 	if (IFileManager::Get().FileExists(*FString::Printf(TEXT("%sSaveGames/%s.sav"), *FPaths::ProjectSavedDir(), DEFAULT_SLOT)))
 	{
 		FAsyncLoadGameFromSlotDelegate LoadGameDelegate;
@@ -374,10 +381,6 @@ void FPlayerLocalDataInterface::GetStoreItems(int32 StoreId, FGetStoreItemsCompl
 	}
 }
 
-void FPlayerLocalDataInterface::RunServer(const FRunServerParameter& Parameter, FGetServerComplete Delegate)
-{
-}
-
 void FPlayerLocalDataInterface::PayItem(int32 StoreId, int64 ItemId, FCommonCompleteNotify Delegate)
 {
 	UItemDataTradable* BuyItem = nullptr;
@@ -685,33 +688,6 @@ void FPlayerLocalDataInterface::DoIncreaseExperience(int32 ExpAmount) const
 	{
 		FPlatformAtomics::InterlockedAdd(&GameData->Properties.CurrentExperience, ExpAmount);
 	}
-}
-
-
-void FPlayerLocalDataInterface::RegisterServer(int32 Port, int32 MaxPlayers, const FString& MapName, FRegisterServerComplete Delegate)
-{
-}
-
-void FPlayerLocalDataInterface::UnRegisterServer()
-{
-}
-
-void FPlayerLocalDataInterface::UpdateActivePlayers(bool bIncrement)
-{
-}
-
-void FPlayerLocalDataInterface::Login(FCommonCompleteNotify Delegate)
-{
-	Delegate.ExecuteIfBound(MSG_SUCCESS);
-}
-
-void FPlayerLocalDataInterface::Logout()
-{
-}
-
-FString FPlayerLocalDataInterface::GetServerToken() const
-{
-	return TEXT("NONE");
 }
 
 const FPlayerProperties& FPlayerLocalDataInterface::GetCachedProperties() const

@@ -26,4 +26,10 @@ public:
     static UPDSAsync_DeliverTask* PDI_DeliverTask(UObject* WorldContextObject, int64 TaskId);
 
 	void OnCompleted(UItemData* Rewards, const FString& ErrorMessage) const;
+
+	virtual void Activate() override;
+
+private:
+
+	int64 T_TaskId;
 };

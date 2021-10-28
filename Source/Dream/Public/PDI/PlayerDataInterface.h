@@ -6,12 +6,16 @@
 #define PDI_LOCAL TEXT("Local")
 #define PDI_SERVER TEXT("Server")
 
+#define MSG_ERROR TEXT("Error")
+#define MSG_SUCCESS TEXT("")
+
 DECLARE_DELEGATE_OneParam(FInitializeDelegate, bool /* ErrorMessage */);
 DECLARE_DELEGATE_OneParam(FCommonCompleteNotify, const FString& /* ErrorMessage */);
 DECLARE_DELEGATE_TwoParams(FGetWeaponComplete, const TArray<FPlayerWeapon>&, const FString& /* ErrorMessage */);
 DECLARE_DELEGATE_TwoParams(FGetPlayerInfoComplete, const FPlayerInfo&, const FString& /* ErrorMessage */);
 DECLARE_DELEGATE_TwoParams(FGetPlayerPropertiesDelegate, const FPlayerProperties&, const FString& /* ErrorMessage */);
-DECLARE_DELEGATE_TwoParams(FGetServerComplete, const FString& /*ServerAddress*/, const FString& /* ErrorMessage */);
+DECLARE_DELEGATE_TwoParams(FGetServerComplete, const FFindServerResult& /*Result*/, const FString& /* ErrorMessage */);
+DECLARE_DELEGATE_TwoParams(FRunServerComplete, const FString& /*ServerId*/, const FString& /* ErrorMessage */);
 DECLARE_DELEGATE_OneParam(FRegisterServerComplete, const FString& /*ServerId*/);
 DECLARE_DELEGATE_TwoParams(FGetStoreItemsComplete, const FStoreInformation&, const FString& /*ErrorMessage*/);
 DECLARE_DELEGATE_TwoParams(FGetTalentsComplete, const TArray<FTalentInfo>&, const FString& /*ErrorMessage*/);
@@ -34,7 +38,6 @@ class FPlayerDataInterface
 {
 	
 public:
-
 	virtual ~FPlayerDataInterface() = default;
 
 	virtual void Initialize(FInitializeDelegate Delegate = FInitializeDelegate()) = 0;
@@ -56,9 +59,6 @@ public:
 
 	virtual void GetStoreItems(int32 StoreId, FGetStoreItemsComplete Delegate = FGetStoreItemsComplete()) = 0;
 
-	// Server
-	virtual void RunServer(const FRunServerParameter& Parameter, FGetServerComplete Delegate = FGetServerComplete()) = 0;
-
 	// Local
 	virtual void PayItem(int32 StoreId, int64 ItemId, FCommonCompleteNotify Delegate = FCommonCompleteNotify()) = 0;
 
@@ -79,11 +79,15 @@ public:
 	virtual void UpdateTaskState(const FQuestActionHandle& Handle) = 0;
 
 	// Server
-	virtual void RegisterServer(int32 Port, int32 MaxPlayers, const FString& MapName, FRegisterServerComplete Delegate) = 0;
+	virtual void RegisterServer(const FDedicatedServerInformation& Information, FRegisterServerComplete Delegate = FRegisterServerComplete()) = 0;
 	virtual void UnRegisterServer() = 0;
 
 	// Server
 	virtual void UpdateActivePlayers(bool bIncrement) = 0;
+
+	// local
+	virtual void GetAvailableDedicatedServer(const FString& ServerId, FGetServerComplete Delegate) = 0;
+	virtual void RunNewDedicatedServer(const FRunServerParameter& Parameter, FRunServerComplete Delegate = FRunServerComplete()) = 0;
 
 	// Local
 	virtual void Login(FCommonCompleteNotify Delegate = FCommonCompleteNotify()) = 0;
@@ -97,13 +101,6 @@ public:
 	/** 当条用过Server函数修改过Properties数据时应该调用此函数刷新数据 */
 	virtual void RefreshPlayerProperties() = 0;
 	
-	FPlayerDataDelegate& GetPlayerDataDelegate()
-	{
-		return PlayerDataDelegate;
-	}
-
-protected:
-
-	FPlayerDataDelegate PlayerDataDelegate;
+	virtual FPlayerDataDelegate& GetPlayerDataDelegate() = 0;
 	
 };

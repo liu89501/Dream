@@ -24,5 +24,12 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category="PDI")
     static UPDSAsync_GetTask* PDI_GetTask(UObject* WorldContextObject, int32 TaskGroupId, EGetTaskCondition Condition);
 
+	virtual void Activate() override;
+	
 	void OnCompleted(const TArray<FTaskInformation>& Tasks, const FString& ErrorMessage) const;
+
+private:
+
+	int32 T_TaskGroupId;
+	EGetTaskCondition T_Condition;
 };

@@ -2,14 +2,14 @@
 
 
 #include "DGE_DamageHealthSteal.h"
-#include "DreamAttributeSet.h"
 
-FGameplayTag UDGE_DamageHealthSteal::HealthStealSetByCallerTag = FGameplayTag::RequestGameplayTag(TEXT("GE.SetByCaller.HealthSteal"));
+#include "DGameplayTags.h"
+#include "DreamAttributeSet.h"
 
 UDGE_DamageHealthSteal::UDGE_DamageHealthSteal()
 {
     FSetByCallerFloat ModifierMagnitudeHealth;
-    ModifierMagnitudeHealth.DataTag = HealthStealSetByCallerTag;
+    ModifierMagnitudeHealth.DataTag = CustomizeTags().HealthStealSetByCallerTag;
     
     FGameplayModifierInfo ModifierHealth;
     ModifierHealth.Attribute = DreamAttrStatics().HealthStealProperty;

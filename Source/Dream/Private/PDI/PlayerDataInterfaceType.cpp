@@ -9,6 +9,8 @@
 #include "DMoney.h"
 #include "ShootWeapon.h"
 
+DEFINE_LOG_CATEGORY(LogPDS)
+
 /*FArchive& operator<<(FArchive& Ar, UClass*& Class)
 {
 	if (Ar.IsLoading())

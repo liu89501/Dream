@@ -7,31 +7,28 @@ UPDSAsync_EquipModule* UPDSAsync_EquipModule::PDI_EquipModule(UObject* WorldCont
 {
 	if (UPDSAsync_EquipModule* PDSEM = NewObject<UPDSAsync_EquipModule>(WorldContextObject))
 	{
-		PDSEM->Init(ModuleId, Category);
+		PDSEM->T_ModuleId = ModuleId;
+		PDSEM->T_Category = Category;
 		return PDSEM;
 	}
 	return nullptr;
 }
 
-void UPDSAsync_EquipModule::OnCompleted(const FString& ErrorMessage) const
-{
-	FTimerHandle Handle;
-	GetWorld()->GetTimerManager().SetTimer(Handle, [this, ErrorMessage]
-    {
-        if (ErrorMessage.IsEmpty())
-        {
-            OnSuccess.Broadcast();
-        }
-        else
-        {
-            OnFailure.Broadcast();
-        }
-    }, 0.001f, false);
-}
-
-void UPDSAsync_EquipModule::Init(int64 ModuleId, EModuleCategory Category) const
+void UPDSAsync_EquipModule::Activate()
 {
 	FCommonCompleteNotify Delegate;
 	Delegate.BindUObject(this, &UPDSAsync_EquipModule::OnCompleted);
-	FPlayerDataInterfaceStatic::Get()->EquipModule(ModuleId, Category, Delegate);
+	FPlayerDataInterfaceStatic::Get()->EquipModule(T_ModuleId, T_Category, Delegate);
+}
+
+void UPDSAsync_EquipModule::OnCompleted(const FString& ErrorMessage) const
+{
+	if (ErrorMessage.IsEmpty())
+	{
+		OnSuccess.Broadcast();
+	}
+	else
+	{
+		OnFailure.Broadcast();
+	}
 }

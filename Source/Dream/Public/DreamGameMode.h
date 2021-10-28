@@ -6,7 +6,6 @@
 
 #include "DreamType.h"
 #include "UdpSocketReceiver.h"
-#include "PDI/PlayerDataInterfaceType.h"
 #include "GameFramework/GameModeBase.h"
 #include "DreamGameMode.generated.h"
 
@@ -31,13 +30,25 @@ public:
 		return PlayerResurrectionTime;
 	}
 
+	int32 GetGameModeMaxPlayers() const
+	{
+		return MaxPlayers;
+	}
+
+public:
+
+	static int32 DEFAULT_MAX_PLAYERS;
+
 protected:
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Dream|Settings")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = DreamGameMode)
 	EGameType GameType;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dream|Settings")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = DreamGameMode)
 	float PlayerResurrectionTime;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = DreamGameMode)
+	int32 MaxPlayers;
 	
 	UPROPERTY()
 	bool bAutoShutdown;

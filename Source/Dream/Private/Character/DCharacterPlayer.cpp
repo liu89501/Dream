@@ -39,6 +39,8 @@
 #include "DPlayerCameraManager.h"
 #include "GameplayEffectExtension.h"
 
+#define MAX_MOUSE_SENSITIVITY 135
+
 // Sets default values
 ADCharacterPlayer::ADCharacterPlayer()
     : SprintSpeed(1000.f)
@@ -158,7 +160,10 @@ void ADCharacterPlayer::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     Super::EndPlay(EndPlayReason);
 
-    FPlayerDataInterfaceStatic::Get()->GetPlayerDataDelegate().OnExperienceChanged.Remove(Handle_Exp);
+    if (IsLocallyControlled())
+    {
+        FPlayerDataInterfaceStatic::Get()->GetPlayerDataDelegate().OnExperienceChanged.Remove(Handle_Exp);
+    }
 }
 
 void ADCharacterPlayer::PostInitializeComponents()
@@ -216,8 +221,7 @@ void ADCharacterPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
     if (UDGameUserSettings* Settings = Cast<UDGameUserSettings>(GEngine->GetGameUserSettings()))
     {
-        BaseTurnRate += Settings->GetCalculatedMouseSensitivity();
-        BaseLookUpRate += Settings->GetCalculatedMouseSensitivity();
+        SetMouseInputScale(Settings->GetMouseSensitivity());
     }
     
     PlayerInputComponent->BindAxis("MoveForward", this, &ADCharacterPlayer::MoveForward);
@@ -519,7 +523,7 @@ void ADCharacterPlayer::ReloadFinished()
 
 void ADCharacterPlayer::ServerReloadMagazine_Implementation()
 {
-    TriggerAbilityFromTag(ConditionTags::Condition_Reloading, this);
+    TriggerAbilityFromTag(CustomizeTags().Condition_Reloading, this);
     MulticastReloadMagazine();
 }
 
@@ -748,13 +752,13 @@ void ADCharacterPlayer::RefreshAttributeBaseValue()
         CacheWeaponPerkHandles.Add(AbilitySystem->GiveAbility(FGameplayAbilitySpec(AbilityClass)));
     }
 
-    AbilitySystem->RemoveActiveEffectsWithTags(FGameplayTagContainer(EffectTags::GE_Buff_All));
-    TriggerAbilityFromTag(ConditionTags::Condition_Immediately, this);
+    AbilitySystem->RemoveActiveEffectsWithTags(FGameplayTagContainer(CustomizeTags().GE_Buff_All));
+    TriggerAbilityFromTag(CustomizeTags().Condition_Immediately, this);
 }
 
 void ADCharacterPlayer::FastRefreshWeaponAttribute(const FEquipmentAttributes& PrevWeaponAttrs)
 {
-    AbilitySystem->RemoveActiveEffectsWithTags(FGameplayTagContainer(EffectTags::GE_Buff_Weapon));
+    AbilitySystem->RemoveActiveEffectsWithTags(FGameplayTagContainer(CustomizeTags().GE_Buff_Weapon));
 
     for (const FGameplayAbilitySpecHandle& Handle : CacheWeaponPerkHandles)
     {
@@ -770,7 +774,7 @@ void ADCharacterPlayer::FastRefreshWeaponAttribute(const FEquipmentAttributes& P
     }
     
     AdditiveAttributes(ActiveWeapon->WeaponAttribute - PrevWeaponAttrs);
-    TriggerAbilityFromTag(ConditionTags::Condition_Immediately, this);
+    TriggerAbilityFromTag(CustomizeTags().Condition_Immediately, this);
 }
 
 void ADCharacterPlayer::SetPlayerHUDVisible(bool bVisible)
@@ -1276,7 +1280,7 @@ void ADCharacterPlayer::HealthChanged(const FOnAttributeChangeData& AttrData)
 void ADCharacterPlayer::HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle)
 {
     Super::HandleDamage(DamageDone, Handle);
-    TriggerAbilityFromTag(ConditionTags::Condition_Injured, Handle.GetInstigator());
+    TriggerAbilityFromTag(CustomizeTags().Condition_Injured, Handle.GetInstigator());
 }
 
 void ADCharacterPlayer::RadarScanTick()
@@ -1376,11 +1380,11 @@ void ADCharacterPlayer::HitEnemy(const FDamageTargetInfo& DamageInfo, ADCharacte
 {
     if (DamageInfo.bKilled)
     {
-        TriggerAbilityFromTag(ConditionTags::Condition_KilledEnemy, HitTarget);
+        TriggerAbilityFromTag(CustomizeTags().Condition_KilledEnemy, HitTarget);
     }
     else
     {
-        TriggerAbilityFromTag(ConditionTags::Condition_HitEnemy, HitTarget);
+        TriggerAbilityFromTag(CustomizeTags().Condition_HitEnemy, HitTarget);
     }
 
     ClientHitEnemy(DamageInfo);
@@ -1532,6 +1536,12 @@ void ADCharacterPlayer::SetCombatStatus(bool bNewCombatStatus)
 UPlayerHUD* ADCharacterPlayer::GetPlayerHUD() const
 {
     return PlayerHUD;
+}
+
+void ADCharacterPlayer::SetMouseInputScale(int32 Value)
+{
+    BaseTurnRate = FMath::Min(BaseTurnRate + Value * 3, MAX_MOUSE_SENSITIVITY);
+    BaseLookUpRate = FMath::Min(BaseLookUpRate + Value * 3, MAX_MOUSE_SENSITIVITY);
 }
 
 void ADCharacterPlayer::DoAddMiniMapTips(TArray<FMiniMapData>& Data, const TArray<AActor*>& ScanActors)

@@ -23,5 +23,11 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category=PDI)
     static UPDSAsync_GetStoreInformation* PDI_GetStoreInformation(UObject* WorldContextObject, int32 StoreId);
 
+	virtual void Activate() override;
+
 	void OnLoadCompleted(const FStoreInformation& StoreInfo, const FString& ErrorMessage) const;
+
+private:
+
+	int32 T_StoreId;
 };

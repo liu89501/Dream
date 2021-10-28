@@ -13,6 +13,17 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSessionJoinNumberChange, int32, Joi
 
 class APlayerController;
 
+namespace EMatchmakingState
+{
+	enum Type
+	{
+		WAITING_TEAM,	/* 等待队伍 */
+		CREATING_SERVER, /* 开始准备让后台服务器运行一个专用服务器 */
+		WAITING_SERVER, /* 等待连接到游戏服务器 */
+		ATTEMPT_CONNECT_SERVER
+	};
+}
+
 /**
  * 
  */
@@ -31,14 +42,10 @@ public:
 	UPROPERTY(BlueprintAssignable)
 	FEmptyOnlineDelegate OnFailure;
 
-	UPROPERTY(BlueprintAssignable)
-	FSessionJoinNumberChange OnJoinChanged;
-
 	UFUNCTION(BlueprintCallable, meta = (BlueprintInternalUseOnly = "true"), Category = "Dream|Async")
 	static UMatchmakingCallProxy* Matchmaking(
 		APlayerController* PlayerController, 
-		const FName& InMapName,
-		const FString& InGameMode,
+		const FLevelInformation& LevelInformation,
 		FMatchmakingHandle& OutHandle
 	);
 
@@ -49,6 +56,8 @@ public:
 	void ClearAllHandle();
 
 private:
+
+	void Tick();
 
 	void FindLobby();
 
@@ -61,16 +70,19 @@ private:
 
 	void OnJoinSessionCompleted(FName SessionName, EOnJoinSessionCompleteResult::Type CompleteResult);
 
-	void OnCreateServerComplete(const FString& ServerAddress, const FString& ErrorMessage);
+	void OnCreateServerComplete(const FString& ServerID, const FString& ErrorMessage);
+	
+	void OnServerReadyComplete(const struct FFindServerResult& Result, const FString& ErrorMessage);
 
-	void OnSessionTick(float DeltaTime);
+	void OnUpdateSessionComplete(FName SessionName, bool bWasSuccessful);
 
-	void OnStartSessionComplete(FName SessionName, bool bWasSuccessful);
+	FLevelInformation T_LevelInformation;
+	int32 MaxPlayers;
 
-	void JoinLobbyGameServer(const FName& SessionName);
+	FString CreatedServerID;
 
-	FName MatchMapName;
-	FString GameModeAlias;
+	EMatchmakingState::Type State;
+	bool bCompleted;
 	
 	TWeakObjectPtr<UWorld> World;
 
@@ -80,13 +92,15 @@ private:
 	/* 在线子系统会话接口 */
 	IOnlineSessionPtr SessionInt;
 
+	FName MatchmakingSessionName;
+
 	/* 会话查询配置 */
 	TSharedPtr<FOnlineSessionSearch> SearchSettings;
 
 	/* 匹配期间可能会用到的所有任务句柄 */
 	FTimerHandle Handle_RetryMatching;
 	FTimerHandle Handle_SessionTIck;
-	FDelegateHandle Handle_UpdateSessionsComplete;
+	FDelegateHandle Handle_UpdateSessionComplete;
 	FDelegateHandle Handle_FindSessionsComplete;
 	FDelegateHandle Handle_JoinSessionComplete;
 	FDelegateHandle Handle_StartSessionComplete;
@@ -96,10 +110,7 @@ private:
 	uint8 FindRetryCount;
 
 	/* 连接到会话后等待开始游戏的时间(会话的玩家人数未满时) */
-	float WaitStartTime;
+	uint8 WaitStartTime;
 
-	bool bCreatingServer;
-	
-	int32 PrevJoinedPlayerNum;
 };
 

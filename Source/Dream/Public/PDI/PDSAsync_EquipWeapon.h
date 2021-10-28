@@ -23,5 +23,12 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category=PDI)
     static UPDSAsync_EquipWeapon* PDI_EquipWeapon(UObject* WorldContextObject, int64 WeaponId, int32 EquipIndex);
 
+	virtual void Activate() override;
+
 	void OnLoadCompleted(const FString& ErrorMessage) const;
+
+private:
+
+	int64 T_WeaponId;
+	int32 T_EquipIndex;
 };

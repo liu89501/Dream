@@ -5,23 +5,17 @@
 
 UPDSAsync_EquipWeapon* UPDSAsync_EquipWeapon::PDI_EquipWeapon(UObject* WorldContextObject, int64 WeaponId, int32 EquipIndex)
 {
-	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
-	{
-		UPDSAsync_EquipWeapon* PDSI = NewObject<UPDSAsync_EquipWeapon>(WorldContextObject);
+	UPDSAsync_EquipWeapon* PDSI = NewObject<UPDSAsync_EquipWeapon>(WorldContextObject);
+	PDSI->T_WeaponId = WeaponId;
+	PDSI->T_EquipIndex = EquipIndex;
+	return PDSI;
+}
 
-		FTimerHandle Handle;
-		World->GetTimerManager().SetTimer(Handle, [WeaponId, EquipIndex, PDSI]
-        {
-			FCommonCompleteNotify Delegate;
-			Delegate.BindUObject(PDSI, &UPDSAsync_EquipWeapon::OnLoadCompleted);
-			FPlayerDataInterfaceStatic::Get()->EquipWeapon(WeaponId, EquipIndex, Delegate);
-			
-        }, 0.001f, false);
-		
-		return PDSI;
-	}
-	
-	return nullptr;
+void UPDSAsync_EquipWeapon::Activate()
+{
+	FCommonCompleteNotify Delegate;
+	Delegate.BindUObject(this, &UPDSAsync_EquipWeapon::OnLoadCompleted);
+	FPlayerDataInterfaceStatic::Get()->EquipWeapon(T_WeaponId, T_EquipIndex, Delegate);
 }
 
 void UPDSAsync_EquipWeapon::OnLoadCompleted(const FString& ErrorMessage) const

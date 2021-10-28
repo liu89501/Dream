@@ -2,20 +2,30 @@
 
 #include "GameplayTags.h"
 
-namespace EffectTags
+struct MyCustomizeTags
 {
-    extern const FGameplayTag GE_Buff_Weapon;
-    extern const FGameplayTag GE_Buff_Module;
-    extern const FGameplayTag GE_Buff_Talent;
-    extern const FGameplayTag GE_Buff_All;
-}
+    MyCustomizeTags();
+    
+    /** buff 相关 */
+    FGameplayTag GE_Buff_Weapon;
+    FGameplayTag GE_Buff_Module;
+    FGameplayTag GE_Buff_Talent;
+    FGameplayTag GE_Buff_All;
 
-namespace ConditionTags
+    /** perk 触发相关 */
+    FGameplayTag Condition_Immediately;
+    FGameplayTag Condition_Reloading;
+    FGameplayTag Condition_Injured;
+    FGameplayTag Condition_Firing;
+    FGameplayTag Condition_KilledEnemy;
+    FGameplayTag Condition_HitEnemy;
+
+    // 生命偷取 SetByCallerTag
+    FGameplayTag HealthStealSetByCallerTag;
+};
+
+static const MyCustomizeTags& CustomizeTags()
 {
-    extern const FGameplayTag Condition_Immediately;
-    extern const FGameplayTag Condition_Reloading;
-    extern const FGameplayTag Condition_Injured;
-    extern const FGameplayTag Condition_Firing;
-    extern const FGameplayTag Condition_KilledEnemy;
-    extern const FGameplayTag Condition_HitEnemy;
+    static MyCustomizeTags Tags;
+    return Tags;
 }

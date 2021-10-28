@@ -20,9 +20,15 @@ class UPDSAsync_LearnTalents : public UBlueprintAsyncActionBase
 
 public:
 
+	virtual void Activate() override;
+
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category="PDI")
     static UPDSAsync_LearnTalents* PDI_LearnTalents(UObject* WorldContextObject, const TArray<int32>& TalentIdArray);
 
 	UFUNCTION()
 	void OnCompleted(const FString& ErrorMessage) const;
+
+private:
+
+	TArray<int32> T_TalentIdArray;
 };
