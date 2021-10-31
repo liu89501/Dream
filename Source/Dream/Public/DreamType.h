@@ -391,7 +391,7 @@ public:
     TArray<FLevelInformation> Levels;
 };
 
-UCLASS()
+UCLASS(Blueprintable)
 class UCharacterMesh : public UDataAsset
 {
 	GENERATED_BODY()

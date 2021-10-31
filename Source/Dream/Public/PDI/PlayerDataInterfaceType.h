@@ -548,6 +548,9 @@ struct FTaskInformation
 	UPROPERTY(BlueprintReadOnly)
 	ETaskMark TaskMark;
 
+	UPROPERTY(BlueprintReadWrite)
+	bool bTracking;
+
 	int64 GetSortNum() const
 	{
 		return TaskId;

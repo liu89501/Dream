@@ -25,10 +25,38 @@ private:
 	TArray<uint8> SecretKey;
 };
 
+template <typename ServiceParam>
+struct FMessage
+{
+	static_assert(ServiceParam::StaticStruct(), "Only Supports UStruct");
+
+public:
+	
+	FMessage(uint16 InServiceMark, const ServiceParam& InParameter)
+		: ServiceMark(InServiceMark),
+		  Parameter(InParameter)
+	{
+	}
+
+private:
+
+	uint16 ServiceMark;
+
+	ServiceParam Parameter;
+};
+
+namespace MessageUtils
+{
+	template<typename ServiceParam>
+	uint8* BuildMessageBytes(const FMessage<ServiceParam>& Message);
+}
+
 class FPlayerDataInterfaceBase : public FPlayerDataInterface
 {
 	
 public:
+
+	FPlayerDataInterfaceBase() = default;
 	
 	virtual ~FPlayerDataInterfaceBase();
 	
@@ -68,6 +96,11 @@ private:
 
 	/* Server Http Address */
 	FString ServerURL;
+
+	/* Server Host Name */
+	FString ServerHostName;
+	/* Server Listen Port */
+	int32 ServerPort;
 
 	/* Server Authorization Token */
 	FString ServerToken;

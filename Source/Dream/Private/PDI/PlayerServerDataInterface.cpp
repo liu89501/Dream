@@ -6,6 +6,7 @@
 #include "HttpModule.h"
 #include "IHttpResponse.h"
 #include "OnlineSubsystem.h"
+#include "SocketSubsystem.h"
 
 #define LOCTEXT_NAMESPACE "FPlayerServerDataInterface"
 
@@ -23,6 +24,11 @@ void FPlayerServerDataInterface::AcceptTask(const int64& TaskId, FCommonComplete
 }
 
 void FPlayerServerDataInterface::UpdateTaskState(const FQuestActionHandle& Handle)
+{
+}
+
+void FPlayerServerDataInterface::ModifyTrackingState(const int64& TaskId, bool bTracking,
+	FCommonCompleteNotify Delegate)
 {
 }
 

@@ -79,10 +79,10 @@ void UPlayerPreview::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
 	Super::NativeTick(MyGeometry, InDeltaTime);
 
-	/*if (PreviewActor)
+	if (PreviewActor)
 	{
 		PreviewActor->PrestreamTextures(1, true);
-	}*/
+	}
 	
 	if (PreviewWorld)
 	{

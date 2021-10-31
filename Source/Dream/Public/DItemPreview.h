@@ -22,6 +22,9 @@ public:
 	
 	UFUNCTION(BlueprintCallable, Category = ItemPreview)
     USkeletalMeshComponent* AddPreviewSkeletalMeshFromComponent(USkeletalMeshComponent* CharacterMesh);
+
+	UFUNCTION(BlueprintCallable, Category = ItemPreview)
+	AActor* AddPreviewActor(AActor* Template);
 	
 protected:
 	// Called when the game starts or when spawned

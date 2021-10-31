@@ -136,6 +136,8 @@ void ADPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
     }
 }
 
+#if WITH_EDITORONLY_DATA
+
 void ADPlayerController::TestLoginServer()
 {
     if (FPlayerDataInterface* PDS = FPlayerDataInterfaceStatic::Get())
@@ -197,6 +199,8 @@ void ADPlayerController::TestFindSession()
         SessionInt->FindSessions(0, Search);
     }
 }
+
+#endif
 
 void ADPlayerController::RecvData(const TSharedPtr<FArrayReader, ESPMode::ThreadSafe>& ReaderPtr,
                                   const FIPv4Endpoint& Endpoint)

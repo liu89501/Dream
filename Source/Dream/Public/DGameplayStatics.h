@@ -58,7 +58,7 @@ public:
 	static bool ContainsActionKey(APlayerController* PlayerController, FKey Key, FName ActionName);
 
 	UFUNCTION(BlueprintPure, Category = DreamStatics)
-	static FName GetInputActionKeyName(APlayerController* PlayerController, FName ActionName);
+	static const FKey& GetInputActionKey(APlayerController* PlayerController, FName ActionName);
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject"), Category = DreamStatics)
 	static void ServerTravel(UObject* WorldContextObject, const FString& URL, bool bAbsolute);

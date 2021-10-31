@@ -8,7 +8,7 @@ class FPlayerServerDataInterface : public FPlayerDataInterfaceBase
 {
 
 public:
-	
+
 	virtual void AddPlayerRewards(UItemData* Rewards, FCommonCompleteNotify Delegate) override;
 	
 	virtual void EquipWeapon(int64 WeaponId, int32 EquipmentIndex, FCommonCompleteNotify Delegate) override;
@@ -34,6 +34,7 @@ public:
 	virtual void DeliverTask(const int64& TaskId, FTaskRewardDelegate Delegate) override;
 	virtual void AcceptTask(const int64& TaskId, FCommonCompleteNotify Delegate) override;
 	virtual void UpdateTaskState(const FQuestActionHandle& Handle) override;
+	virtual void ModifyTrackingState(const int64& TaskId, bool bTracking, FCommonCompleteNotify Delegate) override;
 	
 	virtual const FPlayerProperties& GetCachedProperties() const override;
 	

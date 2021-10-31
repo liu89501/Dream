@@ -127,6 +127,8 @@ public:
 	UFUNCTION(BlueprintCallable, Category = DController)
 	void SendClientRewardMessage(UItemData* Reward);
 
+#if WITH_EDITORONLY_DATA
+
 	/* TEST ---------------------------------- */
 	UFUNCTION(Exec)
     void TestLoginServer();
@@ -137,7 +139,7 @@ public:
 	UFUNCTION(Exec)
     void TestFindSession();
 	/* TEST ---------------------------------- */
-
+#endif
 
 public:
 

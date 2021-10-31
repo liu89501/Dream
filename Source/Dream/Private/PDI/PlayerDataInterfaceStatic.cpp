@@ -54,7 +54,7 @@ FPlayerDataInterface* FPlayerDataInterfaceStatic::Get()
 bool IsLocal()
 {
 	FString PDI;
-	GConfig->GetString(TEXT("MySettings"), TEXT("PDI"), PDI, GEngineIni);
+	GConfig->GetString(TEXT("PDISettings"), TEXT("PDI"), PDI, GEngineIni);
 	return PDI.Equals(PDI_LOCAL, ESearchCase::IgnoreCase);
 }
 

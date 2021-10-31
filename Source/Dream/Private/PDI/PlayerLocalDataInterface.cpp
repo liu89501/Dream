@@ -627,13 +627,25 @@ void FPlayerLocalDataInterface::DeliverTask(const int64& TaskId, FTaskRewardDele
 
 void FPlayerLocalDataInterface::AcceptTask(const int64& TaskId, FCommonCompleteNotify Delegate)
 {
-	if (TaskData)
+	int64 Tid = TaskId - 1;
+	if (TaskData->TaskList.IsValidIndex(Tid))
 	{
-		int64 Tid = TaskId - 1;
-		if (TaskData->TaskList.IsValidIndex(Tid))
-		{
-			TaskData->TaskList[Tid].TaskMark = ETaskMark::Accepted;
-		}
+		TaskData->TaskList[Tid].TaskMark = ETaskMark::Accepted;
+		UGameplayStatics::AsyncSaveGameToSlot(TaskData, TASK_SLOT, 0);
+		Delegate.ExecuteIfBound(MSG_SUCCESS);
+	}
+	else
+	{
+		Delegate.ExecuteIfBound(MSG_ERROR);
+	}
+}
+
+void FPlayerLocalDataInterface::ModifyTrackingState(const int64& TaskId, bool bTracking, FCommonCompleteNotify Delegate)
+{
+	int64 Tid = TaskId - 1;
+	if (TaskData->TaskList.IsValidIndex(Tid))
+	{
+		TaskData->TaskList[Tid].bTracking = bTracking;
 
 		UGameplayStatics::AsyncSaveGameToSlot(TaskData, TASK_SLOT, 0);
 

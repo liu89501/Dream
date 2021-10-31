@@ -32,6 +32,9 @@ struct FTaskInformationSaveGame
 
 	UPROPERTY()
 	ETaskMark TaskMark;
+	
+	UPROPERTY()
+	bool bTracking;
 
 	FTaskInformationSaveGame& operator=(const FTaskInformation& Information)
 	{
@@ -40,6 +43,7 @@ struct FTaskInformationSaveGame
 		CompletedReward = FItemDataHandle(Information.CompletedReward);
 		TaskMark = Information.TaskMark;
 		CompleteCondition = FQuestConditionHandle(Information.CompleteCondition);
+		bTracking = Information.bTracking;
 		return *this;
 	}
 
@@ -48,7 +52,8 @@ struct FTaskInformationSaveGame
 		  TaskDescription(Other.TaskDescription),
 		  CompleteCondition(Other.CompleteCondition),
 		  CompletedReward(Other.CompletedReward),
-		  TaskMark(Other.TaskMark)
+		  TaskMark(Other.TaskMark),
+		  bTracking(Other.bTracking)
 	{
 	}
 
@@ -63,6 +68,7 @@ struct FTaskInformationSaveGame
 		Information.CompletedReward = CompletedReward.Get();
 		Information.TaskMark = TaskMark;
 		Information.CompleteCondition = CompleteCondition.Get();
+		Information.bTracking = bTracking;
 		return Information;
 	}
 };

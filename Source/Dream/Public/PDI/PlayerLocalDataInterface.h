@@ -29,6 +29,7 @@ public:
 
 	virtual void DeliverTask(const int64& TaskId, FTaskRewardDelegate Delegate) override;
 	virtual void AcceptTask(const int64& TaskId, FCommonCompleteNotify Delegate) override;
+	virtual void ModifyTrackingState(const int64& TaskId, bool bTracking, FCommonCompleteNotify Delegate) override;
 
 	virtual void UpdateTaskState(const FQuestActionHandle& Handle) override;
 

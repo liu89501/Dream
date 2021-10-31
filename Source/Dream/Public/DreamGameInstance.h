@@ -57,6 +57,13 @@ protected:
 	UFUNCTION()
     virtual void OnPostLoadMap(UWorld* LoadedWorld);
 
+#if WITH_EDITORONLY_DATA
+
+	UFUNCTION(Exec)
+	void TestSocketSend();
+
+#endif
+
 private:
 
 	UPROPERTY()

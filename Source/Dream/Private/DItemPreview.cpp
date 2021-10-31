@@ -49,7 +49,7 @@ void ADItemPreview::ProcessMeshComponents(UMeshComponent* PreviewBody, UMeshComp
 
 			if (NewMeshComponent)
 			{
-				NewMeshComponent->RegisterComponentWithWorld(GetWorld());
+				NewMeshComponent->RegisterComponent();
 				NewMeshComponent->AttachToComponent(PreviewBody, FAttachmentTransformRules::KeepRelativeTransform, Component->GetAttachSocketName());
 				ProcessMeshComponents(NewMeshComponent, MeshComponent);
 			}
@@ -61,12 +61,21 @@ USkeletalMeshComponent* ADItemPreview::AddPreviewSkeletalMeshFromComponent(USkel
 {
 	USkeletalMeshComponent* Body = NewObject<USkeletalMeshComponent>(
                     this, USkeletalMeshComponent::StaticClass(), NAME_None, RF_NoFlags, CharacterMesh);
-	Body->RegisterComponentWithWorld(GetWorld());
+	Body->RegisterComponent();
 	Body->SetRelativeTransform(FTransform::Identity);
 	Body->AttachToComponent(PreviewActorRoot, FAttachmentTransformRules::KeepRelativeTransform);
 	Body->SetAnimClass(CharacterMesh->GetAnimClass());
 	ProcessMeshComponents(Body, CharacterMesh);
 	return Body;
+}
+
+AActor* ADItemPreview::AddPreviewActor(AActor* Template)
+{
+	FActorSpawnParameters SpawnParameters;
+	SpawnParameters.Template = Template;
+	AActor* SpawnPreviewActor = GetWorld()->SpawnActor<AActor>(Template->GetClass(), SpawnParameters);
+	SpawnPreviewActor->AttachToComponent(PreviewActorRoot, FAttachmentTransformRules::KeepRelativeTransform);
+	return SpawnPreviewActor;
 }
 
 // Called when the game starts or when spawned

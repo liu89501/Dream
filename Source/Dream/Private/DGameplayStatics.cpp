@@ -94,18 +94,18 @@ bool UDGameplayStatics::ContainsActionKey(APlayerController* PlayerController, F
 	return bResult;
 }
 
-FName UDGameplayStatics::GetInputActionKeyName(APlayerController* PlayerController, FName ActionName)
+const FKey& UDGameplayStatics::GetInputActionKey(APlayerController* PlayerController, FName ActionName)
 {
 	if (PlayerController)
 	{
 		TArray<FInputActionKeyMapping> ActionKeyMapping = PlayerController->PlayerInput->GetKeysForAction(ActionName);
 		if (ActionKeyMapping.IsValidIndex(0))
 		{
-			return ActionKeyMapping[0].Key.GetFName();
+			return ActionKeyMapping[0].Key;
 		}
 	}
 
-	return NAME_None;
+	return EKeys::AnyKey;
 }
 
 void UDGameplayStatics::ServerTravel(UObject* WorldContextObject, const FString& URL, bool bAbsolute)

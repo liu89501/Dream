@@ -13,6 +13,9 @@
 #include "GameFramework/Character.h"
 #include "DCharacterPlayer.generated.h"
 
+
+#define SKIN_COMP_NAME TEXT("Skin_Component")
+
 class AShootWeapon;
 
 UENUM(BlueprintType)
@@ -151,9 +154,6 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, BlueprintAuthorityOnly, meta = (ScriptName="OnServerDeath", DisplayName="OnServerDeath"), Category = "CharacterPlayer")
 	void BP_OnServerDeath(const AActor* Causer);
 
-	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName="OnDeath", DisplayName="OnDeath"), Category = "CharacterPlayer")
-	void BP_OnDeath();
-
 	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName = "OnToggleWeaponAim", DisplayName = "OnToggleWeaponAim"), Category = "CharacterPlayer")
 	void BP_OnToggleWeaponAim(bool bNewAimed);
 
@@ -246,6 +246,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	void SetMouseInputScale(int32 Value);
 
+	UFUNCTION(BlueprintCallable, Meta = (DisplayName="UpdateCharacterMesh", ScriptName="UpdateCharacterMesh"), Category=CharacterPlayer)
+	void BP_SetCharacterMesh(UCharacterMesh* CharacterMesh);
+	
 	bool GetMiniMapTips(TArray<FMiniMapData>& Data);
 
 	const struct FCharacterMontage* GetCurrentActionMontage() const;
@@ -440,9 +443,10 @@ protected:
 	// todo 这里可能会有问题 试想如果一个人在视野之外这个RPC在其他客户端能否接收到，这是个问题需要测试
 	UFUNCTION(Server, Reliable)
 	void ServerUpdateCharacterMesh(UCharacterMesh* CharacterMesh);
-	UFUNCTION(NetMulticast, Reliable)
-	void MulticastUpdateCharacterMesh(UCharacterMesh* CharacterMesh);
-	void ProcessUpdateCharacterMesh(UCharacterMesh* CharacterMesh);
+
+	UFUNCTION()
+	void OnRep_CharacterMesh();
+	void SetCharacterMesh(UCharacterMesh* CharacterMesh);
 
 	virtual void OnActiveGameplayEffectAdded(UAbilitySystemComponent* ASC, const FGameplayEffectSpec& Spec, FActiveGameplayEffectHandle Handle);
 	virtual void OnActiveGameplayEffectTimeChange(FActiveGameplayEffectHandle Handle, float NewStartTime, float NewDuration);
@@ -455,6 +459,9 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = CharacterPlayer)
 	bool bCombatStatus;
+
+	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterMesh, Category = CharacterPlayer)
+	UCharacterMesh* CurrentCharacterMesh;
 
 	UPROPERTY()
 	EWeaponStatus WeaponStatus;

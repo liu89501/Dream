@@ -74,6 +74,7 @@ public:
 	// Local
 	virtual void DeliverTask(const int64& TaskId, FTaskRewardDelegate Delegate = FTaskRewardDelegate()) = 0;
 	virtual void AcceptTask(const int64& TaskId, FCommonCompleteNotify Delegate = FCommonCompleteNotify()) = 0;
+	virtual void ModifyTrackingState(const int64& TaskId, bool bTracking, FCommonCompleteNotify Delegate = FCommonCompleteNotify()) = 0;
 
 	// Server
 	virtual void UpdateTaskState(const FQuestActionHandle& Handle) = 0;

@@ -5,8 +5,12 @@
 #include "JsonWriter.h"
 #include "HttpModule.h"
 #include "IHttpResponse.h"
+#include "NetworkMessage.h"
 #include "OnlineSubsystem.h"
 #include "OnlineSubsystemUtils.h"
+#include "Sockets.h"
+#include "SocketSubsystem.h"
+#include "TcpSocketBuilder.h"
 
 #define LOCTEXT_NAMESPACE "FPlayerDataInterfaceBase"
 
@@ -54,6 +58,20 @@ FString FAESUtils::DecryptData(const FString& EncryptContent)
 	return DecryptText;
 }
 
+template <typename ServiceParam>
+uint8* MessageUtils::BuildMessageBytes(const FMessage<ServiceParam>& Message)
+{
+	TArray<uint8> Data;
+	FMemoryWriter Writer(Data);
+	Writer << Message.Parameter;
+
+	UScriptStruct* ParameterStruct = Message.GetParameterUStruct();
+	ParameterStruct->GetCppStructOps()->NetSerialize(Writer, &Message.Parameter);
+	
+	/*LoginParam->SetStringField(TEXT("ServiceName"), Message.ServerName);
+	LoginParam->SetStringField(TEXT("thirdPartyUserTicket"), Ticket);*/
+}
+
 FPlayerDataInterfaceBase::~FPlayerDataInterfaceBase()
 {
 	UE_LOG_ONLINE(Log, TEXT("FPlayerDataInterfaceBase Free..."));
@@ -61,13 +79,15 @@ FPlayerDataInterfaceBase::~FPlayerDataInterfaceBase()
 
 void FPlayerDataInterfaceBase::Initialize(FInitializeDelegate Delegate)
 {
-	GConfig->GetString(TEXT("MySettings"), TEXT("ServerURL"), ServerURL, GEngineIni);
+	GConfig->GetString(TEXT("PDISettings"), TEXT("ServerURL"), ServerURL, GEngineIni);
+	GConfig->GetInt(TEXT("PDISettings"), TEXT("ServerPort"), ServerPort, GEngineIni);
+	GConfig->GetString(TEXT("PDISettings"), TEXT("ServerHostName"), ServerHostName, GEngineIni);
 	GConfig->GetString(TEXT("OnlineSubsystem"), TEXT("DefaultPlatformService"), OSSName, GEngineIni);
 	
 	if (IsRunningDedicatedServer())
 	{
 		FString AESKey;
-		GConfig->GetString(TEXT("MySettings"), TEXT("AESKey"), AESKey, GEngineIni);
+		GConfig->GetString(TEXT("PDISettings"), TEXT("AESKey"), AESKey, GEngineIni);
 		AESUtils = FAESUtils(AESKey);
 		
 		FParse::Value(FCommandLine::Get(), TEXT("ServerToken="), ServerToken);
@@ -156,6 +176,35 @@ void FPlayerDataInterfaceBase::UpdateActivePlayers(bool bIncrement)
 
 void FPlayerDataInterfaceBase::Login(FCommonCompleteNotify Delegate)
 {
+
+	/*ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
+	check(SocketSubsystem);
+
+	
+	FAddressInfoResult Result = SocketSubsystem->GetAddressInfo(*ServerHostName, nullptr, EAddressInfoFlags::Default, NAME_None);
+	if (Result.ReturnCode == ESocketErrors::SE_NO_ERROR && Result.Results.Num() > 0)
+	{
+		Result.Results[0].Address.;
+	}
+
+	FResolveInfo* ResolveInfo = SocketSubsystem->GetHostByName(TCHAR_TO_ANSI(*ServerHostName));
+	checkf(ResolveInfo->IsComplete(), TEXT("Resolve Server HostName Failure"));
+
+	FIPv4Endpoint Endpoint;
+	ResolveInfo->GetResolvedAddress().GetIp(Endpoint.Address.Value);
+	Endpoint.Port = ServerPort;
+
+    FSocket* PDISocket = FTcpSocketBuilder(TEXT("PDISocket"))
+        .AsBlocking()
+        .AsReusable()
+		.WithReceiveBufferSize(2 * 1024 * 1024)
+        .WithSendBufferSize(1024 * 1024);
+
+	check()
+
+	FSimpleAbstractSocket_FSocket SocketWrapper(PDISocket);*/
+
+	
 	FString ErrorMessage;
 	if (!Cookie.IsEmpty())
 	{

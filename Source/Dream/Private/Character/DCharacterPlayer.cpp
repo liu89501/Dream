@@ -263,12 +263,6 @@ void ADCharacterPlayer::StartFire()
         return;
     }
 
-    if (ActiveWeapon->AmmoNum == 0)
-    {
-        ReloadMagazine();
-        return;
-    }
-
     bool bCannotFire = GetWorld()->TimeSeconds <= (ActiveWeapon->GetLastFireTimeSeconds() + ActiveWeapon->GetFireInterval());
     if (WeaponStatus > EWeaponStatus::Firing || (bCannotFire && ActiveWeapon->FireMode != EFireMode::Accumulation))
     {
@@ -342,6 +336,12 @@ void ADCharacterPlayer::HandleFire()
     {
         ActiveWeapon->BP_OnStopFire();
         GetWorldTimerManager().ClearTimer(Handle_Shoot);
+    }
+
+    if (ActiveWeapon->AmmoNum == 0)
+    {
+        ReloadMagazine();
+        return;
     }
 }
 
@@ -862,18 +862,14 @@ void ADCharacterPlayer::ServerInitializePlayer_Implementation(const FPlayerInfo&
         LearnedTalents.Add(Talent.TalentClass.TryLoadClass<UDreamGameplayAbility>());
     }
 
-    if (UCharacterMesh* CharacterMesh = Cast<UCharacterMesh>(PlayerInfo.CharacterMesh.TryLoad()))
-    {
-        if (CharacterMesh->IsSupportedForNetworking())
-        {
-            MulticastUpdateCharacterMesh(CharacterMesh);
-        }
-    }
+    SetCharacterMesh(Cast<UCharacterMesh>(PlayerInfo.CharacterMesh.TryLoad()));
 
     Level = PlayerInfo.Properties.Level;
     
     RefreshAttributeBaseValue();
 }
+
+
 
 void ADCharacterPlayer::OnPlayerExperienceChanged(int32 MaxExp, int32 CrtExp, int32 NewLevel)
 {
@@ -1187,6 +1183,7 @@ void ADCharacterPlayer::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Ou
     DOREPLIFETIME(ADCharacterPlayer, ActiveWeapon);
     DOREPLIFETIME(ADCharacterPlayer, bCombatStatus);
     DOREPLIFETIME(ADCharacterPlayer, bSprinted);
+    DOREPLIFETIME(ADCharacterPlayer, CurrentCharacterMesh);
     DOREPLIFETIME_CONDITION(ADCharacterPlayer, ActiveWeaponIndex, ELifetimeCondition::COND_OwnerOnly);
     DOREPLIFETIME_CONDITION(ADCharacterPlayer, MovingInput, ELifetimeCondition::COND_SkipOwner);
 }
@@ -1222,6 +1219,9 @@ void ADCharacterPlayer::OnDeath(const AActor* Causer)
     float PlayerResurrectionTime = GameMode->GetPlayerResurrectionTime();
     ClientResurrection(PlayerResurrectionTime);
 
+    SetReplicatingMovement(false);
+    TearOff();
+
     FTimerHandle Handle_Temp;
     GetWorldTimerManager().SetTimer(
         Handle_Temp,
@@ -1241,6 +1241,11 @@ void ADCharacterPlayer::OnDeath(const AActor* Causer)
 
 void ADCharacterPlayer::HealthChanged(const FOnAttributeChangeData& AttrData)
 {
+    if (PlayerHUD)
+    {
+        PlayerHUD->SetHealth(GetHealthPercent());
+    }
+    
     if (IsDeath())
     {
         if (IsLocallyControlled())
@@ -1267,11 +1272,6 @@ void ADCharacterPlayer::HealthChanged(const FOnAttributeChangeData& AttrData)
             ActiveWeapon->WeaponMesh->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
             ActiveWeapon->WeaponMesh->SetSimulatePhysics(true);
         }
-    }
-
-    if (PlayerHUD)
-    {
-        PlayerHUD->SetHealth(GetHealthPercent());
     }
 
     Super::HealthChanged(AttrData);
@@ -1315,29 +1315,42 @@ void ADCharacterPlayer::ServerUpdateMovingInput_Implementation(const FVector2D& 
 
 void ADCharacterPlayer::ServerUpdateCharacterMesh_Implementation(UCharacterMesh* CharacterMesh)
 {
-    MulticastUpdateCharacterMesh(CharacterMesh);
+    CurrentCharacterMesh = CharacterMesh;
 }
 
-void ADCharacterPlayer::MulticastUpdateCharacterMesh_Implementation(UCharacterMesh* CharacterMesh)
+void ADCharacterPlayer::OnRep_CharacterMesh()
 {
-    if (GetLocalRole() != ROLE_Authority || GetNetMode() == NM_Standalone)
-    {
-        ProcessUpdateCharacterMesh(CharacterMesh);
-    }
+    SetCharacterMesh(CurrentCharacterMesh);
 }
 
-void ADCharacterPlayer::ProcessUpdateCharacterMesh(UCharacterMesh* CharacterMesh)
+void ADCharacterPlayer::SetCharacterMesh(UCharacterMesh* CharacterMesh)
 {
-    GetMesh()->SetSkeletalMesh(CharacterMesh->MasterMesh);
+    CurrentCharacterMesh = CharacterMesh;
 
-    for (USkeletalMesh* SKMesh : CharacterMesh->SlaveMeshs)
+    ENetMode NetMode = GetNetMode();
+    if (NetMode == NM_Client || NetMode == NM_Standalone)
     {
-        USkeletalMeshComponent* SKComponent = NewObject<USkeletalMeshComponent>(this);
-        SKComponent->RegisterComponent();
-        SKComponent->SetSkeletalMesh(SKMesh);
-        SKComponent->SetAnimClass(SlaveMeshAnimBPClass);
-        SKComponent->SetAnimationMode(EAnimationMode::AnimationBlueprint);
-        SKComponent->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform);
+        GetMesh()->SetSkeletalMesh(CurrentCharacterMesh->MasterMesh);
+
+        for (auto Iterator = GetMesh()->GetAttachChildren().CreateConstIterator(); Iterator; ++Iterator)
+        {
+            USceneComponent* const Child = *Iterator;
+            if (Child && Child->ComponentHasTag(SKIN_COMP_NAME))
+            {
+                Child->DestroyComponent();
+            }
+        }
+        
+        for (USkeletalMesh* SKMesh : CurrentCharacterMesh->SlaveMeshs)
+        {
+            USkeletalMeshComponent* SKComponent = NewObject<USkeletalMeshComponent>(this);
+            SKComponent->RegisterComponent();
+            SKComponent->SetSkeletalMesh(SKMesh);
+            SKComponent->SetAnimClass(SlaveMeshAnimBPClass);
+            SKComponent->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+            SKComponent->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform);
+            SKComponent->ComponentTags.Add(SKIN_COMP_NAME);
+        }
     }
 }
 
@@ -1542,6 +1555,11 @@ void ADCharacterPlayer::SetMouseInputScale(int32 Value)
 {
     BaseTurnRate = FMath::Min(BaseTurnRate + Value * 3, MAX_MOUSE_SENSITIVITY);
     BaseLookUpRate = FMath::Min(BaseLookUpRate + Value * 3, MAX_MOUSE_SENSITIVITY);
+}
+
+void ADCharacterPlayer::BP_SetCharacterMesh(UCharacterMesh* CharacterMesh)
+{
+    ServerUpdateCharacterMesh(CharacterMesh);
 }
 
 void ADCharacterPlayer::DoAddMiniMapTips(TArray<FMiniMapData>& Data, const TArray<AActor*>& ScanActors)
