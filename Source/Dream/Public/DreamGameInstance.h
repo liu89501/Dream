@@ -10,6 +10,9 @@
 #include "Engine/GameInstance.h"
 #include "DreamGameInstance.generated.h"
 
+
+class UTaskDataAsset;
+
 /**
  *
  */
@@ -44,7 +47,7 @@ public:
 	TMap<TEnumAsByte<EPhysicalSurface>, FSurfaceImpactEffect> SurfaceImpactEffects;
 	
 	const FSurfaceImpactEffect& GetSurfaceImpactEffect(EPhysicalSurface SurfaceType);
-	
+
 protected:
 
 	virtual void Init() override;
@@ -56,13 +59,6 @@ protected:
 
 	UFUNCTION()
     virtual void OnPostLoadMap(UWorld* LoadedWorld);
-
-#if WITH_EDITORONLY_DATA
-
-	UFUNCTION(Exec)
-	void TestSocketSend();
-
-#endif
 
 private:
 

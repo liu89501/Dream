@@ -416,9 +416,9 @@ protected:
 
 	void SprintMoveSpeedChange(bool bNewSprint);
 
-	void OnInitPlayer(const FPlayerInfo& PlayerInfo, const FString& ErrorMessage);
+	void OnInitPlayer(const FPlayerInfo& PlayerInfo, bool bSuccess);
 
-	void OnPlayerExperienceChanged(int32 MaxExp, int32 CrtExp, int32 NewLevel);
+	void OnPlayerPropertiesChanged(const FPlayerProperties& Properties);
 
 	/** 属性相关 */
 	void AdditiveAttributes(const FEquipmentAttributes& Attributes);
@@ -534,7 +534,9 @@ private:
 	FTimerHandle Handle_Reload;
 	FTimerHandle Handle_Equip;
 
-	FDelegateHandle Handle_Exp;
+	FDelegateHandle Handle_Properties;
+
+	FDelegateHandle Handle_PlayerInfo;
 
 	/* 记录进入战斗状态的次数 */
 	FThreadSafeCounter CombatStatusCounter;

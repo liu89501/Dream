@@ -11,22 +11,22 @@ UPDSAsync_PayItem* UPDSAsync_PayItem::PDI_BuyItem(UObject* WorldContextObject, i
 	return PDSPI;
 }
 
-void UPDSAsync_PayItem::OnLoadCompleted(const FString& ErrorMessage) const
+void UPDSAsync_PayItem::OnLoadCompleted(bool bSuccess) const
 {
-	if (ErrorMessage.IsEmpty())
+	FPDIStatic::Get()->RemoveOnBuyItem(Handle);
+	if (bSuccess)
 	{
-		OnSuccess.Broadcast(ErrorMessage);
+		OnSuccess.Broadcast();
 	}
 	else
 	{
-		OnFailure.Broadcast(ErrorMessage);
+		OnFailure.Broadcast();
 	}
 }
 
 void UPDSAsync_PayItem::Activate()
 {
-	FCommonCompleteNotify Delegate;
-	Delegate.BindUObject(this, &UPDSAsync_PayItem::OnLoadCompleted);
-	FPlayerDataInterfaceStatic::Get()->PayItem(T_StoreId, T_ItemId, Delegate);
+	Handle = FPDIStatic::Get()->AddOnBuyItem(FOnCompleted::FDelegate::CreateUObject(this, &UPDSAsync_PayItem::OnLoadCompleted));
+	FPDIStatic::Get()->PayItem(FBuyItemParam(T_StoreId, T_ItemId));
 }
 

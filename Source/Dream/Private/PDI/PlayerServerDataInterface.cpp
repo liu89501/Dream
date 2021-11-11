@@ -1,35 +1,76 @@
 ﻿// ReSharper disable All
-#include "PDI/PlayerServerDataInterface.h"
+#include "PlayerServerDataInterface.h"
+
+#include "DreamGameInstance.h"
 #include "OnlineIdentityInterface.h"
 #include "JsonUtilities.h"
 #include "JsonWriter.h"
 #include "HttpModule.h"
 #include "IHttpResponse.h"
 #include "OnlineSubsystem.h"
+#include "PlayerDataInterfaceStatic.h"
 #include "SocketSubsystem.h"
 
 #define LOCTEXT_NAMESPACE "FPlayerServerDataInterface"
 
-void FPlayerServerDataInterface::AddPlayerRewards(UItemData* Rewards, FCommonCompleteNotify Delegate)
+FPlayerServerDataInterface::FPlayerServerDataInterface()
 {
+	CALLBACK_BINDING_RAW(TService_PlayerInfo::MarkId, this, &FPlayerServerDataInterface::OnReceivePlayerInformation);
+	CALLBACK_BINDING_RAW(TService_AddRewards::MarkId, this, &FPlayerServerDataInterface::OnReceiveAddPlayerRewards);
+	CALLBACK_BINDING_RAW(TService_EquipWeapon::MarkId, this, &FPlayerServerDataInterface::OnReceiveEquipWeapon);
+	CALLBACK_BINDING_RAW(TService_EquipModule::MarkId, this, &FPlayerServerDataInterface::OnReceiveEquipModule);
+	CALLBACK_BINDING_RAW(TService_LearningTalents::MarkId, this, &FPlayerServerDataInterface::OnReceiveLearningTalents);
+	CALLBACK_BINDING_RAW(TService_GetStoreItems::MarkId, this, &FPlayerServerDataInterface::OnReceiveGetStoreItems);
+	CALLBACK_BINDING_RAW(TService_PayItem::MarkId, this, &FPlayerServerDataInterface::OnReceivePayItem);
+	CALLBACK_BINDING_RAW(TService_GetTalents::MarkId, this, &FPlayerServerDataInterface::OnReceiveGetTalents);
+	CALLBACK_BINDING_RAW(TService_GetTasks::MarkId, this, &FPlayerServerDataInterface::OnReceiveGetTasks);
+	CALLBACK_BINDING_RAW(TService_DeliverTask::MarkId, this, &FPlayerServerDataInterface::OnReceiveDeliverTask);
+	CALLBACK_BINDING_RAW(TService_AcceptTask::MarkId, this, &FPlayerServerDataInterface::OnReceiveAcceptTask);
+	CALLBACK_BINDING_RAW(TService_UpdateTaskState::MarkId, this, &FPlayerServerDataInterface::OnReceiveUpdateTaskState);
+	CALLBACK_BINDING_RAW(TService_ModifyTrackingState::MarkId, this, &FPlayerServerDataInterface::OnReceiveModifyTrackingState);
 }
 
-void FPlayerServerDataInterface::DeliverTask(const int64& TaskId, FTaskRewardDelegate Delegate)
+void FPlayerServerDataInterface::Initialize()
 {
-	
+	FPlayerDataInterfaceBase::Initialize();
+
+	BroadcastOnInitialize(true);
 }
 
-void FPlayerServerDataInterface::AcceptTask(const int64& TaskId, FCommonCompleteNotify Delegate)
+void FPlayerServerDataInterface::AddPlayerRewards(const FItemDataHandle& Rewards)
 {
+	SocketSender->Send(PDIBuildParam<TService_AddRewards>(Rewards));
+}
+
+void FPlayerServerDataInterface::DeliverTask(int32 TaskId)
+{
+	SocketSender->Send(PDIBuildParam<TService_DeliverTask>(TaskId));
+}
+
+void FPlayerServerDataInterface::AcceptTask(const FAcceptTaskParam& Param)
+{
+	SocketSender->Send(PDIBuildParam<TService_AcceptTask>(Param));
 }
 
 void FPlayerServerDataInterface::UpdateTaskState(const FQuestActionHandle& Handle)
 {
+	
+	// todo 更新任务进度状态
 }
 
-void FPlayerServerDataInterface::ModifyTrackingState(const int64& TaskId, bool bTracking,
-	FCommonCompleteNotify Delegate)
+void FPlayerServerDataInterface::ModifyTrackingState(const FModifyTrackingParam& Param)
 {
+	SocketSender->Send(PDIBuildParam<TService_ModifyTrackingState>(Param));
+}
+
+void FPlayerServerDataInterface::AddTaskConditionStateChangeDelegate(int32 TaskId, FOnTaskConditionStateChange Delegate)
+{
+	Delegates.Add(TaskId, Delegate);
+}
+
+void FPlayerServerDataInterface::RemoveTaskConditionStateChangeDelegate(int32 TaskId)
+{
+	Delegates.Remove(TaskId);
 }
 
 const FPlayerProperties& FPlayerServerDataInterface::GetCachedProperties() const
@@ -37,262 +78,238 @@ const FPlayerProperties& FPlayerServerDataInterface::GetCachedProperties() const
 	return CachedProperties;
 }
 
-void FPlayerServerDataInterface::RefreshPlayerProperties()
+void FPlayerServerDataInterface::EquipModule(const FEquipModuleParam& Param)
 {
+	SocketSender->Send(PDIBuildParam<TService_EquipModule>(Param));
 }
 
-void FPlayerServerDataInterface::EquipModule(int64 ModuleId, EModuleCategory ModuleCategory, FCommonCompleteNotify Delegate)
+void FPlayerServerDataInterface::LearningTalents(const TArray<int32>& TalentIdArray)
 {
+	SocketSender->Send(PDIBuildParam<TService_LearningTalents>(TalentIdArray));
 }
 
-void FPlayerServerDataInterface::LearningTalent(int32 TalentId, FCommonCompleteNotify Delegate)
+void FPlayerServerDataInterface::EquipWeapon(const FEquipWeaponParam& Param)
 {
+	SocketSender->Send(PDIBuildParam<TService_EquipWeapon>(Param));
 }
 
-void FPlayerServerDataInterface::LearningTalents(const TArray<int32>& TalentIdArray, FCommonCompleteNotify Delegate)
+void FPlayerServerDataInterface::GetStoreItems(int32 StoreId)
 {
+	SocketSender->Send(PDIBuildParam<TService_GetStoreItems>(StoreId));
 }
 
-void FPlayerServerDataInterface::EquipWeapon(int64 WeaponId, int32 EquipmentIndex, FCommonCompleteNotify Delegate)
+void FPlayerServerDataInterface::PayItem(const FBuyItemParam& Param)
 {
-	FHttpRequestRef Request = MakePostRequest(TEXT("/player/weapon/switch"));
-	Request->SetContentAsString(FString::Printf(TEXT("{\"weaponId\":%d,\"equipmentIndex\":%d}"), WeaponId, EquipmentIndex));
-	Request->OnProcessRequestComplete().BindRaw(this, &FPlayerServerDataInterface::OnSwitchWeaponCompleteTrigger, Delegate);
-	if (!Request->ProcessRequest())
-	{
-		Delegate.ExecuteIfBound(MSG_ERROR);
-	}
+	SocketSender->Send(PDIBuildParam<TService_PayItem>(Param));
 }
 
-void FPlayerServerDataInterface::GetStoreItems(int32 StoreId, FGetStoreItemsComplete Delegate)
+void FPlayerServerDataInterface::GetPlayerInfo(EGetEquipmentCondition Condition)
 {
-	FHttpRequestRef Request = MakeGetRequest(FString::Printf(TEXT("/player/storeItems/%d"), StoreId));
-	Request->OnProcessRequestComplete().BindRaw(this, &FPlayerServerDataInterface::OnGetStoreItemsCompleteTrigger, Delegate);
-	/*if (!Request->ProcessRequest())
-	{
-		Delegate.ExecuteIfBound(Empty, MSG_ERROR);
-	}*/
+	SocketSender->Send(PDIBuildParam<TService_PlayerInfo>(Condition));
 }
 
-void FPlayerServerDataInterface::PayItem(int32 StoreId, int64 ItemId, FCommonCompleteNotify Delegate)
+void FPlayerServerDataInterface::GetTalents(ETalentCategory TalentCategory)
 {
-	FHttpRequestRef Request = MakeGetRequest(FString::Printf(TEXT("/player/payItem/%d"), ItemId));
-	Request->OnProcessRequestComplete().BindRaw(this, &FPlayerServerDataInterface::OnPayItemCompleteTrigger, Delegate);
-	if (!Request->ProcessRequest())
-	{
-		Delegate.ExecuteIfBound(MSG_ERROR);
-	}
+	SocketSender->Send(PDIBuildParam<TService_GetTalents>(TalentCategory));
 }
 
-void FPlayerServerDataInterface::GetPlayerWeapons(EGetEquipmentCondition Condition, FGetWeaponComplete Delegate)
+void FPlayerServerDataInterface::GetTasks(const FSearchTaskParam& Param)
 {
-	FString URL(Condition == EGetEquipmentCondition::Equipped ? TEXT("/player/weapon") : TEXT("/player/weapon/equipped"));
-
-	FHttpRequestRef Request = MakeGetRequest(URL);
-	Request->OnProcessRequestComplete().BindRaw(this, &FPlayerServerDataInterface::OnGetWeaponCompleteTrigger, Delegate);
-	if (!Request->ProcessRequest())
-	{
-		TArray<FPlayerWeapon> Empty;
-		Delegate.ExecuteIfBound(Empty, MSG_ERROR);
-	}
+	SocketSender->Send(PDIBuildParam<TService_GetTasks>(Param));
 }
 
-void FPlayerServerDataInterface::GetPlayerInfo(EGetEquipmentCondition Condition, FGetPlayerInfoComplete Delegate)
+void FPlayerServerDataInterface::OnReceivePlayerInformation(FPacketArchiveReader& Reader)
 {
-	FHttpRequestRef Request = MakeGetRequest(TEXT("/player/info"));
-	Request->OnProcessRequestComplete().BindRaw(this, &FPlayerServerDataInterface::OnGetPlayerInfoCompleteTrigger, Delegate);
-	if (!Request->ProcessRequest())
-	{
-		FPlayerInfo PlayerInfo;
-		Delegate.ExecuteIfBound(PlayerInfo, MSG_ERROR);
-	}
-}
-
-void FPlayerServerDataInterface::GetTalents(EPDTalentCategory::Type TalentCategory, FGetTalentsComplete Delegate)
-{
-	
-}
-
-void FPlayerServerDataInterface::GetPlayerProperties(FGetPlayerPropertiesDelegate Delegate)
-{
-}
-
-void FPlayerServerDataInterface::GetTasks(EGetTaskCondition Condition, FGetTasksDelegate Delegate)
-{
-}
-
-void FPlayerServerDataInterface::OnGetWeaponCompleteTrigger(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully, FGetWeaponComplete Delegate)
-{
-	TArray<FPlayerWeapon> Weapons;
-	FString ErrorMessage;
-
-	if (bConnectedSuccessfully)
-	{
-		FString ResponseContent = Response->GetContentAsString();
-		
-		TSharedPtr<FJsonObject> Object;
-		TSharedRef< TJsonReader<> > Reader = TJsonReaderFactory<>::Create(ResponseContent);
-		if (FJsonSerializer::Deserialize(Reader, Object))
-		{
-			if (Object->GetBoolField(TEXT("status")))
-			{
-				const TArray<TSharedPtr<FJsonValue>>& WeaponData = Object->GetArrayField(TEXT("data"));
-				FJsonObjectConverter::JsonArrayToUStruct<FPlayerWeapon>(WeaponData, &Weapons, 0, 0);
-			}
-			else
-			{
-				ErrorMessage = Object->GetStringField(TEXT("msg"));
-			}
-		}
-		else
-		{
-			ErrorMessage = TEXT("Json 解析失败");
-		}
-	}
-	else
-	{
-		ErrorMessage = TEXT("连接异常");
-	}
-
-	if (!ErrorMessage.IsEmpty())
-	{
-		UE_LOG_ONLINE(Error, TEXT("武器获取接口异常: %s"), *ErrorMessage);
-	}
-
-	Delegate.ExecuteIfBound(Weapons, ErrorMessage);
-}
-
-void FPlayerServerDataInterface::OnGetPlayerInfoCompleteTrigger(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully, FGetPlayerInfoComplete Delegate)
-{
+	bool bSuccess;
 	FPlayerInfo PlayerInfo;
-	FString ErrorMessage;
+	Reader << bSuccess;
 
-	if (bConnectedSuccessfully)
+	if (bSuccess)
 	{
-		TSharedPtr<FJsonObject> Object;
+		Reader << PlayerInfo;
 
-		FString ContentString = Response->GetContentAsString();
-		TSharedRef< TJsonReader<> > Reader = TJsonReaderFactory<>::Create(ContentString);
-		if (FJsonSerializer::Deserialize(Reader, Object))
+		CachedProperties = PlayerInfo.Properties;
+	}
+
+	BroadcastOnGetPlayerInfo(PlayerInfo, bSuccess);
+}
+
+void FPlayerServerDataInterface::OnReceiveEquipWeapon(FPacketArchiveReader& Reader)
+{
+	bool bSuccess;
+	Reader << bSuccess;
+	BroadcastOnEquipWeapon(bSuccess);
+}
+
+void FPlayerServerDataInterface::OnReceiveEquipModule(FPacketArchiveReader& Reader)
+{
+	bool bSuccess;
+	Reader << bSuccess;
+	BroadcastOnEquipModule(bSuccess);
+}
+
+void FPlayerServerDataInterface::OnReceiveLearningTalents(FPacketArchiveReader& Reader)
+{
+	bool bSuccess;
+	Reader << bSuccess;
+	BroadcastOnLearnTalents(bSuccess);
+}
+
+void FPlayerServerDataInterface::OnReceiveGetStoreItems(FPacketArchiveReader& Reader)
+{
+	bool bSuccess;
+	FStoreInformation Information;
+	
+	Reader << bSuccess;
+	if (bSuccess)
+	{
+		Reader << Information;
+	}
+	BroadcastOnGetStoreItems(Information, bSuccess);
+}
+
+void FPlayerServerDataInterface::OnReceivePayItem(FPacketArchiveReader& Reader)
+{
+	bool bSuccess;
+	Reader << bSuccess;
+	BroadcastOnBuyItem(bSuccess);
+}
+
+void FPlayerServerDataInterface::OnReceiveAddPlayerRewards(FPacketArchiveReader& Reader)
+{
+	bool bSuccess;
+	Reader << bSuccess;
+	
+	BroadcastOnAddPlayerRewards(bSuccess);
+}
+
+void FPlayerServerDataInterface::OnReceiveGetTalents(FPacketArchiveReader& Reader)
+{
+	bool bSuccess;
+	TArray<FTalentInfo> Talents;
+	
+	Reader << bSuccess;
+	if (bSuccess)
+	{
+		Reader << Talents;
+	}
+	
+	BroadcastOnGetTalents(Talents, bSuccess);
+}
+
+void FPlayerServerDataInterface::OnReceiveGetTasks(FPacketArchiveReader& Reader)
+{
+	bool bSuccess;
+	TArray<FTaskInformation> TaskInformations;
+	
+	Reader << bSuccess;
+	if (bSuccess)
+	{
+		EGetTaskCondition Condition;
+		Reader << Condition;
+		
+		int32 TaskGroupId;
+		Reader << TaskGroupId;
+
+		UTaskDataAsset* TaskDataAsset = FPDIStatic::GetTaskDataAsset();
+
+		if (Condition == EGetTaskCondition::NotAccept)
 		{
-			if (Object->GetBoolField(TEXT("status")))
+			TSet<int32> AcceptTaskId;
+			Reader << AcceptTaskId;
+
+			for (const FTaskInformation& Information : TaskDataAsset->Tasks)
 			{
-				UE_LOG_ONLINE(Log, TEXT("玩家信息接口: %s"), *ContentString);
-				const TSharedPtr<FJsonObject>& Data = Object->GetObjectField(TEXT("data"));
-				FJsonObjectConverter::JsonObjectToUStruct(Data.ToSharedRef(), &PlayerInfo);
-			}
-			else
-			{
-				ErrorMessage = Object->GetStringField(TEXT("msg"));
+				if (AcceptTaskId.Contains(Information.TaskId))
+				{
+					continue;
+				}
+
+				FTaskInformation Duplicted(Information);
+				
+				Duplicted.CompleteCondition = NewObject<UDQuestCondition>(GetTransientPackage(),
+					Information.CompleteCondition->GetClass(), NAME_None, RF_NoFlags, Information.CompleteCondition);
+				
+				Duplicted.CompletedReward = NewObject<UItemData>(GetTransientPackage(),
+					Information.CompletedReward->GetClass(), NAME_None, RF_NoFlags, Information.CompletedReward);
+				
+				TaskInformations.Add(Duplicted);
 			}
 		}
 		else
 		{
-			ErrorMessage = TEXT("玩家信息获取接口Json解析失败");
-		}
-	}
-	else
-	{
-		ErrorMessage = TEXT("GetPlayerInfo 接口连接异常");
-	}
+			TArray<FNetTaskInformation> NetTaskInformations;
+			Reader << NetTaskInformations;
 
-	if (!ErrorMessage.IsEmpty())
-	{
-		UE_LOG_ONLINE(Error, TEXT("玩家信息接口异常: %s"), *ErrorMessage);
-	}
-
-	Delegate.ExecuteIfBound(PlayerInfo, ErrorMessage);
-}
-
-void FPlayerServerDataInterface::OnAddItemCompleteTrigger(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully)
-{
-
-}
-
-void FPlayerServerDataInterface::OnPayItemCompleteTrigger(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully, FCommonCompleteNotify Delegate)
-{
-	FString ErrorMessage;
-	bool bSuccessfully = bConnectedSuccessfully;
-	if (bSuccessfully)
-	{
-		TSharedPtr<FJsonObject> Object;
-		TSharedRef< TJsonReader<> > Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
-		bSuccessfully = FJsonSerializer::Deserialize(Reader, Object);
-
-		if (bSuccessfully)
-		{
-			bSuccessfully = Object->GetBoolField(TEXT("status"));
-			if (!bSuccessfully)
+			for (const FNetTaskInformation& AcceptTask : NetTaskInformations)
 			{
-				ErrorMessage = Object->GetStringField(TEXT("msg"));
-				UE_LOG_ONLINE(Error, TEXT("购买物品接口错误: %s"), *ErrorMessage);
-			}
-		}
-	}
+				FTaskInformation TaskInformation;
+				
+				if (TaskDataAsset->GetInformationByTaskId(AcceptTask.TaskId, TaskInformation))
+				{
+					TaskInformation.bTracking = AcceptTask.bTracking;
+					TaskInformation.TaskMark = AcceptTask.TaskMark;
+					TaskInformation.CompleteCondition->CurrentValue = AcceptTask.ProgressCurrentVal;
 
-	Delegate.ExecuteIfBound(ErrorMessage);
-}
-
-void FPlayerServerDataInterface::OnGetStoreItemsCompleteTrigger(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully, FGetStoreItemsComplete Delegate)
-{
-	FString ErrorMessage;
-	//TArray<FDItemInfo> Items;
-	bool bSuccessfully = bConnectedSuccessfully;
-	if (bSuccessfully)
-	{
-		TSharedPtr<FJsonObject> Object;
-		TSharedRef< TJsonReader<> > Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
-		bSuccessfully = FJsonSerializer::Deserialize(Reader, Object);
-
-		if (bSuccessfully)
-		{
-			bSuccessfully = Object->GetBoolField(TEXT("status"));
-			if (bSuccessfully)
-			{
-				const TArray<TSharedPtr<FJsonValue>>& JsonValues = Object->GetArrayField(TEXT("data"));
-				//FJsonObjectConverter::JsonArrayToUStruct<FDItemInfo>(JsonValues, &Items, 0, 0);
-			}
-			else
-			{
-				ErrorMessage = Object->GetStringField(TEXT("msg"));
-				UE_LOG_ONLINE(Error, TEXT("商店物品获取接口错误: %s"), *ErrorMessage);
+					TaskInformation.CompleteCondition = NewObject<UDQuestCondition>(GetTransientPackage(),
+						TaskInformation.CompleteCondition->GetClass(), NAME_None, RF_NoFlags, TaskInformation.CompleteCondition);
+				
+					TaskInformation.CompletedReward = NewObject<UItemData>(GetTransientPackage(),
+                        TaskInformation.CompletedReward->GetClass(), NAME_None, RF_NoFlags, TaskInformation.CompletedReward);
+					
+					TaskInformations.Add(TaskInformation);
+				}
 			}
 		}
 	}
 	
-	//Delegate.ExecuteIfBound(Items, ErrorMessage);
+	BroadcastOnGetTasks(TaskInformations, bSuccess);
 }
 
-void FPlayerServerDataInterface::OnSwitchWeaponCompleteTrigger(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully, FCommonCompleteNotify Delegate)
+void FPlayerServerDataInterface::OnReceiveDeliverTask(FPacketArchiveReader& Reader)
 {
-	FString ErrorMessage;
-	if (bConnectedSuccessfully)
+	bool bSuccess;
+	FItemDataHandle ItemData;
+	
+	Reader << bSuccess;
+	if (bSuccess)
 	{
-		TSharedPtr<FJsonObject> Object;
-		TSharedRef<TJsonReader<TCHAR>> Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
-		if (FJsonSerializer::Deserialize(Reader, Object))
-		{
-			if (!Object->GetBoolField(TEXT("status")))
-			{
-				ErrorMessage = Object->GetStringField(TEXT("msg"));
-			}
-		}
-		else
-		{
-			ErrorMessage = TEXT("Json解析失败");
-		}
+		Reader << ItemData;
 	}
-	else
-	{
-		ErrorMessage = TEXT("连接失败");
-	}
+	
+	BroadcastOnDeliverTask(ItemData.Get(),bSuccess);
+}
 
-	if (!ErrorMessage.IsEmpty())
-	{
-		UE_LOG_ONLINE(Error, TEXT("武器更换失败: %s"), *ErrorMessage);
-	}
+void FPlayerServerDataInterface::OnReceiveAcceptTask(FPacketArchiveReader& Reader)
+{
+	bool bSuccess;
+	Reader << bSuccess;
+	BroadcastOnAcceptTask(bSuccess);
+}
 
-	Delegate.ExecuteIfBound(ErrorMessage);
+void FPlayerServerDataInterface::OnReceiveUpdateTaskState(FPacketArchiveReader& Reader)
+{
+	
+}
+
+void FPlayerServerDataInterface::OnReceiveModifyTrackingState(FPacketArchiveReader& Reader)
+{
+	bool bSuccess;
+	Reader << bSuccess;
+	BroadcastOnModifyTaskTracking(bSuccess);
+}
+
+void FPlayerServerDataInterface::OnReceivePropertiesChange(FPacketArchiveReader& Reader)
+{
+	bool bSuccess;
+	Reader << bSuccess;
+
+	if (bSuccess)
+	{
+		Reader << CachedProperties;
+
+		GetPlayerDataDelegate().OnPropertiesChange.Broadcast(CachedProperties);
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

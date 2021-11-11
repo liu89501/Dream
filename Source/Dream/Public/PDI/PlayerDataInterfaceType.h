@@ -4,6 +4,8 @@
 
 #include "CoreMinimal.h"
 #include "DModuleBase.h"
+#include "ShootWeapon.h"
+
 #include "PlayerDataInterfaceType.generated.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogPDS, Log, All);
@@ -20,15 +22,12 @@ namespace EServerState
 }
 
 UENUM(BlueprintType)
-namespace EPDTalentCategory
+enum class ETalentCategory : uint8
 {
-	enum Type
-	{
-		SniperExpert,
-        BlastingGrandmaster,
-        Warrior
-    };
-}
+	SniperExpert,
+    BlastingGrandmaster,
+    Warrior
+};
 
 /*
  * 获取玩家信息时 相关的装备是获取已装备在身上的还是其他的
@@ -36,10 +35,9 @@ namespace EPDTalentCategory
 UENUM(BlueprintType)
 enum class EGetTaskCondition : uint8
 {
-	All,
+	NotAccept,
 	UnSubmit,
-	Submitted,
-	NotAccept
+	Submitted
 };
 
 /*
@@ -160,6 +158,18 @@ class DREAM_API UDQuestCondition : public UObject
 	
 public:
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=Condition)
+	int32 TargetValue;
+
+	UPROPERTY()
+	int32 CurrentValue;
+
+	UDQuestCondition()
+		: TargetValue(0),
+		  CurrentValue(0)
+	{
+	}
+
 	UFUNCTION(BlueprintPure, Meta = (DisplayName="GetProgressPercent", ScriptName="GetProgressPercent"), Category=QuestCondition)
     float BP_GetQuestProgressPercent() const;
 
@@ -179,64 +189,67 @@ class DREAM_API UDQuestCondition_KillTarget : public UDQuestCondition
 	
 public:
 
-	UDQuestCondition_KillTarget()
-		: CurrentKilled(0)
-	{
-	}
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	int32 KillNum;
-
-	UPROPERTY()
-	int32 CurrentKilled;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=Condition)
 	TSubclassOf<AActor> TargetType;
 
 	virtual bool UpdateCondition(const FQuestActionHandle& Handle) override;
-
-	virtual float GetQuestProgressPercent() const override;
-
-	virtual bool IsCompleted() const override;
 
 	virtual void SerializeItemData(FArchive& Ar) override;
 	
 };
 
-USTRUCT()
+USTRUCT(BlueprintType)
 struct FQuestConditionHandle
 {
 	GENERATED_BODY()
 
-	FQuestConditionHandle() : QuestCondition(nullptr), ConditionClass(nullptr)
+	FQuestConditionHandle() : QuestCondition(nullptr)
 	{
 	}
 
 	explicit FQuestConditionHandle(UDQuestCondition* InCondition)
-        : QuestCondition(InCondition), ConditionClass(InCondition->GetClass())
+        : QuestCondition(InCondition)
 	{
+		if (InCondition)
+		{
+			ConditionClass = InCondition->GetClass()->GetPathName();
+		}
 	}
 
-	bool Serialize(FArchive& Ar);
+	friend FArchive& operator<<(FArchive& Ar, FQuestConditionHandle& A)
+	{
+		Ar << A.ConditionClass;
+	
+		if (Ar.IsLoading())
+		{
+			if (A.QuestCondition == nullptr)
+			{
+				if (UClass* Class = LoadClass<UDQuestCondition>(nullptr, *A.ConditionClass))
+				{
+					A.QuestCondition = NewObject<UDQuestCondition>(GetTransientPackage(), Class);
+				}
+			}
+		}
+
+		if (A.QuestCondition)
+		{
+			A.QuestCondition->SerializeItemData(Ar);
+		}
+		return Ar;
+	}
+
+	UDQuestCondition* operator->() const
+	{
+		return QuestCondition;
+	}
 
 	UDQuestCondition* Get() const;
 
-private:
-
-	UPROPERTY()
+	UPROPERTY(BlueprintReadOnly)
 	UDQuestCondition* QuestCondition;
 
 	UPROPERTY()
-	UClass* ConditionClass;
-};
-
-template<>
-struct TStructOpsTypeTraits< FQuestConditionHandle > : TStructOpsTypeTraitsBase2< FQuestConditionHandle >
-{
-	enum
-	{
-		WithSerializer = true,
-    };
+	FString ConditionClass;
 };
 
 
@@ -249,6 +262,15 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category=ItemData)
 	int64 ItemId;
+
+	/** 序列化时标识一下具体序列化的是什么数据 */
+	uint8 SerializeMark;
+	
+	int32 PlayerId;
+
+	UItemData() : ItemId(0), SerializeMark(0), PlayerId(0)
+	{
+	}
 
 	// 如果要做服务器版本的 这里应该需要加一个唯一ID --- 现在先不考虑。
 	//FString UniqueNetId;
@@ -312,6 +334,11 @@ class DREAM_API UItemDataWeapon : public UItemDataEquipment
 	
 public:
 
+	UItemDataWeapon()
+	{
+		SerializeMark = 1;
+	}
+
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category=ItemData)
 	TSubclassOf<AShootWeapon> WeaponClass;
 
@@ -345,6 +372,11 @@ class DREAM_API UItemDataModule : public UItemDataEquipment
 	
 public:
 
+	UItemDataModule()
+	{
+		SerializeMark = 2;
+	}
+
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category=ItemData)
 	TSubclassOf<UDModuleBase> ModuleClass;
 
@@ -370,7 +402,12 @@ class DREAM_API UItemDataContainer : public UItemData
 {
 	GENERATED_BODY()
 
-	public:
+public:
+
+	UItemDataContainer()
+	{
+		SerializeMark = 3;
+	}
 
 	virtual void SerializeItemData(FArchive& Ar) override;
 
@@ -410,6 +447,11 @@ class DREAM_API UItemDataExperience : public UItemData
 	
 public:
 
+	UItemDataExperience()
+	{
+		SerializeMark = 4;
+	}
+
 	UPROPERTY(EditAnywhere, Category=ItemData)
 	int32 ExperienceAmount;
 
@@ -436,6 +478,11 @@ class DREAM_API UItemDataMoney : public UItemData
 	
 public:
 
+	UItemDataMoney()
+	{
+		SerializeMark = 5;
+	}
+
 	UPROPERTY(EditAnywhere, Category=ItemData)
 	int32 MoneyAmount;
 
@@ -454,42 +501,58 @@ public:
 	}
 };
 
-USTRUCT()
+USTRUCT(BlueprintType)
 struct FItemDataHandle
 {
 	GENERATED_BODY()
 
 public:
 	
-	FItemDataHandle() : ItemData(nullptr), ItemDataClass(nullptr)
+	FItemDataHandle() : ItemData(nullptr)
 	{
 	}
 
-	explicit FItemDataHandle(UItemData* InItemData) : ItemData(InItemData), ItemDataClass(InItemData->GetClass())
+	explicit FItemDataHandle(UItemData* InItemData) :
+		ItemData(InItemData)
 	{
+		if (InItemData)
+		{
+			ItemDataClass = InItemData->GetClass()->GetPathName();
+		}
 	}
 
-	bool Serialize(FArchive& Ar);
+	friend FArchive& operator<<(FArchive& Ar, FItemDataHandle& Value)
+	{
+		Ar << Value.ItemDataClass;
+
+		if (Ar.IsLoading())
+		{
+			if (Value.ItemData == nullptr)
+			{
+				if (UClass* DataClass = LoadClass<UItemData>(nullptr, *Value.ItemDataClass))
+				{
+					Value.ItemData = NewObject<UItemData>(GetTransientPackage(), DataClass);
+				}
+			}
+		}
+
+		if (Value.ItemData)
+		{
+			Value.ItemData->SerializeItemData(Ar);
+		}
+		
+		return Ar;
+	}
 
 	UItemData* Get() const;
 
-private:
-
-	UPROPERTY()
+	UPROPERTY(BlueprintReadOnly)
 	UItemData* ItemData;
 
 	UPROPERTY()
-	UClass* ItemDataClass;
+	FString ItemDataClass;
 };
 
-template<>
-struct TStructOpsTypeTraits< FItemDataHandle > : TStructOpsTypeTraitsBase2< FItemDataHandle >
-{
-	enum
-	{
-		WithSerializer = true,
-    };
-};
 
 struct FItemDataRange
 {
@@ -534,7 +597,7 @@ struct FTaskInformation
 	GENERATED_BODY()
 
 	UPROPERTY(BlueprintReadOnly)
-	int64 TaskId;
+	int32 TaskId;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Meta = (MetaClass = "DQuestDescription"))
 	FSoftObjectPath TaskDescription;
@@ -544,6 +607,9 @@ struct FTaskInformation
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Instanced)
 	UItemData* CompletedReward;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	int32 TaskGroupId;
 
 	UPROPERTY(BlueprintReadOnly)
 	ETaskMark TaskMark;
@@ -555,6 +621,106 @@ struct FTaskInformation
 	{
 		return TaskId;
 	}
+
+	friend FArchive& operator<<(FArchive& Ar, FTaskInformation& A)
+	{
+		Ar << A.TaskId;
+		Ar << A.TaskGroupId;
+		Ar << A.TaskDescription;
+
+		FQuestConditionHandle Condition(A.CompleteCondition);
+		Ar << Condition;
+		A.CompleteCondition = Condition.Get();
+
+		
+		FItemDataHandle Reward(A.CompletedReward);
+		Ar << Reward;
+		A.CompletedReward = Reward.Get();
+		
+		Ar << A.TaskMark;
+		Ar << A.bTracking;
+		return Ar;
+	}
+};
+
+USTRUCT()
+struct FNetTaskInformation
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	int32 TaskId;
+
+	UPROPERTY()
+	ETaskMark TaskMark;
+
+	UPROPERTY()
+	bool bTracking;
+	
+	UPROPERTY()
+	int32 ProgressCurrentVal;
+	
+	UPROPERTY()
+	int32 ProgressTargetVal;
+
+	friend FArchive& operator<<(FArchive& Ar, FNetTaskInformation& A)
+	{
+		Ar << A.TaskId;
+		Ar << A.TaskMark;
+		Ar << A.bTracking;
+		Ar << A.ProgressCurrentVal;
+		Ar << A.ProgressTargetVal;
+		return Ar;
+	}
+
+};
+
+USTRUCT()
+struct FSearchTaskParam
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	EGetTaskCondition Condition;
+
+	UPROPERTY()
+	int32 GroupId;
+
+
+	FSearchTaskParam()
+		: Condition(EGetTaskCondition::NotAccept),
+		  GroupId(0)
+	{
+	}
+
+	FSearchTaskParam(EGetTaskCondition Condition, int32 GroupId)
+		: Condition(Condition),
+		  GroupId(GroupId)
+	{
+	}
+
+	friend FArchive& operator<<(FArchive& Ar, FSearchTaskParam& A)
+	{
+		Ar << A.Condition;
+		Ar << A.GroupId;
+		return Ar;
+	}
+};
+
+UCLASS()
+class UTaskDataAsset : public UDataAsset
+{
+	GENERATED_BODY()
+
+public:
+
+	UPROPERTY(EditAnywhere)
+	TArray<FTaskInformation> Tasks;
+
+	bool GetInformationByTaskId(int32 TaskId, FTaskInformation& Information);
+
+	virtual void PreSave(const ITargetPlatform* TargetPlatform) override;
+	
 };
 
 USTRUCT(BlueprintType)
@@ -576,24 +742,16 @@ struct FTalentInfo
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Meta = ( MetaClass = "DreamGameplayAbility" ))
 	FSoftClassPath TalentClass;
-};
 
-
-USTRUCT(BlueprintType)
-struct FPlayerWeaponAdd
-{
-	GENERATED_USTRUCT_BODY()
-
-public:
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Meta = ( MetaClass = "ShootWeapon" ))
-	FSoftClassPath WeaponClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FString UserId;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FEquipmentAttributes Attributes;
+	friend FArchive& operator<<(FArchive& Ar, FTalentInfo& A)
+	{
+		Ar << A.TalentId;
+		Ar << A.TalentGroupId;
+		Ar << A.TalentIndex;
+		Ar << A.bLearned;
+		Ar << A.TalentClass;
+		return Ar;
+	}
 };
 
 USTRUCT()
@@ -643,6 +801,16 @@ struct FPlayerWeapon
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = WeaponInfo)
 	FEquipmentAttributes Attributes;
+
+	friend FArchive& operator<<(FArchive& Ar, FPlayerWeapon& Weapon)
+	{
+		Ar << Weapon.WeaponId;
+		Ar << Weapon.WeaponClass;
+		Ar << Weapon.bEquipped;
+		Ar << Weapon.Index;
+		Ar << Weapon.Attributes;
+		return Ar;
+	}
 };
 
 USTRUCT(BlueprintType)
@@ -680,15 +848,16 @@ struct FPlayerModule
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	FEquipmentAttributes Attributes;
-};
 
-USTRUCT(BlueprintType)
-struct FPlayerModuleList
-{
-	GENERATED_BODY()
-
-	UPROPERTY(BlueprintReadOnly)
-	TArray<FPlayerModule> Modules;
+	friend FArchive& operator<<(FArchive& Ar, FPlayerModule& Module)
+	{
+		Ar << Module.ModuleId;
+		Ar << Module.ModuleClass;
+		Ar << Module.bEquipped;
+		Ar << Module.Category;
+		Ar << Module.Attributes;
+		return Ar;
+	}
 };
 
 /** 玩家拥有的各种数据 */
@@ -699,7 +868,6 @@ struct FPlayerProperties
 
 	FPlayerProperties()
 		: Money(0),
-		  AvailableTalentPoints(0),
 		  Level(1),
 		  CurrentExperience(0),
 		  MaxExperience(0)
@@ -709,8 +877,6 @@ struct FPlayerProperties
 	UPROPERTY(BlueprintReadOnly, EditAnywhere)
 	int64 Money;
 
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	int32 AvailableTalentPoints;
 	
 	UPROPERTY(BlueprintReadOnly, EditAnywhere)
 	int32 Level;
@@ -720,6 +886,15 @@ struct FPlayerProperties
 
 	UPROPERTY(BlueprintReadOnly)
 	int32 MaxExperience;
+
+	friend FArchive& operator<<(FArchive& Ar, FPlayerProperties& A)
+	{
+		Ar << A.Money;
+		Ar << A.Level;
+		Ar << A.CurrentExperience;
+		Ar << A.MaxExperience;
+		return Ar;
+	}
 };
 
 USTRUCT(BlueprintType)
@@ -741,6 +916,16 @@ struct FPlayerInfo
 
 	UPROPERTY(BlueprintReadOnly)
 	FSoftObjectPath CharacterMesh;
+
+	friend FArchive& operator<<(FArchive& Ar, FPlayerInfo& A)
+	{
+		Ar << A.Properties;
+		Ar << A.Weapons;
+		Ar << A.Modules;
+		Ar << A.Talents;
+		Ar << A.CharacterMesh;
+		return Ar;
+	}
 };
 
 USTRUCT(BlueprintType)
@@ -764,6 +949,14 @@ struct FRunServerParameter
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere)
 	FString ModeName;
+
+	friend FArchive& operator<<(FArchive& Ar, FRunServerParameter& A)
+	{
+		Ar << A.MapAssetPath;
+		Ar << A.MapName;
+		Ar << A.ModeName;
+		return Ar;
+	}
 };
 
 USTRUCT()
@@ -776,6 +969,63 @@ struct FFindServerResult
 
 	UPROPERTY()
 	int32 ServerState;
+
+	friend FArchive& operator<<(FArchive& Ar, FFindServerResult& A)
+	{
+		Ar << A.ServerAddress;
+		Ar << A.ServerAddress;
+		return Ar;
+	}
+};
+
+USTRUCT()
+struct FLaunchNotifyParam
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString ServerId;
+
+	UPROPERTY()
+	int32 ListenPort;
+
+
+	FLaunchNotifyParam()
+		: ListenPort(0)
+	{
+	}
+
+	FLaunchNotifyParam(const FString& ServerId, int32 ListenPort)
+		: ServerId(ServerId),
+		  ListenPort(ListenPort)
+	{
+	}
+
+	friend FArchive& operator<<(FArchive& Ar, FLaunchNotifyParam& A)
+	{
+		Ar << A.ServerId;
+		Ar << A.ListenPort;
+		return Ar;
+	}
+};
+
+USTRUCT()
+struct FLoginParameter
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	FString PlatformName;
+
+	UPROPERTY()
+	FString ThirdPartyUserTicket;
+
+	friend FArchive& operator<<(FArchive& Ar, FLoginParameter& A)
+	{
+		Ar << A.PlatformName;
+		Ar << A.ThirdPartyUserTicket;
+		return Ar;
+	}
 };
 
 USTRUCT()
@@ -791,6 +1041,38 @@ struct FDedicatedServerInformation
 	FString MapName;
 	UPROPERTY()
 	FString GameModeName;
+
+	friend FArchive& operator<<(FArchive& Ar, FDedicatedServerInformation& A)
+	{
+		Ar << A.Port;
+		Ar << A.MaxPlayers;
+		Ar << A.MapName;
+		Ar << A.GameModeName;
+		return Ar;
+	}
+};
+
+USTRUCT()
+struct FUpdateServerPlayerParam
+{
+	GENERATED_BODY()
+
+	FUpdateServerPlayerParam() : bIncrementPlayerNum(false)
+	{
+	}
+	
+	FUpdateServerPlayerParam(bool InIncrementPlayerNum) : bIncrementPlayerNum(InIncrementPlayerNum)
+	{
+	}
+	
+	UPROPERTY()
+	bool bIncrementPlayerNum;
+
+	friend FArchive& operator<<(FArchive& Ar, FUpdateServerPlayerParam& A)
+	{
+		Ar << A.bIncrementPlayerNum;
+		return Ar;
+	}
 };
 
 USTRUCT(BlueprintType)
@@ -799,11 +1081,153 @@ struct FStoreInformation
 	GENERATED_BODY()
 
 	UPROPERTY(BlueprintReadOnly, Category = Item)
-	TArray<UItemData*> Items;
+	TArray<FItemDataHandle> Items;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Item)
-	int64 PlayerMoneyAmount;
+	friend FArchive& operator<<(FArchive& Ar, FStoreInformation& Value)
+	{
+		Ar << Value.Items;
+		return Ar;
+	}
+};
 
+USTRUCT()
+struct FEquipWeaponParam
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	int64 WeaponId;
+	UPROPERTY()
+	int32 EquipmentIndex;
+
+	FEquipWeaponParam()
+		: WeaponId(0),
+          EquipmentIndex(0)
+	{
+	}
+
+	FEquipWeaponParam(int64 WeaponId, int32 EquipmentIndex)
+		: WeaponId(WeaponId),
+		  EquipmentIndex(EquipmentIndex)
+	{
+	}
+
+	friend FArchive& operator<<(FArchive& Ar, FEquipWeaponParam& A)
+	{
+		Ar << A.WeaponId;
+		Ar << A.EquipmentIndex;
+		return Ar;
+	}
+};
+
+USTRUCT()
+struct FEquipModuleParam
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	int64 ModuleId;
+	UPROPERTY()
+	EModuleCategory ModuleCategory;
+
+	FEquipModuleParam()
+		: ModuleId(0),
+          ModuleCategory(EModuleCategory::C1)
+	{
+	}
+
+	FEquipModuleParam(int64 ModuleId, EModuleCategory ModuleCategory)
+		: ModuleId(ModuleId),
+		  ModuleCategory(ModuleCategory)
+	{
+	}
+
+	friend FArchive& operator<<(FArchive& Ar, FEquipModuleParam& A)
+	{
+		Ar << A.ModuleId;
+		Ar << A.ModuleCategory;
+		return Ar;
+	}
+};
+
+USTRUCT()
+struct FBuyItemParam
+{
+	GENERATED_BODY()
+
+
+	FBuyItemParam()
+		: StoreId(0),
+          ItemId(0)
+	{
+	}
+
+	FBuyItemParam(int32 StoreId, int64 ItemId)
+		: StoreId(StoreId),
+		  ItemId(ItemId)
+	{
+	}
+
+	UPROPERTY()
+	int32 StoreId;
+	UPROPERTY()
+	int64 ItemId;
+
+	friend FArchive& operator<<(FArchive& Ar, FBuyItemParam& A)
+	{
+		Ar << A.StoreId;
+		Ar << A.ItemId;
+		return Ar;
+	}
+};
+
+struct FAcceptTaskParam
+{
+
+	int32 TaskId;
+	int32 TaskGroupId;
+	int32 ConditionTargetValue;
+
+	FAcceptTaskParam()
+		: TaskId(0),
+		  TaskGroupId(0),
+		  ConditionTargetValue(0)
+	{
+		
+	}
+
+	FAcceptTaskParam(int32 TaskId, int32 TaskGroupId, int32 InConditionTargetValue)
+		: TaskId(TaskId),
+		  TaskGroupId(TaskGroupId),
+		  ConditionTargetValue(InConditionTargetValue)
+	{
+	}
+
+	friend FArchive& operator<<(FArchive& Ar, FAcceptTaskParam& A)
+	{
+		Ar << A.TaskId;
+		Ar << A.TaskGroupId;
+		Ar << A.ConditionTargetValue;
+		return Ar;
+	}
+};
+
+USTRUCT()
+struct FModifyTrackingParam
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	int32 TaskId;
+	UPROPERTY()
+	bool bTracking;
+
+	friend FArchive& operator<<(FArchive& Ar, FModifyTrackingParam& A)
+	{
+		Ar << A.TaskId;
+		Ar << A.bTracking;
+		return Ar;
+	}
 };
 
 USTRUCT(BlueprintType)
@@ -812,6 +1236,31 @@ struct FMulticastDelegateHandle
 	GENERATED_BODY()
 
 	FDelegateHandle Handle;
-
 };
 
+#if WITH_EDITORONLY_DATA
+
+USTRUCT()
+struct FMyTestSerialize
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	TArray<FLoginParameter> ArrSer;
+
+	UPROPERTY()
+	float IntArr;
+
+	UPROPERTY()
+	TSet<int32> SetTest;
+
+	friend FArchive& operator<<(FArchive& Ar, FMyTestSerialize& A)
+	{
+		Ar << A.SetTest;
+		Ar << A.ArrSer;
+		Ar << A.IntArr;
+		return Ar;
+	}
+};
+
+#endif

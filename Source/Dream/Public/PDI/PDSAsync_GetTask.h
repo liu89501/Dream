@@ -26,10 +26,11 @@ public:
 
 	virtual void Activate() override;
 	
-	void OnCompleted(const TArray<FTaskInformation>& Tasks, const FString& ErrorMessage) const;
+	void OnCompleted(const TArray<FTaskInformation>& Tasks, bool bSuccess) const;
 
 private:
 
 	int32 T_TaskGroupId;
 	EGetTaskCondition T_Condition;
+	FDelegateHandle Handle;
 };

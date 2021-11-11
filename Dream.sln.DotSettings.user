@@ -5,4 +5,5 @@
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=DNPC/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=DNUMBER/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=FAES/@EntryIndexedValue">True</s:Boolean>
+	<s:Boolean x:Key="/Default/UserDictionary/Words/=FTCP/@EntryIndexedValue">True</s:Boolean>
 	<s:Boolean x:Key="/Default/UserDictionary/Words/=LOCTEXT/@EntryIndexedValue">True</s:Boolean></wpf:ResourceDictionary>

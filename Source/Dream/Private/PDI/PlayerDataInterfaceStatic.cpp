@@ -3,13 +3,17 @@
 #include "PDI/PlayerLocalDataInterface.h"
 #include "PDI/PlayerServerDataInterface.h"
 
-FPlayerDataInterface* FPlayerDataInterfaceStatic::Singleton = nullptr;
+FPlayerDataInterface* FPDIStatic::Singleton = nullptr;
+UTaskDataAsset* FPDIStatic::TaskDataAsset = nullptr;
 
-void FPlayerDataInterfaceStatic::Startup()
+void FPDIStatic::Startup()
 {
 	if (Singleton == nullptr)
 	{
-		if (FPlayerDataInterfaceStatic::IsLocalInterface())
+		TaskDataAsset = LoadObject<UTaskDataAsset>(nullptr, TEXT("/Game/Main/Asset/DA_TaskList"));
+		checkf(TaskDataAsset, TEXT("Load TaskDataAsset Failure"));
+		
+		if (FPDIStatic::IsLocalInterface())
 		{
 			Singleton = new FPlayerLocalDataInterface();
 		}
@@ -22,7 +26,7 @@ void FPlayerDataInterfaceStatic::Startup()
 	}
 }
 
-void FPlayerDataInterfaceStatic::Shutdown()
+void FPDIStatic::Shutdown()
 {
 #if WITH_EDITOR
 
@@ -32,21 +36,12 @@ void FPlayerDataInterfaceStatic::Shutdown()
 	}
 
 #endif
-	
-	if (IsRunningDedicatedServer())
-    {
-    	Singleton->UnRegisterServer();
-    }
-    else
-    {
-    	Singleton->Logout();
-    }
 
 	delete Singleton;
 	Singleton = nullptr;
 }
 
-FPlayerDataInterface* FPlayerDataInterfaceStatic::Get()
+FPlayerDataInterface* FPDIStatic::Get()
 {
 	return Singleton;
 }
@@ -58,8 +53,13 @@ bool IsLocal()
 	return PDI.Equals(PDI_LOCAL, ESearchCase::IgnoreCase);
 }
 
-bool FPlayerDataInterfaceStatic::IsLocalInterface()
+bool FPDIStatic::IsLocalInterface()
 {
 	static bool IsLocalPDI = IsLocal();
 	return IsLocalPDI;
+}
+
+UTaskDataAsset* FPDIStatic::GetTaskDataAsset()
+{
+	return TaskDataAsset;
 }

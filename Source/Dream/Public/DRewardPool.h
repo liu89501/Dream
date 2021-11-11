@@ -3,6 +3,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+
+#include "DPlayerState.h"
 #include "Engine/DataAsset.h"
 #include "DRewardPool.generated.h"
 
@@ -53,5 +55,5 @@ public:
 	TArray<FRewardGroup> RewardGroup;
 
 	UFUNCTION(BlueprintCallable)
-	UItemData* GenerateRewards();
+	UItemData* GenerateRewards(ADPlayerState* PlayerState);
 };

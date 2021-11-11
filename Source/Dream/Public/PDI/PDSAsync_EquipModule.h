@@ -27,10 +27,11 @@ public:
 	virtual void Activate() override;
 
 	UFUNCTION()
-	void OnCompleted(const FString& ErrorMessage) const;
+	void OnCompleted(bool bSuccess) const;
 
 private:
 
 	int64 T_ModuleId;
 	EModuleCategory T_Category;
+	FDelegateHandle Handle;
 };

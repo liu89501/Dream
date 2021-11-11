@@ -173,7 +173,7 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 	TArray<AActor*> HostileActors;
 	AIPerception->GetHostileActors(HostileActors);
 
-	if (!FPlayerDataInterfaceStatic::IsLocalInterface())
+	if (!FPDIStatic::IsLocalInterface())
 	{
 		UItemDataContainer* DataContainer = NewObject<UItemDataContainer>();
 		TMap<ADPlayerController*, UItemData*> AllPlayerRewards;
@@ -192,7 +192,7 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 				continue;
 			}
 
-			UItemData* Rewards = RewardPool->GenerateRewards();
+			UItemData* Rewards = RewardPool->GenerateRewards(PlayerController->GetPlayerState<ADPlayerState>());
 			if (Rewards->IsValidData())
 			{
 				AllPlayerRewards.Add(PlayerController, Rewards);
@@ -202,9 +202,10 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 
 		if (DataContainer->IsValidData())
 		{
-			FCommonCompleteNotify Delegate;
-			Delegate.BindUObject(this, &ADEnemyBase::OnRewardsAddCompleted, AllPlayerRewards);
-			FPlayerDataInterfaceStatic::Get()->AddPlayerRewards(DataContainer, Delegate);
+			Handle_Rewards = FPDIStatic::Get()->AddOnAddPlayerRewards(
+				FOnCompleted::FDelegate::CreateUObject(this, &ADEnemyBase::OnRewardsAddCompleted, AllPlayerRewards));
+			
+			FPDIStatic::Get()->AddPlayerRewards(FItemDataHandle(DataContainer));
 		}
 	}
 	else
@@ -224,9 +225,11 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 	SetLifeSpan(3.f);
 }
 
-void ADEnemyBase::OnRewardsAddCompleted(const FString& ErrorMessage, TMap<ADPlayerController*, UItemData*> Rewards)
+void ADEnemyBase::OnRewardsAddCompleted(bool bSuccess, TMap<ADPlayerController*, UItemData*> Rewards) const
 {
-	if (ErrorMessage.IsEmpty())
+	FPDIStatic::Get()->RemoveOnAddPlayerRewards(Handle_Rewards);
+	
+	if (bSuccess)
 	{
 		for (TPair<ADPlayerController*, UItemData*> PlayerReward : Rewards)
 		{

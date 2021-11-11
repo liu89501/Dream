@@ -93,12 +93,12 @@ void UMatchmakingCallProxy::Tick()
 				{
 					State = EMatchmakingState::CREATING_SERVER;
 
-					FRunServerComplete Delegate;
+					/*FRunServerComplete Delegate;
 					Delegate.BindUObject(this, &UMatchmakingCallProxy::OnCreateServerComplete);
 					FRunServerParameter Parameter(T_LevelInformation.Map.GetAssetName(),
-                        T_LevelInformation.GameNodeClassAlias, T_LevelInformation.Map.GetLongPackageName());
+                        T_LevelInformation.GameNodeClassAlias, T_LevelInformation.Map.GetLongPackageName());*/
 			
-					FPlayerDataInterfaceStatic::Get()->RunNewDedicatedServer(Parameter, Delegate);
+					//FPlayerDataInterfaceStatic::Get()->RunNewDedicatedServer(Parameter, Delegate);
 				}
 				WaitStartTime += SESSION_WAIT_TICK_INTERVAL;
 			}
@@ -106,9 +106,9 @@ void UMatchmakingCallProxy::Tick()
 
 		case EMatchmakingState::WAITING_SERVER:
 			{
-				FGetServerComplete Delegate;
-				Delegate.BindUObject(this, &UMatchmakingCallProxy::OnServerReadyComplete);
-				FPlayerDataInterfaceStatic::Get()->GetAvailableDedicatedServer(CreatedServerID, Delegate);
+				//FGetServerComplete Delegate;
+				//Delegate.BindUObject(this, &UMatchmakingCallProxy::OnServerReadyComplete);
+				//FPlayerDataInterfaceStatic::Get()->GetAvailableDedicatedServer(CreatedServerID, Delegate);
 			}
 		break;
 

@@ -16,14 +16,14 @@ UPDSAsync_EquipModule* UPDSAsync_EquipModule::PDI_EquipModule(UObject* WorldCont
 
 void UPDSAsync_EquipModule::Activate()
 {
-	FCommonCompleteNotify Delegate;
-	Delegate.BindUObject(this, &UPDSAsync_EquipModule::OnCompleted);
-	FPlayerDataInterfaceStatic::Get()->EquipModule(T_ModuleId, T_Category, Delegate);
+	Handle = FPDIStatic::Get()->AddOnEquipModule(FOnCompleted::FDelegate::CreateUObject(this, &UPDSAsync_EquipModule::OnCompleted));
+	FPDIStatic::Get()->EquipModule(FEquipModuleParam(T_ModuleId, T_Category));
 }
 
-void UPDSAsync_EquipModule::OnCompleted(const FString& ErrorMessage) const
+void UPDSAsync_EquipModule::OnCompleted(bool bSuccess) const
 {
-	if (ErrorMessage.IsEmpty())
+	FPDIStatic::Get()->RemoveOnEquipModule(Handle);
+	if (bSuccess)
 	{
 		OnSuccess.Broadcast();
 	}

@@ -139,11 +139,11 @@ void ADCharacterPlayer::BeginPlay()
             AbilitySystem->OnAnyGameplayEffectRemovedDelegate().AddUObject(this, &ADCharacterPlayer::OnActiveGameplayEffectRemoved);
         }
 
-        FPlayerDataInterface* PDS = FPlayerDataInterfaceStatic::Get();
-        FGetPlayerInfoComplete Delegate;
-        Delegate.BindUObject(this, &ADCharacterPlayer::OnInitPlayer);
-        PDS->GetPlayerInfo(EGetEquipmentCondition::Equipped, Delegate);
-        Handle_Exp = PDS->GetPlayerDataDelegate().OnExperienceChanged.AddUObject(this, &ADCharacterPlayer::OnPlayerExperienceChanged);
+        FPlayerDataInterface* PDS = FPDIStatic::Get();
+        Handle_PlayerInfo = PDS->AddOnGetPlayerInfo(FOnGetPlayerInfo::FDelegate::CreateUObject(this, &ADCharacterPlayer::OnInitPlayer));
+        Handle_Properties = PDS->GetPlayerDataDelegate().OnPropertiesChange.AddUObject(this, &ADCharacterPlayer::OnPlayerPropertiesChanged);
+
+        PDS->GetPlayerInfo(EGetEquipmentCondition::Equipped);
     }
 
     if (!bIsPreviewCharacter)
@@ -162,7 +162,7 @@ void ADCharacterPlayer::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
     if (IsLocallyControlled())
     {
-        FPlayerDataInterfaceStatic::Get()->GetPlayerDataDelegate().OnExperienceChanged.Remove(Handle_Exp);
+        FPDIStatic::Get()->GetPlayerDataDelegate().OnPropertiesChange.Remove(Handle_Properties);
     }
 }
 
@@ -392,7 +392,7 @@ void ADCharacterPlayer::HandleSwitchWeapon(int32 WeaponIndex)
         ActiveWeapon->SetWeaponEnable(false);
 
         float Duration = PlayMontage(GetCurrentActionMontage()->EquipAnim, nullptr);
-        GetWorldTimerManager().SetTimer(Handle_Equip, FTimerDelegate::CreateUObject(this, &ADCharacterPlayer::SwitchFinished, -1), Duration, false);
+        GetWorldTimerManager().SetTimer(Handle_Equip, FTimerDelegate::CreateUObject(this, &ADCharacterPlayer::SwitchFinished, WeaponIndex), Duration, false);
     }
     else
     {
@@ -832,12 +832,14 @@ void ADCharacterPlayer::SetActiveWeapon(AShootWeapon* NewWeapon)
     }
 }
 
-void ADCharacterPlayer::OnInitPlayer(const FPlayerInfo& PlayerInfo, const FString& ErrorMessage)
+void ADCharacterPlayer::OnInitPlayer(const FPlayerInfo& PlayerInfo, bool bSuccess)
 {
-    if (!ErrorMessage.IsEmpty())
+    FPDIStatic::Get()->RemoveOnGetPlayerInfo(Handle_PlayerInfo);
+    
+    if (!bSuccess)
     {
         DREAM_LOG(Error, TEXT("InitPlayer Failure"));
-        GetPlayerController()->ClientReturnToMainMenuWithTextReason(FText::FromString(ErrorMessage));
+        GetPlayerController()->ClientReturnToMainMenuWithTextReason(FText::FromString(""));
         return;
     }
 
@@ -869,13 +871,11 @@ void ADCharacterPlayer::ServerInitializePlayer_Implementation(const FPlayerInfo&
     RefreshAttributeBaseValue();
 }
 
-
-
-void ADCharacterPlayer::OnPlayerExperienceChanged(int32 MaxExp, int32 CrtExp, int32 NewLevel)
+void ADCharacterPlayer::OnPlayerPropertiesChanged(const FPlayerProperties& Properties)
 {
-    if (GetCharacterLevel() < NewLevel)
+    if (GetCharacterLevel() < Properties.Level)
     {
-        ServerSetCharacterLevel(NewLevel);
+        ServerSetCharacterLevel(Properties.Level);
     }
 }
 
@@ -1425,7 +1425,7 @@ void ADCharacterPlayer::ClientHitEnemy_Implementation(const FDamageTargetInfo& D
             if (DamageInfo.bKilled)
             {
                 FQuestActionHandle Handle(new FQuestAction_KilledTarget(HitResult->GetActor()->GetClass()));
-                FPlayerDataInterfaceStatic::Get()->UpdateTaskState(Handle);
+                FPDIStatic::Get()->UpdateTaskState(Handle);
             }
         }
     }

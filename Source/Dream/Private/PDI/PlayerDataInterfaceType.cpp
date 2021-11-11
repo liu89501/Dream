@@ -7,6 +7,7 @@
 #include "DGameplayStatics.h"
 #include "DModuleBase.h"
 #include "DMoney.h"
+#include "DreamGameInstance.h"
 #include "ShootWeapon.h"
 
 DEFINE_LOG_CATEGORY(LogPDS)
@@ -36,7 +37,7 @@ float UDQuestCondition::BP_GetQuestProgressPercent() const
 
 float UDQuestCondition::GetQuestProgressPercent() const
 {
-	return 0.f;
+	return TargetValue == 0 ? 0 : CurrentValue / static_cast<float>(TargetValue);
 }
 
 bool UDQuestCondition::UpdateCondition(const FQuestActionHandle& Handle)
@@ -46,7 +47,7 @@ bool UDQuestCondition::UpdateCondition(const FQuestActionHandle& Handle)
 
 bool UDQuestCondition::IsCompleted() const
 {
-	return false;
+	return TargetValue == CurrentValue;
 }
 
 void UDQuestCondition::SerializeItemData(FArchive& Ar)
@@ -67,7 +68,7 @@ bool UDQuestCondition_KillTarget::UpdateCondition(const FQuestActionHandle& Hand
 			FQuestAction_KilledTarget* Action_KilledTarget = static_cast<FQuestAction_KilledTarget*>(QuestAction);
 			if (Action_KilledTarget->GetTargetClass()->IsChildOf(*TargetType))
 			{
-				FPlatformAtomics::InterlockedIncrement(&CurrentKilled);
+				FPlatformAtomics::InterlockedExchange(&CurrentValue, FMath::Min(CurrentValue + 1, TargetValue));
 			}
 		}
 	}
@@ -75,20 +76,10 @@ bool UDQuestCondition_KillTarget::UpdateCondition(const FQuestActionHandle& Hand
 	return IsCompleted();
 }
 
-float UDQuestCondition_KillTarget::GetQuestProgressPercent() const
-{
-	return CurrentKilled / static_cast<float>(KillNum);
-}
-
-bool UDQuestCondition_KillTarget::IsCompleted() const
-{
-	return FMath::Min(CurrentKilled, KillNum) == KillNum;
-}
-
 void UDQuestCondition_KillTarget::SerializeItemData(FArchive& Ar)
 {
-	Ar << CurrentKilled;
-	Ar << KillNum;
+	Ar << CurrentValue;
+	Ar << TargetValue;
 	Ar << TargetType;
 }
 
@@ -150,7 +141,9 @@ bool UItemDataContainer::IsValidData() const
 
 void UItemData::SerializeItemData(FArchive& Ar)
 {
+	Ar << SerializeMark;
 	Ar << ItemId;
+	Ar << PlayerId;
 }
 
 void UItemData::InitializeExtraProperties()
@@ -161,7 +154,7 @@ void UItemDataContainer::SerializeItemData(FArchive& Ar)
 {
 	Super::SerializeItemData(Ar);
 
-	int32 ItemNum = 0;
+	int32 ItemNum;
 
 	if (Ar.IsSaving())
 	{
@@ -171,7 +164,7 @@ void UItemDataContainer::SerializeItemData(FArchive& Ar)
 		for (UItemData* ItemData : Items)
 		{
 			FItemDataHandle Handle(ItemData);
-			Handle.Serialize(Ar);
+			Ar << Handle;
 		}
 	}
 	else
@@ -181,7 +174,7 @@ void UItemDataContainer::SerializeItemData(FArchive& Ar)
 		for (int32 N = 0; N < ItemNum; N++)
 		{
 			FItemDataHandle Handle;
-			Handle.Serialize(Ar);
+			Ar << Handle;
 			Items.Add(Handle.Get());
 		}
 	}
@@ -321,44 +314,35 @@ void UItemDataMoney::SerializeItemData(FArchive& Ar)
 	Ar << MoneyAmount;
 }
 
-bool FItemDataHandle::Serialize(FArchive& Ar)
-{
-	Ar << ItemDataClass;
-
-	if (Ar.IsLoading())
-	{
-		if (ItemData == nullptr)
-		{
-			ItemData = NewObject<UItemData>(GetTransientPackage(), ItemDataClass);
-		}
-	}
-
-	ItemData->SerializeItemData(Ar);
-	return true;
-}
-
 UItemData* FItemDataHandle::Get() const
 {
 	return ItemData;
 }
 
-bool FQuestConditionHandle::Serialize(FArchive& Ar)
-{
-	Ar << ConditionClass;
-	
-	if (Ar.IsLoading())
-	{
-		if (QuestCondition == nullptr)
-		{
-			QuestCondition = NewObject<UDQuestCondition>(GetTransientPackage(), ConditionClass);
-		}
-	}
-
-	QuestCondition->SerializeItemData(Ar);
-	return true;
-}
 
 UDQuestCondition* FQuestConditionHandle::Get() const
 {
 	return QuestCondition;
+}
+
+bool UTaskDataAsset::GetInformationByTaskId(int32 TaskId, FTaskInformation& Information)
+{
+	if (Tasks.IsValidIndex(TaskId - 1))
+	{
+		Information = Tasks[TaskId - 1];
+
+		return true;
+	}
+
+	return false;
+}
+
+void UTaskDataAsset::PreSave(const ITargetPlatform* TargetPlatform)
+{
+	Super::PreSave(TargetPlatform);
+
+	for (int32 N = 0; N < Tasks.Num(); N++)
+	{
+		Tasks[N].TaskId = N + 1;
+	}
 }

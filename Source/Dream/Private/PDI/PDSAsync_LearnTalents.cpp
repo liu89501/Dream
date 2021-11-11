@@ -15,14 +15,14 @@ UPDSAsync_LearnTalents* UPDSAsync_LearnTalents::PDI_LearnTalents(UObject* WorldC
 
 void UPDSAsync_LearnTalents::Activate()
 {
-	FCommonCompleteNotify Delegate;
-	Delegate.BindUObject(this, &UPDSAsync_LearnTalents::OnCompleted);
-	FPlayerDataInterfaceStatic::Get()->LearningTalents(T_TalentIdArray, Delegate);
+	Handle = FPDIStatic::Get()->AddOnLearnTalents(FOnCompleted::FDelegate::CreateUObject(this, &UPDSAsync_LearnTalents::OnCompleted));
+	FPDIStatic::Get()->LearningTalents(T_TalentIdArray);
 }
 
-void UPDSAsync_LearnTalents::OnCompleted(const FString& ErrorMessage) const
+void UPDSAsync_LearnTalents::OnCompleted(bool bSuccess) const
 {
-	if (ErrorMessage.IsEmpty())
+	FPDIStatic::Get()->RemoveOnLearnTalents(Handle);
+	if (bSuccess)
 	{
 		OnSuccess.Broadcast();
 	}

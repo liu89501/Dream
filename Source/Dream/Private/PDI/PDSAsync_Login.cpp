@@ -11,14 +11,14 @@ UPDSAsync_Login* UPDSAsync_Login::PDI_Login(UObject* WorldContextObject)
 
 void UPDSAsync_Login::Activate()
 {
-	FCommonCompleteNotify Delegate;
-	Delegate.BindUObject(this, &UPDSAsync_Login::OnCompleted);
-	FPlayerDataInterfaceStatic::Get()->Login(Delegate);
+	Handle = FPDIStatic::Get()->AddOnLogin(FOnCompleted::FDelegate::CreateUObject(this, &UPDSAsync_Login::OnCompleted));
+	FPDIStatic::Get()->Login();
 }
 
-void UPDSAsync_Login::OnCompleted(const FString& ErrorMessage) const
+void UPDSAsync_Login::OnCompleted(bool bSuccess) const
 {
-	if (ErrorMessage.IsEmpty())
+	FPDIStatic::Get()->RemoveOnLogin(Handle);
+	if (bSuccess)
 	{
 		OnSuccess.Broadcast();
 	}

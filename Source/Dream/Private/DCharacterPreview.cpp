@@ -70,7 +70,6 @@ void ADCharacterPreview::UpdateCharacterMesh(UCharacterMesh* CharacterMesh)
 	{
 		if (Child && Child->ComponentHasTag(SKIN_COMP_NAME))
 		{
-			UE_LOG(LogTemp, Warning, TEXT("Destroy: %s"), *Child->GetFullName());
 			Child->DestroyComponent();
 		}
 	}

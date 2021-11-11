@@ -2,15 +2,12 @@
 
 
 #include "DreamGameInstance.h"
-
-#include "DGameUserSettings.h"
 #include "Engine.h"
 #include "DreamType.h"
-#include "IPv4Endpoint.h"
 #include "MoviePlayer.h"
-#include "SocketSubsystem.h"
-#include "TcpSocketBuilder.h"
-#include "PDI/PlayerDataInterfaceStatic.h"
+#include "PlayerDataInterface.h"
+#include "PlayerDataInterfaceStatic.h"
+#include "PlayerGameData.h"
 #include "UserWidget.h"
 
 UDreamGameInstance::UDreamGameInstance()
@@ -30,7 +27,14 @@ void UDreamGameInstance::Init()
 {
 	Super::Init();
 
-	FPlayerDataInterfaceStatic::Startup();
+	FPDIStatic::Startup();
+
+#if WITH_EDITOR
+
+	FPDIStatic::Get()->Login();
+	
+#endif
+
 
 	if (!IsRunningDedicatedServer())
 	{
@@ -44,7 +48,7 @@ void UDreamGameInstance::Shutdown()
 {
 	Super::Shutdown();
 
-	FPlayerDataInterfaceStatic::Shutdown();
+	FPDIStatic::Shutdown();
 }
 
 void UDreamGameInstance::OnPreLoadMap(const FString& MapName)
@@ -63,35 +67,3 @@ void UDreamGameInstance::OnPostLoadMap(UWorld* LoadedWorld)
 {
 	GetMoviePlayer()->StopMovie();
 }
-
-#if WITH_EDITORONLY_DATA
-
-void UDreamGameInstance::TestSocketSend()
-{
-	FSocket* TestSocket = FTcpSocketBuilder(TEXT("TestSocket"))
-		.AsBlocking()
-		.AsReusable()
-        .WithReceiveBufferSize(2 * 1024 * 1024)
-        .WithSendBufferSize(1024 * 1024);
-
-	FIPv4Endpoint Endpoint(FIPv4Address::InternalLoopback, 8888);
-	TSharedRef<FInternetAddr> AddrIpv4 = Endpoint.ToInternetAddrIPV4();
-	TestSocket->Bind(*AddrIpv4);
-	TestSocket->Connect(*AddrIpv4);
-	
-	TArray<uint8> Data;
-	FMemoryWriter Writer(Data);
-
-	uint32 Value = 666;
-	Writer << Value;
-
-	int32 Sent;	
-	TestSocket->Send(Data.GetData(), Data.Num(), Sent);
-	
-
-	UE_LOG(LogDream, Warning, TEXT("BytesSent: %d"), Sent);
-
-	TestSocket->Close();
-}
-
-#endif

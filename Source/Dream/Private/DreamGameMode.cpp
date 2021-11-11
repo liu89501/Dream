@@ -1,6 +1,8 @@
 ﻿// Copyright 1998-2019 Epic Games, Inc. All Rights Reserved.
 
 #include "DreamGameMode.h"
+
+#include "DPlayerState.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
 #include "EngineUtils.h"
@@ -36,7 +38,18 @@ AActor* ADreamGameMode::ChoosePlayerStart_Implementation(AController* Player)
 
 FString ADreamGameMode::InitNewPlayer(APlayerController* NewPlayerController, const FUniqueNetIdRepl& UniqueId, const FString& Options, const FString& Portal)
 {
-	return Super::InitNewPlayer(NewPlayerController, UniqueId, Options, Portal);
+	FString Error = Super::InitNewPlayer(NewPlayerController, UniqueId, Options, Portal);
+	
+	if (Error.IsEmpty())
+	{
+		if (ADPlayerState* PlayerState = NewPlayerController->GetPlayerState<ADPlayerState>())
+		{
+			int32 PlayerId = UGameplayStatics::GetIntOption(Options, TEXT("PlayerId"), 0);
+			PlayerState->SetPlayerId(PlayerId);	
+		}
+	}
+
+	return Error;
 }
 
 void ADreamGameMode::PostLogin(APlayerController* NewPlayer)
@@ -47,10 +60,7 @@ void ADreamGameMode::PostLogin(APlayerController* NewPlayer)
 	
 	IdleTimeCount = 0.f;
 	PlayerNumCounter.Increment();
-	if (FPlayerDataInterface* PlayerDataInterface = FPlayerDataInterfaceStatic::Get())
-	{
-		PlayerDataInterface->UpdateActivePlayers(true);
-	}
+	FPDIStatic::Get()->UpdateActivePlayers(FUpdateServerPlayerParam(true));
 }
 
 void ADreamGameMode::Logout(AController* Exiting)
@@ -62,10 +72,8 @@ void ADreamGameMode::Logout(AController* Exiting)
 	if (Exiting->IsA(APlayerController::StaticClass()))
 	{
 		PlayerNumCounter.Decrement();
-		if (FPlayerDataInterface* PlayerDataInterface = FPlayerDataInterfaceStatic::Get())
-		{
-			PlayerDataInterface->UpdateActivePlayers(false);
-		}
+		
+		FPDIStatic::Get()->UpdateActivePlayers(FUpdateServerPlayerParam(false));
 	}
 }
 

@@ -13,14 +13,14 @@ UPDSAsync_GetTask* UPDSAsync_GetTask::PDI_GetTask(UObject* WorldContextObject, i
 
 void UPDSAsync_GetTask::Activate()
 {
-	FGetTasksDelegate Delegate;
-	Delegate.BindUObject(this, &UPDSAsync_GetTask::OnCompleted);
-	FPlayerDataInterfaceStatic::Get()->GetTasks(T_Condition, Delegate);
+	Handle = FPDIStatic::Get()->AddOnGetTasks(FOnGetTasks::FDelegate::CreateUObject(this, &UPDSAsync_GetTask::OnCompleted));
+	FPDIStatic::Get()->GetTasks(FSearchTaskParam(T_Condition, T_TaskGroupId));
 }
 
-void UPDSAsync_GetTask::OnCompleted(const TArray<FTaskInformation>& Tasks, const FString& ErrorMessage) const
+void UPDSAsync_GetTask::OnCompleted(const TArray<FTaskInformation>& Tasks, bool bSuccess) const
 {
-	if (ErrorMessage.IsEmpty())
+	FPDIStatic::Get()->RemoveOnGetTasks(Handle);
+	if (bSuccess)
 	{
 		OnSuccess.Broadcast(Tasks);
 	}

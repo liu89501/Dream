@@ -35,6 +35,7 @@ public:
 		return MaxPlayers;
 	}
 
+
 public:
 
 	static int32 DEFAULT_MAX_PLAYERS;

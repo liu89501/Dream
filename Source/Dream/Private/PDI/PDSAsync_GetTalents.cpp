@@ -3,7 +3,7 @@
 #include "PDI/PlayerDataInterface.h"
 #include "PDI/PlayerDataInterfaceStatic.h"
 
-UPDSAsync_GetTalents* UPDSAsync_GetTalents::PDI_GetTalents(UObject* WorldContextObject, TEnumAsByte<EPDTalentCategory::Type> Category)
+UPDSAsync_GetTalents* UPDSAsync_GetTalents::PDI_GetTalents(UObject* WorldContextObject, ETalentCategory Category)
 {
 	UPDSAsync_GetTalents* PDSGT = NewObject<UPDSAsync_GetTalents>(WorldContextObject);
 	PDSGT->T_Category = Category;
@@ -12,14 +12,14 @@ UPDSAsync_GetTalents* UPDSAsync_GetTalents::PDI_GetTalents(UObject* WorldContext
 
 void UPDSAsync_GetTalents::Activate()
 {
-	FGetTalentsComplete Delegate;
-	Delegate.BindUObject(this, &UPDSAsync_GetTalents::OnCompleted);
-	FPlayerDataInterfaceStatic::Get()->GetTalents(T_Category, Delegate);
+	Handle = FPDIStatic::Get()->AddOnGetTalents(FOnGetTalents::FDelegate::CreateUObject(this, &UPDSAsync_GetTalents::OnCompleted));
+	FPDIStatic::Get()->GetTalents(T_Category);
 }
 
-void UPDSAsync_GetTalents::OnCompleted(const TArray<FTalentInfo>& Talents, const FString& ErrorMessage) const
+void UPDSAsync_GetTalents::OnCompleted(const TArray<FTalentInfo>& Talents, bool bSuccess) const
 {
-	if (ErrorMessage.IsEmpty())
+	FPDIStatic::Get()->RemoveOnGetTalents(Handle);
+	if (bSuccess)
 	{
 		OnSuccess.Broadcast(Talents);
 	}

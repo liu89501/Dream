@@ -23,13 +23,14 @@ class UPDSAsync_GetTalents : public UBlueprintAsyncActionBase
 public:
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category="PDI")
-    static UPDSAsync_GetTalents* PDI_GetTalents(UObject* WorldContextObject, TEnumAsByte<EPDTalentCategory::Type> Category);
+    static UPDSAsync_GetTalents* PDI_GetTalents(UObject* WorldContextObject, ETalentCategory Category);
 
 	virtual void Activate() override;
 	
-	void OnCompleted(const TArray<FTalentInfo>& Talents, const FString& ErrorMessage) const;
+	void OnCompleted(const TArray<FTalentInfo>& Talents, bool bSuccess) const;
 
 private:
 
-	TEnumAsByte<EPDTalentCategory::Type> T_Category;
+	ETalentCategory T_Category;
+	FDelegateHandle Handle;
 };

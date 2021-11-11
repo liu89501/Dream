@@ -36,6 +36,9 @@ struct FTaskInformationSaveGame
 	UPROPERTY()
 	bool bTracking;
 
+	UPROPERTY()
+	int32 TaskGroupId;
+
 	FTaskInformationSaveGame& operator=(const FTaskInformation& Information)
 	{
 		TaskId = Information.TaskId;
@@ -53,7 +56,8 @@ struct FTaskInformationSaveGame
 		  CompleteCondition(Other.CompleteCondition),
 		  CompletedReward(Other.CompletedReward),
 		  TaskMark(Other.TaskMark),
-		  bTracking(Other.bTracking)
+		  bTracking(Other.bTracking),
+		  TaskGroupId(Other.TaskGroupId)
 	{
 	}
 
@@ -69,7 +73,44 @@ struct FTaskInformationSaveGame
 		Information.TaskMark = TaskMark;
 		Information.CompleteCondition = CompleteCondition.Get();
 		Information.bTracking = bTracking;
+		Information.TaskGroupId = TaskGroupId;
 		return Information;
+	}
+
+	bool Serialize(FArchive& Ar)
+	{
+		Ar << TaskId;
+		Ar << TaskDescription;
+		Ar << CompleteCondition;
+		Ar << CompletedReward;
+		Ar << TaskMark;
+		Ar << bTracking;
+		return true;
+	}
+};
+
+template<>
+struct TStructOpsTypeTraits<FTaskInformationSaveGame> : TStructOpsTypeTraitsBase2<FTaskInformationSaveGame>
+{
+	enum
+	{
+		WithSerializer = true,
+    };
+};
+
+
+USTRUCT(BlueprintType)
+struct FPlayerModuleList
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly)
+	TArray<FPlayerModule> Modules;
+
+	friend FArchive& operator<<(FArchive& Ar, FPlayerModuleList& A)
+	{
+		Ar << A.Modules;
+		return Ar;
 	}
 };
 
@@ -116,6 +157,21 @@ struct FItemListSaveGame
 
 	UPROPERTY()
 	TArray<FItemDataHandle> Items;
+
+	bool Serialize(FArchive& Ar)
+	{
+		Ar << Items;
+		return true;
+	}
+};
+
+template<>
+struct TStructOpsTypeTraits<FItemListSaveGame> : TStructOpsTypeTraitsBase2<FItemListSaveGame>
+{
+	enum
+	{
+		WithSerializer = true,
+    };
 };
 
 UCLASS()
@@ -182,16 +238,5 @@ public:
 
 	UPROPERTY(EditAnywhere)
 	TArray<FTalentInfo> Talents;
-};
-
-UCLASS()
-class UTaskDataAsset : public UDataAsset
-{
-	GENERATED_BODY()
-
-public:
-
-	UPROPERTY(EditAnywhere)
-	TArray<FTaskInformation> Tasks;
 };
 

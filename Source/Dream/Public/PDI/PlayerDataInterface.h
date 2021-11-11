@@ -9,29 +9,73 @@
 #define MSG_ERROR TEXT("Error")
 #define MSG_SUCCESS TEXT("")
 
-DECLARE_DELEGATE_OneParam(FInitializeDelegate, bool /* ErrorMessage */);
-DECLARE_DELEGATE_OneParam(FCommonCompleteNotify, const FString& /* ErrorMessage */);
-DECLARE_DELEGATE_TwoParams(FGetWeaponComplete, const TArray<FPlayerWeapon>&, const FString& /* ErrorMessage */);
-DECLARE_DELEGATE_TwoParams(FGetPlayerInfoComplete, const FPlayerInfo&, const FString& /* ErrorMessage */);
-DECLARE_DELEGATE_TwoParams(FGetPlayerPropertiesDelegate, const FPlayerProperties&, const FString& /* ErrorMessage */);
-DECLARE_DELEGATE_TwoParams(FGetServerComplete, const FFindServerResult& /*Result*/, const FString& /* ErrorMessage */);
-DECLARE_DELEGATE_TwoParams(FRunServerComplete, const FString& /*ServerId*/, const FString& /* ErrorMessage */);
-DECLARE_DELEGATE_OneParam(FRegisterServerComplete, const FString& /*ServerId*/);
-DECLARE_DELEGATE_TwoParams(FGetStoreItemsComplete, const FStoreInformation&, const FString& /*ErrorMessage*/);
-DECLARE_DELEGATE_TwoParams(FGetTalentsComplete, const TArray<FTalentInfo>&, const FString& /*ErrorMessage*/);
-DECLARE_DELEGATE_TwoParams(FExperienceChangeDelegate, int32 NewLevel, const FString& /*ErrorMessage*/);
-DECLARE_DELEGATE_TwoParams(FGetTasksDelegate, const TArray<FTaskInformation>&, const FString& /*ErrorMessage*/);
-DECLARE_DELEGATE_TwoParams(FTaskRewardDelegate, UItemData*, const FString& /*ErrorMessage*/);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnCompleted, bool);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnGetWeapons, const TArray<FPlayerWeapon>&, bool);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnGetPlayerInfo, const FPlayerInfo&, bool);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnGetServer, const FFindServerResult& /*Result*/, bool);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnRegisterServer, const FString& /*ServerId*/, bool);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnLaunchNotify, const FString& /*ServerAddr*/, bool);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnGetStoreItems, const FStoreInformation&, bool);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnGetTalents, const TArray<FTalentInfo>&, bool);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnGetTasks, const TArray<FTaskInformation>&, bool);
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnTaskReward, UItemData*, bool);
 
-DECLARE_MULTICAST_DELEGATE_OneParam(FPlayerMoneyChanged, int64);
-DECLARE_MULTICAST_DELEGATE_ThreeParams(FPlayerExperienceChanged, int32 /* Max */, int32 /*Current*/, int32/*Level*/);
-DECLARE_MULTICAST_DELEGATE_OneParam(FTaskStateChanged, const TArray<FTaskInformation>&);
+
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnPropertiesChange, const FPlayerProperties&);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnTaskConditionStateChange, float /* Progress */);
+
+DECLARE_DELEGATE(FOnServerConnectionLose);
+
+#define DEFINE_PDI_DELEGATE_BASE(DelegateType, DelegateName) \
+private: \
+	DelegateType DelegateName; \
+public: \
+	FDelegateHandle Add##DelegateName(DelegateType::FDelegate Delegate) \
+	{ \
+		return DelegateName.Add(Delegate); \
+	} \
+\
+	void Remove##DelegateName(FDelegateHandle Handle) \
+	{ \
+		DelegateName.Remove(Handle); \
+	}
+
+#define DEFINE_PDI_DELEGATE(DelegateType, DelegateName) \
+	DEFINE_PDI_DELEGATE_BASE(DelegateType, DelegateName) \
+\
+	void Broadcast##DelegateName() \
+	{ \
+		DelegateName.Broadcast(); \
+	}
+
+#define DEFINE_PDI_DELEGATE_OneParam(DelegateType, DelegateName, Param1) \
+	DEFINE_PDI_DELEGATE_BASE(DelegateType, DelegateName) \
+\
+	void Broadcast##DelegateName(Param1 P1) \
+	{ \
+		DelegateName.Broadcast(P1); \
+	}
+	
+#define DEFINE_PDI_DELEGATE_TwoParams(DelegateType, DelegateName, Param1, Param2) \
+	DEFINE_PDI_DELEGATE_BASE(DelegateType, DelegateName) \
+\
+	void Broadcast##DelegateName(Param1 P1, Param2 P2) \
+	{ \
+		DelegateName.Broadcast(P1, P2); \
+	}
+	
+#define DEFINE_PDI_DELEGATE_ThreeParams(DelegateType, DelegateName, Param1, Param2, Param3) \
+	DEFINE_PDI_DELEGATE_BASE(DelegateType, DelegateName) \
+\
+	void Broadcast##DelegateName(Param1 P1, Param2 P2, Param3 P3) \
+	{ \
+		DelegateName.Broadcast(P1, P2, P3); \
+	}
+	
 
 struct FPlayerDataDelegate
 {
-	FPlayerMoneyChanged OnMoneyChanged;
-	FPlayerExperienceChanged OnExperienceChanged;
-	FTaskStateChanged OnTaskStateChanged;
+	FOnPropertiesChange OnPropertiesChange;
 };
 
 class FPlayerDataInterface
@@ -40,68 +84,74 @@ class FPlayerDataInterface
 public:
 	virtual ~FPlayerDataInterface() = default;
 
-	virtual void Initialize(FInitializeDelegate Delegate = FInitializeDelegate()) = 0;
+	virtual void Initialize() = 0;
 
 	// Server
-	virtual void AddPlayerRewards(UItemData* Rewards, FCommonCompleteNotify Delegate = FCommonCompleteNotify()) = 0;
+	virtual void AddPlayerRewards(const FItemDataHandle& Rewards) = 0;
 
 	// Local
-	virtual void EquipWeapon(int64 WeaponId, int32 EquipmentIndex, FCommonCompleteNotify Delegate = FCommonCompleteNotify()) = 0;
+	virtual void EquipWeapon(const FEquipWeaponParam& Param) = 0;
 
 	// Local
-	virtual void EquipModule(int64 ModuleId, EModuleCategory ModuleCategory, FCommonCompleteNotify Delegate = FCommonCompleteNotify()) = 0;
+	virtual void EquipModule(const FEquipModuleParam& Param) = 0;
 
 	// Local
-	virtual void LearningTalent(int32 TalentId, FCommonCompleteNotify Delegate = FCommonCompleteNotify()) = 0;
+	virtual void LearningTalents(const TArray<int32>& TalentIdArray) = 0;
+
+	virtual void GetStoreItems(int32 StoreId) = 0;
 
 	// Local
-	virtual void LearningTalents(const TArray<int32>& TalentIdArray, FCommonCompleteNotify Delegate = FCommonCompleteNotify()) = 0;
+	virtual void PayItem(const FBuyItemParam& Param) = 0;
 
-	virtual void GetStoreItems(int32 StoreId, FGetStoreItemsComplete Delegate = FGetStoreItemsComplete()) = 0;
-
-	// Local
-	virtual void PayItem(int32 StoreId, int64 ItemId, FCommonCompleteNotify Delegate = FCommonCompleteNotify()) = 0;
-
-	virtual void GetPlayerWeapons(EGetEquipmentCondition Condition, FGetWeaponComplete Delegate) = 0;
-	virtual void GetPlayerInfo(EGetEquipmentCondition Condition, FGetPlayerInfoComplete Delegate) = 0;
+	virtual void GetPlayerInfo(EGetEquipmentCondition Condition) = 0;
 	
-	virtual void GetPlayerProperties(FGetPlayerPropertiesDelegate Delegate) = 0;
-	
-	virtual void GetTalents(EPDTalentCategory::Type TalentCategory, FGetTalentsComplete Delegate) = 0;
+	virtual void GetTalents(ETalentCategory TalentCategory) = 0;
 
-	virtual void GetTasks(EGetTaskCondition Condition, FGetTasksDelegate Delegate) = 0;
+	virtual void GetTasks(const FSearchTaskParam& Param) = 0;
 
 	// Local
-	virtual void DeliverTask(const int64& TaskId, FTaskRewardDelegate Delegate = FTaskRewardDelegate()) = 0;
-	virtual void AcceptTask(const int64& TaskId, FCommonCompleteNotify Delegate = FCommonCompleteNotify()) = 0;
-	virtual void ModifyTrackingState(const int64& TaskId, bool bTracking, FCommonCompleteNotify Delegate = FCommonCompleteNotify()) = 0;
+	virtual void DeliverTask(int32 TaskId) = 0;
+	virtual void AcceptTask(const FAcceptTaskParam& Param) = 0;
+	virtual void ModifyTrackingState(const FModifyTrackingParam& Param) = 0;
 
 	// Server
 	virtual void UpdateTaskState(const FQuestActionHandle& Handle) = 0;
-
-	// Server
-	virtual void RegisterServer(const FDedicatedServerInformation& Information, FRegisterServerComplete Delegate = FRegisterServerComplete()) = 0;
-	virtual void UnRegisterServer() = 0;
-
-	// Server
-	virtual void UpdateActivePlayers(bool bIncrement) = 0;
+	virtual void RegisterServer(const FDedicatedServerInformation& Information) = 0;
+	virtual void UpdateActivePlayers(const FUpdateServerPlayerParam& Param) = 0;
+	virtual void NotifyBackendServer(const FLaunchNotifyParam& Param) = 0;
 
 	// local
-	virtual void GetAvailableDedicatedServer(const FString& ServerId, FGetServerComplete Delegate) = 0;
-	virtual void RunNewDedicatedServer(const FRunServerParameter& Parameter, FRunServerComplete Delegate = FRunServerComplete()) = 0;
+	virtual void RunNewDedicatedServer(const FRunServerParameter& Parameter) = 0;
 
 	// Local
-	virtual void Login(FCommonCompleteNotify Delegate = FCommonCompleteNotify()) = 0;
+	virtual void Login() = 0;
 	virtual void Logout() = 0;
-
-	virtual FString GetServerToken() const = 0;
 
 	virtual const FPlayerProperties& GetCachedProperties() const = 0;
 
-	// Local
-	/** 当条用过Server函数修改过Properties数据时应该调用此函数刷新数据 */
-	virtual void RefreshPlayerProperties() = 0;
-	
 	virtual FPlayerDataDelegate& GetPlayerDataDelegate() = 0;
-	
+
+	virtual FOnServerConnectionLose& OnServerConnectionLoseDelegate() = 0;
+
+	virtual void AddTaskConditionStateChangeDelegate(int32 TaskId, FOnTaskConditionStateChange Delegate) = 0;
+	virtual void RemoveTaskConditionStateChangeDelegate(int32 TaskId) = 0;
+
+	DEFINE_PDI_DELEGATE_OneParam(FOnCompleted, OnInitialize, bool);
+	DEFINE_PDI_DELEGATE_OneParam(FOnCompleted, OnLogin, bool);
+	DEFINE_PDI_DELEGATE_OneParam(FOnCompleted, OnEquipWeapon, bool);
+	DEFINE_PDI_DELEGATE_OneParam(FOnCompleted, OnEquipModule, bool);
+	DEFINE_PDI_DELEGATE_OneParam(FOnCompleted, OnLearnTalents, bool);
+	DEFINE_PDI_DELEGATE_OneParam(FOnCompleted, OnAddPlayerRewards, bool);
+	DEFINE_PDI_DELEGATE_OneParam(FOnCompleted, OnBuyItem, bool);
+	DEFINE_PDI_DELEGATE_OneParam(FOnCompleted, OnAcceptTask, bool);
+	DEFINE_PDI_DELEGATE_OneParam(FOnCompleted, OnModifyTaskTracking, bool);
+	DEFINE_PDI_DELEGATE_TwoParams(FOnGetStoreItems, OnGetStoreItems, const FStoreInformation&, bool);
+	DEFINE_PDI_DELEGATE_TwoParams(FOnGetWeapons, OnGetWeapons, const TArray<FPlayerWeapon>&, bool);
+	DEFINE_PDI_DELEGATE_TwoParams(FOnGetPlayerInfo, OnGetPlayerInfo, const FPlayerInfo&, bool);
+	DEFINE_PDI_DELEGATE_TwoParams(FOnGetTalents, OnGetTalents, const TArray<FTalentInfo>&, bool);
+	DEFINE_PDI_DELEGATE_TwoParams(FOnGetTasks, OnGetTasks, const TArray<FTaskInformation>&, bool);
+	DEFINE_PDI_DELEGATE_TwoParams(FOnTaskReward, OnDeliverTask, UItemData*, bool);
+	DEFINE_PDI_DELEGATE_TwoParams(FOnGetServer, OnGetServer, const FFindServerResult&, bool);
+	DEFINE_PDI_DELEGATE_TwoParams(FOnRegisterServer, OnRegisterServer, const FString&, bool);
+	DEFINE_PDI_DELEGATE_TwoParams(FOnLaunchNotify, OnLaunchNotify, const FString&, bool);
 };

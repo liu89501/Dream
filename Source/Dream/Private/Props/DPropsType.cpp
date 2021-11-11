@@ -1,6 +1,7 @@
 // ReSharper disable CppSomeObjectMembersMightNotBeInitialized
 #include "DPropsType.h"
 #include "DBaseAttributesAsset.h"
+#include "DreamGameplayAbility.h"
 #include "Kismet/KismetMathLibrary.h"
 
 #define RANDOM_ITEM(Item) if (AttrAssign.Item.Num() > 0) { Attributes.Item = AttrAssign.Item[UKismetMathLibrary::RandomInteger(AttrAssign.Item.Num())]; }
@@ -143,7 +144,7 @@ FEquipmentAttributes& FEquipmentAttributes::operator=(FEquipmentAttributes&& Oth
 	{
 		return *this;
 	}
-		
+
 	AttackPower = Other.AttackPower;
 	MaxHealth = Other.MaxHealth;
 	CriticalDamage = Other.CriticalDamage;
@@ -154,4 +155,45 @@ FEquipmentAttributes& FEquipmentAttributes::operator=(FEquipmentAttributes&& Oth
 	Penetration = Other.Penetration;
 	Perks = MoveTemp(Other.Perks);
 	return *this;
+}
+
+FArchive& operator<<(FArchive& Ar, FEquipmentAttributes& Attr)
+{
+	Ar << Attr.AttackPower;
+	Ar << Attr.MaxHealth;
+	Ar << Attr.CriticalDamage;
+	Ar << Attr.CriticalRate;
+	Ar << Attr.HealthSteal;
+	Ar << Attr.Defense;
+	Ar << Attr.DamageReduction;
+	Ar << Attr.Penetration;
+
+	if (Ar.IsPersistent())
+	{
+		Ar << Attr.Perks;
+	}
+	else
+	{
+		int32 Length = Attr.Perks.Num();
+		Ar << Length;
+		Attr.Perks.AddZeroed(Length);
+
+		for (int32 N = 0; N < Length; N++)
+		{
+			UClass* Class = *Attr.Perks[N];
+			FString PerkPath = Class == nullptr ? TEXT("") : Class->GetPathName();
+
+			if (Ar.IsLoading())
+			{
+				Ar << PerkPath;
+				Attr.Perks[N] = LoadClass<UDreamGameplayAbility>(nullptr, *PerkPath);
+			}
+			else
+			{
+				Ar << PerkPath;
+			}
+		}
+	}
+
+	return Ar;
 }

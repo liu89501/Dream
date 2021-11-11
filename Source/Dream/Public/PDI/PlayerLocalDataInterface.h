@@ -10,26 +10,23 @@ class FPlayerLocalDataInterface : public FPlayerDataInterfaceBase, public FGCObj
 public:
 	FPlayerLocalDataInterface();
 	
-	virtual void Initialize(FInitializeDelegate Delegate) override;
+	virtual void Initialize() override;
 
-	virtual void AddPlayerRewards(UItemData* Rewards, FCommonCompleteNotify Delegate) override;
+	virtual void AddPlayerRewards(const FItemDataHandle& Rewards) override;
 
-	virtual void EquipWeapon(int64 WeaponId, int32 EquippedIndex, FCommonCompleteNotify Delegate) override;
-	virtual void EquipModule(int64 ModuleId, EModuleCategory ModuleCategory, FCommonCompleteNotify Delegate) override;
-	virtual void LearningTalent(int32 TalentId, FCommonCompleteNotify Delegate) override;
-	virtual void GetStoreItems(int32 StoreId, FGetStoreItemsComplete Delegate) override;
-	virtual void PayItem(int32 StoreId, int64 ItemId, FCommonCompleteNotify Delegate) override;
-	virtual void GetPlayerWeapons(EGetEquipmentCondition Condition, FGetWeaponComplete Delegate) override;
-	virtual void GetPlayerInfo(EGetEquipmentCondition Condition, FGetPlayerInfoComplete Delegate) override;
-	virtual void GetPlayerProperties(FGetPlayerPropertiesDelegate Delegate) override;
+	virtual void EquipWeapon(const FEquipWeaponParam& Param) override;
+	virtual void EquipModule(const FEquipModuleParam& Param) override;
+	virtual void GetStoreItems(int32 StoreId) override;
+	virtual void PayItem(const FBuyItemParam& Param) override;
+	virtual void GetPlayerInfo(EGetEquipmentCondition Condition) override;
 
-	virtual void GetTalents(EPDTalentCategory::Type TalentCategory, FGetTalentsComplete Delegate) override;
-	virtual void LearningTalents(const TArray<int32>& TalentIdArray, FCommonCompleteNotify Delegate) override;
-	virtual void GetTasks(EGetTaskCondition Condition, FGetTasksDelegate Delegate) override;
+	virtual void GetTalents(ETalentCategory TalentCategory) override;
+	virtual void LearningTalents(const TArray<int32>& TalentIdArray) override;
+	virtual void GetTasks(const FSearchTaskParam& Param) override;
 
-	virtual void DeliverTask(const int64& TaskId, FTaskRewardDelegate Delegate) override;
-	virtual void AcceptTask(const int64& TaskId, FCommonCompleteNotify Delegate) override;
-	virtual void ModifyTrackingState(const int64& TaskId, bool bTracking, FCommonCompleteNotify Delegate) override;
+	virtual void DeliverTask(int32 TaskId) override;
+	virtual void AcceptTask(const FAcceptTaskParam& Param) override;
+	virtual void ModifyTrackingState(const FModifyTrackingParam& Param) override;
 
 	virtual void UpdateTaskState(const FQuestActionHandle& Handle) override;
 
@@ -37,17 +34,15 @@ public:
 
 	virtual void AddReferencedObjects(FReferenceCollector& Collector) override;
 
-	virtual void RefreshPlayerProperties() override;
-
 protected:
 
 	void DoAddItem(UItemData* ItemData) const;
 
 	void DoIncreaseExperience(int32 ExpAmount) const;
 
-	void AsyncLoadGameData(const FString& Slot, const int32 Index, class USaveGame* SaveGame, FInitializeDelegate Delegate);
-	void AsyncTaskData(const FString& Slot, const int32 Index, class USaveGame* SaveGame, FInitializeDelegate Delegate);
-	void AsyncStoreData(const FString& Slot, const int32 Index, class USaveGame* SaveGame, FInitializeDelegate Delegate);
+	void AsyncLoadGameData(const FString& Slot, const int32 Index, class USaveGame* SaveGame);
+	void AsyncTaskData(const FString& Slot, const int32 Index, class USaveGame* SaveGame);
+	void AsyncStoreData(const FString& Slot, const int32 Index, class USaveGame* SaveGame);
 
 	class UPlayerGameData* GameData;
 
@@ -57,7 +52,7 @@ protected:
 
 private:
 
-	void AttemptExecuteInitializeDelegate(FInitializeDelegate Delegate, bool bCompleted);
+	void AttemptExecuteInitializeDelegate(bool bCompleted);
 	void FilterTasks(EGetTaskCondition Condition, TArray<FTaskInformation>& Tasks) const;
 
 	FThreadSafeCounter LoadCounter;

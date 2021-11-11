@@ -615,27 +615,17 @@ UItemDataModule* UDGameplayStatics::ModuleCastToExInformation(const FPlayerModul
 
 const FPlayerProperties& UDGameplayStatics::GetCachedPlayerProperties()
 {
-	return FPlayerDataInterfaceStatic::Get()->GetCachedProperties();
+	return FPDIStatic::Get()->GetCachedProperties();
 }
 
-void UDGameplayStatics::BindMoneyChangedDelegate(UObject* Object, FName FunctionName, FMulticastDelegateHandle& Handle)
+void UDGameplayStatics::BindPropertiesChangeDelegate(UObject* Object, FName FunctionName, FMulticastDelegateHandle& Handle)
 {
-	Handle.Handle = FPlayerDataInterfaceStatic::Get()->GetPlayerDataDelegate().OnMoneyChanged.AddUFunction(Object, FunctionName);
+	Handle.Handle = FPDIStatic::Get()->GetPlayerDataDelegate().OnPropertiesChange.AddUFunction(Object, FunctionName);
 }
 
-void UDGameplayStatics::BindExperienceChangedDelegate(UObject* Object, FName FunctionName, FMulticastDelegateHandle& Handle)
+void UDGameplayStatics::RemovePropertiesChangeDelegateHandle(const FMulticastDelegateHandle& MulticastDelegateHandle)
 {
-	Handle.Handle = FPlayerDataInterfaceStatic::Get()->GetPlayerDataDelegate().OnExperienceChanged.AddUFunction(Object, FunctionName);
-}
-
-void UDGameplayStatics::RemoveExperienceDelegateHandle(const FMulticastDelegateHandle& MulticastDelegateHandle)
-{
-	FPlayerDataInterfaceStatic::Get()->GetPlayerDataDelegate().OnExperienceChanged.Remove(MulticastDelegateHandle.Handle);
-}
-
-void UDGameplayStatics::RemoveMoneyDelegateHandle(const FMulticastDelegateHandle& MulticastDelegateHandle)
-{
-	FPlayerDataInterfaceStatic::Get()->GetPlayerDataDelegate().OnMoneyChanged.Remove(MulticastDelegateHandle.Handle);
+	FPDIStatic::Get()->GetPlayerDataDelegate().OnPropertiesChange.Remove(MulticastDelegateHandle.Handle);
 }
 
 void UDGameplayStatics::GroupModules(const TArray<FPlayerModule>& Modules, TMap<EModuleCategory, FPlayerModuleList>& GroupModules)

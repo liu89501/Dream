@@ -26,9 +26,10 @@ public:
     static UPDSAsync_LearnTalents* PDI_LearnTalents(UObject* WorldContextObject, const TArray<int32>& TalentIdArray);
 
 	UFUNCTION()
-	void OnCompleted(const FString& ErrorMessage) const;
+	void OnCompleted(bool bSuccess) const;
 
 private:
 
 	TArray<int32> T_TalentIdArray;
+	FDelegateHandle Handle;
 };

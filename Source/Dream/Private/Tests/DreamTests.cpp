@@ -7,6 +7,7 @@
 #include "Misc/AutomationTest.h"
 #include "DreamType.h"
 #include "JsonObjectConverter.h"
+#include "PlayerDataInterfaceBase.h"
 #include "PlayerDataInterfaceType.h"
 #include "PlayerGameData.h"
 #include "ShootWeapon.h"
@@ -14,6 +15,29 @@
 #include "Kismet/KismetMathLibrary.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDreamTests, "Dream.Default", EAutomationTestFlags::EditorContext | EAutomationTestFlags::SmokeFilter)
+
+template<typename Type>
+void TestSerialize(Type Parameter)
+{
+	TArray<uint8> Data;
+	FPacketArchiveWriter Writer(Data);
+	int32 Mark = 20;
+	Writer << Mark;
+	Writer << Parameter;
+	TArray<uint8> Packet;
+	int32 DataLength = Data.Num();
+	Packet.Append((uint8*)&DataLength, sizeof(int32));
+	Packet.Append(Data);
+	
+	FString Bytes;
+	for (uint8 b : Packet)
+	{
+		Bytes.AppendInt(b);
+		Bytes.Append(TEXT(","));
+	}
+
+	UE_LOG(LogDream, Log, TEXT("Bytes: %s"), *Bytes);
+}
 
 bool FDreamTests::RunTest(const FString& Parameters) 
 {
@@ -160,7 +184,37 @@ bool FDreamTests::RunTest(const FString& Parameters)
 		DREAM_NLOG(Log, TEXT("Save TaskDataTest: %s"), *TaskDataTest->GetFullName());
 	}*/
 
+	
+
+	FLoginParameter Parameter;
+	Parameter.PlatformName = TEXT("Steam");
+	Parameter.ThirdPartyUserTicket = TEXT("AA");
+
+	FMyTestSerialize Test;
+	Test.IntArr = 12.3f;
+	FSoftObjectPath Path(TEXT("/Game/Main/Weapon/PrecisionRifle/Jotunn"));
+
+	TSet<int32> S;
+	S.Add(1);
+	S.Add(2);
+	Test.SetTest = S;
+	Test.ArrSer.Add(Parameter);
+
+	TestSerialize(Parameter);
+	TestSerialize(Test);
+
+	/*TArray<uint8> AA(RawData, 645);
+	
+	FPacketArchiveReader Reader(AA);
+
+	FPlayerInfo Info;
+	Reader << Info;
+
+	DREAM_NLOG(Error, TEXT("MaxExperience %d"), Info.Properties.MaxExperience);*/
+	
 	DREAM_NLOG(Log, TEXT("----------- 其他测试 结束 -------------"));
 
 	return true;
 }
+
+

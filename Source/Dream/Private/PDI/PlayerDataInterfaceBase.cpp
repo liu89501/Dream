@@ -5,12 +5,12 @@
 #include "JsonWriter.h"
 #include "HttpModule.h"
 #include "IHttpResponse.h"
-#include "NetworkMessage.h"
 #include "OnlineSubsystem.h"
 #include "OnlineSubsystemUtils.h"
 #include "Sockets.h"
 #include "SocketSubsystem.h"
 #include "TcpSocketBuilder.h"
+#include "TCPSocketSender.h"
 
 #define LOCTEXT_NAMESPACE "FPlayerDataInterfaceBase"
 
@@ -48,218 +48,132 @@ FString FAESUtils::DecryptData(const FString& EncryptContent)
 
 	uint8 Padding = DecodeContent.Last();
 	DecodeContent.RemoveAt(DecodeContent.Num() - Padding, Padding);
-	uint8* ContentData = DecodeContent.GetData();
-	*(ContentData + DecodeContent.Num()) = '\0';
+	DecodeContent.Add(0);
 
 	FString DecryptText;
 	TArray<TCHAR>& Chars = DecryptText.GetCharArray();
-	FUTF8ToTCHAR TChar(reinterpret_cast<ANSICHAR*>(ContentData));
+	FUTF8ToTCHAR TChar(reinterpret_cast<ANSICHAR*>(DecodeContent.GetData()));
 	Chars.Append(TChar.Get(), TChar.Length());
 	return DecryptText;
 }
 
-template <typename ServiceParam>
-uint8* MessageUtils::BuildMessageBytes(const FMessage<ServiceParam>& Message)
+FArchive& FPacketArchiveReader::operator<<(FSoftObjectPath& Value)
 {
-	TArray<uint8> Data;
-	FMemoryWriter Writer(Data);
-	Writer << Message.Parameter;
+	FString PathString;
+	*this << PathString;
+	Value.SetPath(PathString);
+	return *this;
+}
 
-	UScriptStruct* ParameterStruct = Message.GetParameterUStruct();
-	ParameterStruct->GetCppStructOps()->NetSerialize(Writer, &Message.Parameter);
-	
-	/*LoginParam->SetStringField(TEXT("ServiceName"), Message.ServerName);
-	LoginParam->SetStringField(TEXT("thirdPartyUserTicket"), Ticket);*/
+FArchive& FPacketArchiveReader::operator<<(UObject*& Value)
+{
+	FString PathName;
+	*this << PathName;
+	if (!PathName.IsEmpty())
+	{
+		Value = LoadObject<UObject>(nullptr, *PathName);
+	}
+	return *this;
+}
+
+FArchive& FPacketArchiveWriter::operator<<(FSoftObjectPath& Value)
+{
+	FString PathString = Value.ToString();
+	*this << PathString;
+	return *this;
+}
+
+FArchive& FPacketArchiveWriter::operator<<(UObject*& Value)
+{
+	FString PathName = Value->GetPathName();
+	*this << PathName;
+	return *this;
+}
+
+FPlayerDataInterfaceBase::FPlayerDataInterfaceBase()
+	: SocketSender(nullptr),
+	  SocketReceiver(nullptr),
+	  Socket(nullptr)
+{
+	CALLBACK_BINDING_RAW(TService_ClientLogin::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveLoginMessage);
+	CALLBACK_BINDING_RAW(TService_RunDedicatedServer::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveGetServerMessage);
+	CALLBACK_BINDING_RAW(TService_RegisterServer::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveRegisterServerMessage);
+	CALLBACK_BINDING_RAW(TService_NotifyServer::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveNotifyBSMessage);
 }
 
 FPlayerDataInterfaceBase::~FPlayerDataInterfaceBase()
 {
 	UE_LOG_ONLINE(Log, TEXT("FPlayerDataInterfaceBase Free..."));
+
+	ShutdownSocket();
 }
 
-void FPlayerDataInterfaceBase::Initialize(FInitializeDelegate Delegate)
+void FPlayerDataInterfaceBase::Initialize()
 {
-	GConfig->GetString(TEXT("PDISettings"), TEXT("ServerURL"), ServerURL, GEngineIni);
 	GConfig->GetInt(TEXT("PDISettings"), TEXT("ServerPort"), ServerPort, GEngineIni);
 	GConfig->GetString(TEXT("PDISettings"), TEXT("ServerHostName"), ServerHostName, GEngineIni);
 	GConfig->GetString(TEXT("OnlineSubsystem"), TEXT("DefaultPlatformService"), OSSName, GEngineIni);
-	
+}
+
+void FPlayerDataInterfaceBase::RegisterServer(const FDedicatedServerInformation& Information)
+{
+	SocketSender->Send(PDIBuildParam<TService_RegisterServer>(Information));
+}
+
+void FPlayerDataInterfaceBase::RunNewDedicatedServer(const FRunServerParameter& Parameter)
+{
+	SocketSender->Send(PDIBuildParam<TService_RunDedicatedServer>(Parameter));
+}
+
+void FPlayerDataInterfaceBase::UpdateActivePlayers(const FUpdateServerPlayerParam& Param)
+{
+	SocketSender->Send(PDIBuildParam<TService_UpdateServer>(Param));
+}
+
+void FPlayerDataInterfaceBase::NotifyBackendServer(const FLaunchNotifyParam& Param)
+{
+	SocketSender->Send(PDIBuildParam<TService_NotifyServer>(Param));
+}
+
+void FPlayerDataInterfaceBase::Login()
+{
+	if (!ConnectToServer())
+	{
+		BroadcastOnLogin(false);
+		ShutdownSocket();
+		return;
+	}
+
 	if (IsRunningDedicatedServer())
 	{
-		FString AESKey;
-		GConfig->GetString(TEXT("PDISettings"), TEXT("AESKey"), AESKey, GEngineIni);
-		AESUtils = FAESUtils(AESKey);
-		
-		FParse::Value(FCommandLine::Get(), TEXT("ServerToken="), ServerToken);
-		FParse::Value(FCommandLine::Get(), TEXT("ServerId="), ServerID);
-	}
-	
-	Delegate.ExecuteIfBound(true);
-}
-
-void FPlayerDataInterfaceBase::GetAvailableDedicatedServer(const FString& ServerId, FGetServerComplete Delegate)
-{
-	FHttpRequestRef Request = MakeGetRequest(FString::Printf(TEXT("/player/get_server?serverId=%s"), *ServerId));
-	Request->OnProcessRequestComplete().BindRaw(this, &FPlayerDataInterfaceBase::OnGetServerCompleteTrigger, Delegate);
-	bool bSuccess = Request->ProcessRequest();
-	
-	if (!bSuccess)
-	{
-		FFindServerResult DummyResult;
-		Delegate.ExecuteIfBound(DummyResult, MSG_ERROR);
-	}
-}
-
-void FPlayerDataInterfaceBase::RegisterServer(const FDedicatedServerInformation& Information, FRegisterServerComplete Delegate)
-{
-	FHttpRequestRef Request = MakePostRequest(TEXT("/server/register"));
-
-	bool bSuccess = true;
-
-	TSharedPtr<FJsonObject> ServerInfo = MakeShareable(new FJsonObject);
-	ServerInfo->SetNumberField(TEXT("Port"), Information.Port);
-	ServerInfo->SetNumberField(TEXT("MaxPlayers"), Information.MaxPlayers);
-	ServerInfo->SetStringField(TEXT("MapName"), Information.MapName);
-	ServerInfo->SetStringField(TEXT("GameModeName"), Information.GameModeName);
-	ServerInfo->SetStringField(TEXT("ServerId"), ServerID);
-
-	FString JsonString;
-	TSharedRef<FCondensedJsonStringWriter> Writer = FCondensedJsonStringWriterFactory::Create(&JsonString);
-	bSuccess &= FJsonSerializer::Serialize(ServerInfo.ToSharedRef(), Writer);
-
-	if (bSuccess)
-	{
-		FString EncryptString;
-		AESUtils.EncryptData(JsonString, EncryptString);
-
-		Request->SetContentAsString(EncryptString);
-		Request->OnProcessRequestComplete().BindRaw(this, &FPlayerDataInterfaceBase::OnRegisterCompleteTrigger, Delegate);
-
-		bSuccess &= Request->ProcessRequest();
-	}
-
-	if (!bSuccess)
-	{
-		Delegate.ExecuteIfBound(MSG_ERROR);
-	}
-}
-
-void FPlayerDataInterfaceBase::RunNewDedicatedServer(const FRunServerParameter& Parameter, FRunServerComplete Delegate)
-{
-	bool bResult = true;
-	FString RequestParam;
-	bResult &= FJsonObjectConverter::UStructToJsonObjectString(Parameter, RequestParam);
-	FHttpRequestRef Request = MakePostRequest("/player/run_server");
-	Request->SetContentAsString(RequestParam);
-	Request->OnProcessRequestComplete().BindRaw(this, &FPlayerDataInterfaceBase::OnRunServerCompleteTrigger, Delegate);
-	bResult &= Request->ProcessRequest();
-
-	if (!bResult)
-	{
-		Delegate.ExecuteIfBound(FString(), MSG_ERROR);
-	}
-}
-
-void FPlayerDataInterfaceBase::UnRegisterServer()
-{
-	FHttpRequestRef Request = MakePostRequest(TEXT("/server/unregister"), TEXT("text/plain"));
-	Request->SetContentAsString(ServerID);
-	Request->ProcessRequest();
-}
-
-void FPlayerDataInterfaceBase::UpdateActivePlayers(bool bIncrement)
-{
-	FHttpRequestRef Request = MakePostRequest(TEXT("/server/updatePlayers"));
-	Request->SetContentAsString(FString::Printf(TEXT("{\"serverId\":\"%s\",\"increment\":%s}"), *ServerID, bIncrement ? TEXT("true") : TEXT("false")));
-	Request->ProcessRequest();
-}
-
-void FPlayerDataInterfaceBase::Login(FCommonCompleteNotify Delegate)
-{
-
-	/*ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
-	check(SocketSubsystem);
-
-	
-	FAddressInfoResult Result = SocketSubsystem->GetAddressInfo(*ServerHostName, nullptr, EAddressInfoFlags::Default, NAME_None);
-	if (Result.ReturnCode == ESocketErrors::SE_NO_ERROR && Result.Results.Num() > 0)
-	{
-		Result.Results[0].Address.;
-	}
-
-	FResolveInfo* ResolveInfo = SocketSubsystem->GetHostByName(TCHAR_TO_ANSI(*ServerHostName));
-	checkf(ResolveInfo->IsComplete(), TEXT("Resolve Server HostName Failure"));
-
-	FIPv4Endpoint Endpoint;
-	ResolveInfo->GetResolvedAddress().GetIp(Endpoint.Address.Value);
-	Endpoint.Port = ServerPort;
-
-    FSocket* PDISocket = FTcpSocketBuilder(TEXT("PDISocket"))
-        .AsBlocking()
-        .AsReusable()
-		.WithReceiveBufferSize(2 * 1024 * 1024)
-        .WithSendBufferSize(1024 * 1024);
-
-	check()
-
-	FSimpleAbstractSocket_FSocket SocketWrapper(PDISocket);*/
-
-	
-	FString ErrorMessage;
-	if (!Cookie.IsEmpty())
-	{
-		Delegate.ExecuteIfBound(ErrorMessage);
-	}
-
-	bool bSuccessfully = false;
-	
-	IOnlineIdentityPtr Identity = Online::GetIdentityInterface();
-	if (Identity.IsValid())
-	{
-		FString Ticket = Identity->GetAuthToken(0);
-
-		TSharedPtr<FJsonObject> LoginParam = MakeShareable(new FJsonObject);
-		LoginParam->SetStringField(TEXT("platformName"), OSSName);
-		LoginParam->SetStringField(TEXT("thirdPartyUserTicket"), Ticket);
-
-		FString OutputString;
-		TSharedRef<FCondensedJsonStringWriter> Writer = FCondensedJsonStringWriterFactory::Create(&OutputString);
-		if (FJsonSerializer::Serialize(LoginParam.ToSharedRef(), Writer))
-		{
-			FHttpRequestRef Request = MakePostRequest(TEXT("/player/login"));
-			Request->SetContentAsString(OutputString);
-			Request->OnProcessRequestComplete().BindRaw(this, &FPlayerDataInterfaceBase::OnLoginCompleteTrigger, Delegate);
-			bSuccessfully = Request->ProcessRequest();
-			if (!bSuccessfully)
-			{
-				ErrorMessage = TEXT("Login request failed");
-			}
-		}
-		else
-		{
-			ErrorMessage = TEXT("Failed to serialize login Json parameters");
-		}
+		FString Token;
+		FParse::Value(FCommandLine::Get(), TEXT("ServerToken="), Token);
+		SocketSender->Send(PDIBuildParam<TService_ServerLogin>(Token));
 	}
 	else
 	{
-		ErrorMessage = TEXT("OSS IdentityInterface Invalid");
-	}
+		FLoginParameter Parameter;
+		
+#if WITH_EDITOR
 
-	if (!bSuccessfully)
-	{
-		Delegate.ExecuteIfBound(ErrorMessage);
+		Parameter.PlatformName = TEXT("Steam");
+		Parameter.ThirdPartyUserTicket = TEXT("123456");
+
+#else
+
+		IOnlineIdentityPtr OnlineIdentity = Online::GetIdentityInterface();
+		Parameter.PlatformName = OSSName;
+		Parameter.ThirdPartyUserTicket = OnlineIdentity->GetAuthToken(0);
+
+#endif
+		
+		SocketSender->Send(PDIBuildParam<TService_ClientLogin>(Parameter));
 	}
 }
 
 void FPlayerDataInterfaceBase::Logout()
 {
-	FHttpRequestRef Request = MakeGetRequest(TEXT("/player/logout"));
-	Request->ProcessRequest();
-}
-
-FString FPlayerDataInterfaceBase::GetServerToken() const
-{
-	return ServerToken;
+	ShutdownSocket();
 }
 
 FPlayerDataDelegate& FPlayerDataInterfaceBase::GetPlayerDataDelegate()
@@ -267,174 +181,156 @@ FPlayerDataDelegate& FPlayerDataInterfaceBase::GetPlayerDataDelegate()
 	return PlayerDataDelegate;
 }
 
-FHttpRequestRef FPlayerDataInterfaceBase::MakeRequest() const
+FOnServerConnectionLose& FPlayerDataInterfaceBase::OnServerConnectionLoseDelegate()
 {
-	FHttpRequestRef Request = FHttpModule::Get().CreateRequest();
-	if (IsRunningDedicatedServer())
-	{
-		Request->SetHeader(TEXT("Token"), ServerToken);
-	}
-	else
-	{
-		Request->SetHeader(TEXT("Cookie"), Cookie);
-	}
-
-	return Request;
+	return OnServerConnectionLose;
 }
 
-FHttpRequestRef FPlayerDataInterfaceBase::MakePostRequest(const FString& URL, FString ContentType) const
+void FPlayerDataInterfaceBase::OnReceiveLoginMessage(FPacketArchiveReader& Data)
 {
-	FHttpRequestRef Request = MakeRequest();
-	Request->SetURL(FString::Printf(TEXT("%s%s"), *ServerURL, *URL));
-	Request->SetVerb(TEXT("POST"));
-	Request->SetHeader(TEXT("Content-Type"), ContentType);
-	return Request;
+	bool bLoginSucess;
+	Data << bLoginSucess;
+
+	BroadcastOnLogin(bLoginSucess);
 }
 
-FHttpRequestRef FPlayerDataInterfaceBase::MakeGetRequest(const FString& URL) const
+void FPlayerDataInterfaceBase::OnReceiveGetServerMessage(FPacketArchiveReader& Data)
 {
-	FHttpRequestRef Request = MakeRequest();
-	Request->SetURL(FString::Printf(TEXT("%s%s"), *ServerURL, *URL));
-	Request->SetVerb(TEXT("GET"));
-	Request->SetHeader(TEXT("Cookie"), Cookie);
-	return Request;
-}
-
-void FPlayerDataInterfaceBase::OnLoginCompleteTrigger(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully, FCommonCompleteNotify Delegate)
-{
-	FString ErrorMessage;
-
-	if (bConnectedSuccessfully)
-	{
-		FString ResponseContent = Response->GetContentAsString();
-
-		TSharedPtr<FJsonObject> Object;
-		TSharedRef< TJsonReader<> > Reader = TJsonReaderFactory<>::Create(ResponseContent);
-		bConnectedSuccessfully = FJsonSerializer::Deserialize(Reader, Object);
-		if (bConnectedSuccessfully)
-		{
-			bConnectedSuccessfully = Object->GetBoolField(TEXT("status"));
-			if (bConnectedSuccessfully)
-			{
-				FString RawCookie = Response->GetHeader(TEXT("Set-Cookie"));
-
-				bConnectedSuccessfully = !RawCookie.IsEmpty();
-
-				if (bConnectedSuccessfully)
-				{
-					int32 Index = 0;
-					RawCookie.FindChar(';', Index);
-					Cookie = RawCookie.Mid(0, Index).TrimEnd();
-				}
-			}
-			else
-			{
-				ErrorMessage = Object->GetStringField(TEXT("msg"));
-				UE_LOG_ONLINE(Error, TEXT("后端服务器登陆失败: %s"), *ErrorMessage);
-			}
-		}
-	}
-	else
-	{
-		ErrorMessage = TEXT("Login Fail");
-		UE_LOG_ONLINE(Error, TEXT("后端服务器登陆失败: bConnectedSuccessfully invalid"));
-	}
-
-	Delegate.ExecuteIfBound(ErrorMessage);
-}
-
-void FPlayerDataInterfaceBase::OnGetServerCompleteTrigger(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully, FGetServerComplete Delegate)
-{
+	bool bSucess;
 	FFindServerResult Result;
-	FString ErrorMessage;
-	
-	if (bConnectedSuccessfully)
+
+	Data << bSucess;
+	if (bSucess)
 	{
-		TSharedPtr<FJsonObject> Object;
-		TSharedRef< TJsonReader<> > Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
-		if (FJsonSerializer::Deserialize(Reader, Object))
-		{
-			if (Object->GetBoolField(TEXT("status")))
-			{
-				const TSharedPtr<FJsonObject>& Data = Object->GetObjectField(TEXT("data"));
-				FJsonObjectConverter::JsonObjectToUStruct(Data.ToSharedRef(), &Result);
-			}
-			else
-			{
-				ErrorMessage = Object->GetStringField(TEXT("msg"));
-			}
-		}
-		else
-		{
-			ErrorMessage = TEXT("Json解析失败");
-		}
-	}
-	else
-	{
-		ErrorMessage = TEXT("连接异常");
+		Data << Result;
 	}
 	
-	Delegate.ExecuteIfBound(Result, ErrorMessage);
+	BroadcastOnGetServer(Result, bSucess);
 }
 
-void FPlayerDataInterfaceBase::OnRegisterCompleteTrigger(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully, FRegisterServerComplete Delegate)
+void FPlayerDataInterfaceBase::OnReceiveRegisterServerMessage(FPacketArchiveReader& Data)
 {
-	if (bConnectedSuccessfully)
-	{
-		TSharedPtr<FJsonObject> Object;
-		TSharedRef< TJsonReader<> > Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
+	bool bSucess;
+	FString ServerId;
+	
+	Data << bSucess;
 
-		if (FJsonSerializer::Deserialize(Reader, Object))
-		{
-			if (Object->GetBoolField(TEXT("status")))
-			{
-				ServerID = Object->GetStringField(TEXT("data"));
-				Delegate.ExecuteIfBound(ServerID);
-			}
-			else
-			{
-				UE_LOG_ONLINE(Warning, TEXT("注册服务器失败: %s"), *Object->GetStringField(TEXT("msg")));
-			}
-		}
+	if (bSucess)
+	{
+		Data << ServerId;
+	}
+	
+	BroadcastOnRegisterServer(ServerId, bSucess);
+}
+
+void FPlayerDataInterfaceBase::OnReceiveNotifyBSMessage(FPacketArchiveReader& Data)
+{
+	bool bSucess;
+	FString ServerAddress;
+
+	Data << bSucess;
+
+	if (bSucess)
+	{
+		Data << ServerAddress;
+	}
+	BroadcastOnLaunchNotify(ServerAddress, bSucess);
+}
+
+void FPlayerDataInterfaceBase::OnSocketDisconnect()
+{
+	OnServerConnectionLose.ExecuteIfBound();
+
+	// todo 重新连接功能
+}
+
+void FPlayerDataInterfaceBase::OnReceiveData(FReceivePacket Data)
+{
+	TSharedRef<FPacketArchiveReader> ArchiveReader = MakeShared<FPacketArchiveReader>(Data);
+	
+	int32 Mark;
+	*ArchiveReader << Mark;
+
+	if (FOnReceiveMessage* Delegate = CallbackDelegates.Find(Mark))
+	{
+		AsyncTask(ENamedThreads::GameThread, [Delegate, ArchiveReader]
+	    {
+	        Delegate->Execute(*ArchiveReader);
+	    });
 	}
 }
 
-void FPlayerDataInterfaceBase::OnRunServerCompleteTrigger(FHttpRequestPtr Request, FHttpResponsePtr Response, bool bConnectedSuccessfully, FRunServerComplete Delegate)
+void FPlayerDataInterfaceBase::BindReceiveFunction(int32 Mark, FOnReceiveMessage Delegate)
 {
-	FString RunningServerID;
-	FString ErrorMessage;
+	CallbackDelegates.Add(Mark, Delegate);
+}
+
+bool FPlayerDataInterfaceBase::ConnectToServer()
+{
+	ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
+
+	TSharedPtr<FInternetAddr> Addr;
 	
-	if (bConnectedSuccessfully)
+	FAddressInfoResult Result = SocketSubsystem->GetAddressInfo(*ServerHostName, nullptr, EAddressInfoFlags::Default, NAME_None);
+	if (Result.ReturnCode == ESocketErrors::SE_NO_ERROR && Result.Results.Num() > 0)
 	{
-		TSharedPtr<FJsonObject> Object;
-		TSharedRef< TJsonReader<> > Reader = TJsonReaderFactory<>::Create(Response->GetContentAsString());
-		if (FJsonSerializer::Deserialize(Reader, Object))
-		{
-			if (Object->GetBoolField(TEXT("status")))
-			{
-				RunningServerID = Object->GetStringField(TEXT("data"));
-			}
-			else
-			{
-				ErrorMessage = Object->GetStringField(TEXT("msg"));
-			}
-		}
-		else
-		{
-			ErrorMessage = TEXT("Json解析失败");
-		}
-	}
-	else
-	{
-		ErrorMessage = TEXT("连接异常");
+		Addr = Result.Results[0].Address;
 	}
 
-	if (!ErrorMessage.IsEmpty())
+	if (!Addr.IsValid())
 	{
-		UE_LOG_ONLINE(Error, TEXT("运行服务器失败: %s"), *ErrorMessage);
+		UE_LOG(LogOnline, Error, TEXT("查找域名对应IP地址失败: %s"), SocketSubsystem->GetSocketError(Result.ReturnCode));
+		return false;
 	}
+
+	Addr->SetPort(ServerPort);
+	UE_LOG(LogOnline, Verbose, TEXT("Address: %s"), *Addr->ToString(true));
+
+	Socket = FTcpSocketBuilder(TEXT("PDISocket"))
+            .WithReceiveBufferSize(2 * 1024 * 1024)
+            .WithSendBufferSize(1024 * 1024)
+            .AsBlocking()
+            .AsReusable();
+
+	if (!Socket->Connect(*Addr))
+	{
+		ESocketErrors LastErrorCode = SocketSubsystem->GetLastErrorCode();
+		UE_LOG(LogOnline, Error, TEXT("连接到服务端失败: %s"), SocketSubsystem->GetSocketError(LastErrorCode));
+		return false;
+	}
+
+	SocketReceiver = new FTCPSocketReceiver(Socket);
+	SocketReceiver->OnReceiveDelegate().BindRaw(this, &FPlayerDataInterfaceBase::OnReceiveData);
+	SocketReceiver->OnShutdownDelegate().BindRaw(this, &FPlayerDataInterfaceBase::OnSocketDisconnect);
+	SocketReceiver->Start();
 	
-	Delegate.ExecuteIfBound(RunningServerID, ErrorMessage);
+	SocketSender = new FTCPSocketSender(Socket);
+
+	return true;
+}
+
+void FPlayerDataInterfaceBase::ShutdownSocket()
+{
+	if (SocketSender != nullptr)
+	{
+		SocketSender->Stop();
+		delete SocketSender;
+	}
+
+	if (Socket != nullptr)
+	{
+		Socket->Close();
+		ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
+		SocketSubsystem->DestroySocket(Socket);
+		Socket = nullptr;
+	}
+
+	// 套接字关了之后这边接收线程才能停， 不然会死锁卡住
+	if (SocketReceiver != nullptr)
+	{
+		SocketReceiver->Stop();
+		delete SocketReceiver;
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

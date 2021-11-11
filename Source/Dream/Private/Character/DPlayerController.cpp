@@ -17,8 +17,10 @@
 #include "OnlineSubsystem.h"
 #include "OnlineSubsystemTypes.h"
 #include "OnlineSessionSettings.h"
+#include "PlayerDataInterfaceBase.h"
 #include "Character/DCharacterPlayer.h"
 #include "PlayerDataInterfaceStatic.h"
+#include "PlayerServerDataInterface.h"
 
 #define LOCTEXT_NAMESPACE "Player.Controller"
 
@@ -73,18 +75,6 @@ void ADPlayerController::PostInitializeComponents()
 void ADPlayerController::BeginPlay()
 {
     Super::BeginPlay();
-
-    if (IsLocalController())
-    {
-        if (ISocketSubsystem* SocketSystem = ISocketSubsystem::Get(STEAM_SUBSYSTEM))
-        {
-            ClientSocket = SocketSystem->CreateSocket(TEXT("SteamClientSocket"), TEXT("LocalSteamClientSocket"));
-            FTimespan ThreadWaitTime = FTimespan::FromMilliseconds(1000);
-            UdpReceiver = new FUdpSocketReceiver(ClientSocket, ThreadWaitTime, TEXT("ClientReceiver"));
-            UdpReceiver->OnDataReceived().BindUObject(this, &ADPlayerController::RecvData);
-            UdpReceiver->Start();
-        }
-    }
 }
 
 void ADPlayerController::NotifyLoadedWorld(FName WorldPackageName, bool bFinalDest)
@@ -128,22 +118,13 @@ void ADPlayerController::ReturnToMainMenuWithTextReason(const FText& ErrorMessag
 void ADPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     Super::EndPlay(EndPlayReason);
-    
-    delete UdpReceiver;
-    if (ClientSocket)
-    {
-        ISocketSubsystem::Get(STEAM_SUBSYSTEM)->DestroySocket(ClientSocket);
-    }
 }
 
 #if WITH_EDITORONLY_DATA
 
 void ADPlayerController::TestLoginServer()
 {
-    if (FPlayerDataInterface* PDS = FPlayerDataInterfaceStatic::Get())
-    {
-        PDS->Login();
-    }
+    FPDIStatic::Get()->Login();
 }
 
 void ADPlayerController::TestCreateSession()
@@ -198,6 +179,12 @@ void ADPlayerController::TestFindSession()
         SessionInt->AddOnFindSessionsCompleteDelegate_Handle(Delegate);
         SessionInt->FindSessions(0, Search);
     }
+}
+
+void ADPlayerController::TestSocket() const
+{
+    FPlayerDataInterfaceBase* InterfaceBase = static_cast<FPlayerDataInterfaceBase*>(FPDIStatic::Get());
+    InterfaceBase->GetSender()->Send(PDIBuildParam<TService_PlayerInfo>(EGetEquipmentCondition::Equipped));
 }
 
 #endif
@@ -280,11 +267,11 @@ void ADPlayerController::SendMessageToPlayer(const FUniqueNetIdRepl& UserNetId, 
 
     if (bValid)
     {
-        int32 SendBytes;
+        /*int32 SendBytes;
         if (!ClientSocket->SendTo(Data.GetData(), Data.Num(), SendBytes, *Addr))
         {
             DREAM_NLOG(Error, TEXT("ClientSocket SendTo Error"));
-        }
+        }*/
     }
     else
     {
@@ -348,7 +335,7 @@ void ADPlayerController::ExitGame()
 
 void ADPlayerController::BeginGame()
 {
-    FPlayerDataInterfaceStatic::Get()->Login();
+    FPDIStatic::Get()->Login();
 }
 
 void ADPlayerController::HandleTeamApply()
@@ -392,24 +379,26 @@ void ADPlayerController::ClientHandleKilledRewardsGenerate_Implementation(UClass
 
     ADEnemyBase* Enemy = EnemyClass->GetDefaultObject<ADEnemyBase>();
 
-    UItemData* GenerateRewards = Enemy->RewardPool->GenerateRewards();
+    UItemData* GenerateRewards = Enemy->RewardPool->GenerateRewards(GetPlayerState<ADPlayerState>());
     if (GenerateRewards->IsValidData())
     {
-        FCommonCompleteNotify Delegate;
-        Delegate.BindUObject(this, &ADPlayerController::OnRewardsAddCompleted, GenerateRewards);
-        FPlayerDataInterfaceStatic::Get()->AddPlayerRewards(GenerateRewards, Delegate);
+        Handle_AddRewards = FPDIStatic::Get()->AddOnAddPlayerRewards(
+            FOnCompleted::FDelegate::CreateUObject(this, &ADPlayerController::OnRewardsAddCompleted, GenerateRewards));
+        FPDIStatic::Get()->AddPlayerRewards(FItemDataHandle(GenerateRewards));
     }
 }
 
-void ADPlayerController::OnRewardsAddCompleted(const FString& ErrorMessage, UItemData* Rewards)
+void ADPlayerController::OnRewardsAddCompleted(bool bSuccess, UItemData* Rewards)
 {
-    if (ErrorMessage.IsEmpty())
+    FPDIStatic::Get()->RemoveOnAddPlayerRewards(Handle_AddRewards);
+    
+    if (bSuccess)
     {
         SendClientRewardMessage(Rewards);
     }
     else
     {
-        DREAM_NLOG(Error, TEXT("Rewards Generate Error: %s"), *ErrorMessage);
+        DREAM_NLOG(Error, TEXT("Rewards Generate Errors"));
     }
 }
 
@@ -430,9 +419,6 @@ void ADPlayerController::SendClientRewardMessage(UItemData* Reward)
 
 void ADPlayerController::ClientReceiveRewardMessage_Implementation(const TArray<FRewardMessage>& RewardMessages)
 {
-    // 刷新数据
-    FPlayerDataInterfaceStatic::Get()->RefreshPlayerProperties();
-    
     for (const FRewardMessage& RewardMessage : RewardMessages)
     {
         if (RewardMessage.RewardPropsClass)

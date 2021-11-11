@@ -3,9 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Sockets.h"
 #include "DreamType.h"
-#include "DPropsType.h"
 #include "SharedPointer.h"
 #include "IPv4Endpoint.h"
 #include "PlayerDataInterface.h"
@@ -138,6 +136,9 @@ public:
 
 	UFUNCTION(Exec)
     void TestFindSession();
+	
+	UFUNCTION(Exec)
+    void TestSocket() const;
 	/* TEST ---------------------------------- */
 #endif
 
@@ -193,10 +194,9 @@ protected:
 
 private:
 
-	void OnRewardsAddCompleted(const FString& ErrorMessage, UItemData* Rewards);
+	void OnRewardsAddCompleted(bool bSuccess, UItemData* Rewards);
 
 	void RecvData(const TSharedPtr<class FArrayReader, ESPMode::ThreadSafe>& RawData, const FIPv4Endpoint& Endpoint);
 
-	class FUdpSocketReceiver* UdpReceiver;
-	class FSocket* ClientSocket;
+	FDelegateHandle Handle_AddRewards;
 };

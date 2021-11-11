@@ -13,14 +13,14 @@ UPDSAsync_EquipWeapon* UPDSAsync_EquipWeapon::PDI_EquipWeapon(UObject* WorldCont
 
 void UPDSAsync_EquipWeapon::Activate()
 {
-	FCommonCompleteNotify Delegate;
-	Delegate.BindUObject(this, &UPDSAsync_EquipWeapon::OnLoadCompleted);
-	FPlayerDataInterfaceStatic::Get()->EquipWeapon(T_WeaponId, T_EquipIndex, Delegate);
+	Handle = FPDIStatic::Get()->AddOnEquipWeapon(FOnCompleted::FDelegate::CreateUObject(this, &UPDSAsync_EquipWeapon::OnLoadCompleted));
+	FPDIStatic::Get()->EquipWeapon(FEquipWeaponParam(T_WeaponId, T_EquipIndex));
 }
 
-void UPDSAsync_EquipWeapon::OnLoadCompleted(const FString& ErrorMessage) const
+void UPDSAsync_EquipWeapon::OnLoadCompleted(bool bSuccess) const
 {
-	if (ErrorMessage.IsEmpty())
+	FPDIStatic::Get()->RemoveOnEquipWeapon(Handle);
+	if (bSuccess)
 	{
 		OnSuccess.Broadcast();
 	}

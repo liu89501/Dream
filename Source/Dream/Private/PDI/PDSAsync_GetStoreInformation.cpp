@@ -14,19 +14,19 @@ UPDSAsync_GetStoreInformation* UPDSAsync_GetStoreInformation::PDI_GetStoreInform
 
 void UPDSAsync_GetStoreInformation::Activate()
 {
-	FGetStoreItemsComplete Delegate;
-	Delegate.BindUObject(this, &UPDSAsync_GetStoreInformation::OnLoadCompleted);
-	FPlayerDataInterfaceStatic::Get()->GetStoreItems(T_StoreId, Delegate);
+	Handle = FPDIStatic::Get()->AddOnGetStoreItems(FOnGetStoreItems::FDelegate::CreateUObject(this, &UPDSAsync_GetStoreInformation::OnLoadCompleted));
+	FPDIStatic::Get()->GetStoreItems(T_StoreId);
 }
 
-void UPDSAsync_GetStoreInformation::OnLoadCompleted(const FStoreInformation& StoreInfo, const FString& ErrorMessage) const
+void UPDSAsync_GetStoreInformation::OnLoadCompleted(const FStoreInformation& StoreInfo, bool bSuccess) const
 {
-	if (ErrorMessage.IsEmpty())
+	FPDIStatic::Get()->RemoveOnGetStoreItems(Handle);
+	if (bSuccess)
 	{
-		OnSuccess.Broadcast(StoreInfo, ErrorMessage);
+		OnSuccess.Broadcast(StoreInfo);
 	}
 	else
 	{
-		OnFailure.Broadcast(StoreInfo, ErrorMessage);
+		OnFailure.Broadcast(StoreInfo);
 	}
 }

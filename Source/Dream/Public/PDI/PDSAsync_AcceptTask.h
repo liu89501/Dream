@@ -21,13 +21,15 @@ class UPDSAsync_AcceptTask: public UBlueprintAsyncActionBase
 public:
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category="PDI")
-    static UPDSAsync_AcceptTask* PDI_AcceptTask(UObject* WorldContextObject, int64 InTaskId);
+    static UPDSAsync_AcceptTask* PDI_AcceptTask(UObject* WorldContextObject, int32 InTaskId);
 
-	void OnCompleted(const FString& ErrorMessage) const;
+	void OnCompleted(bool ) const;
 
 	virtual void Activate() override;
 
 private:
 
-	int64 TaskId;
+	int32 TaskId;
+
+	FDelegateHandle Handle;
 };

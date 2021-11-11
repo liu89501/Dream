@@ -4,29 +4,38 @@
 #include "DreamGameSession.h"
 #include "OnlineSubsystem.h"
 #include "DreamGameMode.h"
-#include "OnlineSubsystemUtils.h"
 #include "PDI/PlayerDataInterface.h"
 #include "PDI/PlayerDataInterfaceStatic.h"
-#include "Interfaces/OnlineSessionInterface.h"
+#include "Kismet/GameplayStatics.h"
 
 void ADreamGameSession::RegisterServer()
 {
-	FString GameModeName;
-	FParse::Value(FCommandLine::Get(), TEXT("Game="), GameModeName);
+	int32 Port = GetNetDriver()->GetLocalAddr()->GetPort();
 
-	ADreamGameMode* GameMode = Cast<ADreamGameMode>(GetWorld()->GetAuthGameMode());
-	MaxPlayers = GameMode->GetGameModeMaxPlayers();
+	FString ServerID;
+	if (FParse::Value(FCommandLine::Get(), TEXT("ServerId="), ServerID))
+	{
+		FPDIStatic::Get()->NotifyBackendServer(FLaunchNotifyParam(ServerID, Port));
+	}
+	else
+	{
+		FString GameModeName;
+		FParse::Value(FCommandLine::Get(), TEXT("Game="), GameModeName);
 
-	FDedicatedServerInformation Information;
-	Information.Port = GetNetDriver()->GetLocalAddr()->GetPort();
-	Information.MapName = GetWorld()->GetMapName();
-	Information.MaxPlayers = MaxPlayers;
-	Information.GameModeName = GameModeName;
+		ADreamGameMode* GameMode = Cast<ADreamGameMode>(GetWorld()->GetAuthGameMode());
+		MaxPlayers = GameMode->GetGameModeMaxPlayers();
+
+		FDedicatedServerInformation Information;
+		Information.Port = Port;
+		Information.MapName = GetWorld()->GetMapName();
+		Information.MaxPlayers = MaxPlayers;
+		Information.GameModeName = GameModeName;
 	
-	FPlayerDataInterfaceStatic::Get()->RegisterServer(Information);
+		FPDIStatic::Get()->RegisterServer(Information);
 
-	UE_LOG_ONLINE(Log, TEXT("MapName: %s"), *GetWorld()->GetMapName());
-	UE_LOG_ONLINE(Log, TEXT("GameModeName: %s"), *GameModeName);
+		UE_LOG_ONLINE(Log, TEXT("MapName: %s"), *GetWorld()->GetMapName());
+		UE_LOG_ONLINE(Log, TEXT("GameModeName: %s"), *GameModeName);
+	}
 
 	/*IOnlineSessionPtr SessionInt = Online::GetSessionInterface();
 	if (SessionInt.IsValid())

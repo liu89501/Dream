@@ -9,6 +9,7 @@
 #include "GameplayAbilityTypes.h"
 #include "HoldState.h"
 #include "PlayerDataInterface.h"
+#include "PlayerGameData.h"
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetSystemLibrary.h"
@@ -178,16 +179,10 @@ public:
 	static const FPlayerProperties& GetCachedPlayerProperties();
 
 	UFUNCTION(BlueprintCallable, Meta = (DefaultToSelf="Object", HidePin = "Object"), Category = "DreamStatics|PDI|Delegate")
-	static void BindMoneyChangedDelegate(UObject* Object, FName FunctionName, FMulticastDelegateHandle& Handle);
-	
-	UFUNCTION(BlueprintCallable, Meta = (DefaultToSelf="Object", HidePin = "Object"), Category = "DreamStatics|PDI|Delegate")
-	static void BindExperienceChangedDelegate(UObject* Object, FName FunctionName, FMulticastDelegateHandle& Handle);
+	static void BindPropertiesChangeDelegate(UObject* Object, FName FunctionName, FMulticastDelegateHandle& Handle);
 	
 	UFUNCTION(BlueprintCallable, Category = "DreamStatics|PDI|Delegate")
-	static void RemoveExperienceDelegateHandle(const FMulticastDelegateHandle& MulticastDelegateHandle);
-	
-	UFUNCTION(BlueprintCallable, Category = "DreamStatics|PDI|Delegate")
-	static void RemoveMoneyDelegateHandle(const FMulticastDelegateHandle& MulticastDelegateHandle);
+	static void RemovePropertiesChangeDelegateHandle(const FMulticastDelegateHandle& MulticastDelegateHandle);
 	
 	UFUNCTION(BlueprintCallable, Category = "DreamStatics|PDI")
 	static void GroupModules(const TArray<FPlayerModule>& Modules, TMap<EModuleCategory, FPlayerModuleList>& GroupModules);

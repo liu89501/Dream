@@ -10,7 +10,7 @@ class UPDSAsync_GetStoreInformation : public UBlueprintAsyncActionBase
 {
 	GENERATED_BODY()
 
-	DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(FAsyncTaskCompoleteDelegate, const FStoreInformation&, StoreInfo, const FString&, ErrorMessage);
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAsyncTaskCompoleteDelegate, const FStoreInformation&, StoreInfo);
 
 	UPROPERTY(BlueprintAssignable)
 	FAsyncTaskCompoleteDelegate	OnSuccess;
@@ -25,9 +25,10 @@ public:
 
 	virtual void Activate() override;
 
-	void OnLoadCompleted(const FStoreInformation& StoreInfo, const FString& ErrorMessage) const;
+	void OnLoadCompleted(const FStoreInformation& StoreInfo, bool bSuccess) const;
 
 private:
 
 	int32 T_StoreId;
+	FDelegateHandle Handle;
 };

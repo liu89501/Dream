@@ -10,7 +10,7 @@ class UPDSAsync_PayItem : public UBlueprintAsyncActionBase
 {
 	GENERATED_BODY()
 
-	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAsyncTaskCompoleteDelegate, const FString&, ErrorMessage);
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE(FAsyncTaskCompoleteDelegate);
 
 	UPROPERTY(BlueprintAssignable)
 	FAsyncTaskCompoleteDelegate	OnSuccess;
@@ -24,7 +24,7 @@ public:
     static UPDSAsync_PayItem* PDI_BuyItem(UObject* WorldContextObject, int32 StoreId, int64 ItemId);
 
 	UFUNCTION()
-	void OnLoadCompleted(const FString& ErrorMessage) const;
+	void OnLoadCompleted(bool bSuccess) const;
 
 	virtual void Activate() override;
 
@@ -32,5 +32,6 @@ private:
 
 	int32 T_StoreId;
 	int64 T_ItemId;
+	FDelegateHandle Handle;
 	
 };

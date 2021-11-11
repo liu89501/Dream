@@ -25,10 +25,11 @@ public:
 
 	virtual void Activate() override;
 
-	void OnLoadCompleted(const FString& ErrorMessage) const;
+	void OnLoadCompleted(bool bSuccess) const;
 
 private:
 
 	int64 T_WeaponId;
 	int32 T_EquipIndex;
+	FDelegateHandle Handle;
 };

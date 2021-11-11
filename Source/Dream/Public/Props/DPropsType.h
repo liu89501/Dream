@@ -172,19 +172,7 @@ struct FEquipmentAttributes
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
 	TArray<TSubclassOf<UDreamGameplayAbility>> Perks;
 
-	friend FArchive& operator<<(FArchive& Ar, FEquipmentAttributes& Attr)
-	{
-		Ar << Attr.AttackPower;
-		Ar << Attr.Defense;
-		Ar << Attr.MaxHealth;
-		Ar << Attr.Penetration;
-		Ar << Attr.CriticalDamage;
-		Ar << Attr.CriticalRate;
-		Ar << Attr.DamageReduction;
-		Ar << Attr.HealthSteal;
-		Ar << Attr.Perks;
-		return Ar;
-	}
+	friend FArchive& operator<<(FArchive& Ar, FEquipmentAttributes& Attr);
 };
 
 USTRUCT(BlueprintType)

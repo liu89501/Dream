@@ -11,22 +11,22 @@ UPDSAsync_GetPlayerInfo* UPDSAsync_GetPlayerInfo::PDI_GetPlayerInformation(UObje
 	return PDSGP;
 }
 
-void UPDSAsync_GetPlayerInfo::OnLoadCompleted(const FPlayerInfo& PlayerInfo, const FString& ErrorMessage) const
+void UPDSAsync_GetPlayerInfo::OnLoadCompleted(const FPlayerInfo& PlayerInfo, bool bSuccess) const
 {
-	if (ErrorMessage.IsEmpty())
+	FPDIStatic::Get()->RemoveOnGetPlayerInfo(Handle);
+	if (bSuccess)
 	{
-		OnSuccess.Broadcast(PlayerInfo, ErrorMessage);
+		OnSuccess.Broadcast(PlayerInfo);
 	}
 	else
 	{
-		OnFailure.Broadcast(PlayerInfo, ErrorMessage);
+		OnFailure.Broadcast(PlayerInfo);
 	}
 }
 
 void UPDSAsync_GetPlayerInfo::Activate()
 {
-	FGetPlayerInfoComplete Delegate;
-	Delegate.BindUObject(this, &UPDSAsync_GetPlayerInfo::OnLoadCompleted);
-	FPlayerDataInterfaceStatic::Get()->GetPlayerInfo(T_Condition, Delegate);
+	Handle = FPDIStatic::Get()->AddOnGetPlayerInfo(FOnGetPlayerInfo::FDelegate::CreateUObject(this, &UPDSAsync_GetPlayerInfo::OnLoadCompleted));
+	FPDIStatic::Get()->GetPlayerInfo(T_Condition);
 }
 

@@ -23,13 +23,15 @@ class UPDSAsync_DeliverTask: public UBlueprintAsyncActionBase
 public:
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category="PDI")
-    static UPDSAsync_DeliverTask* PDI_DeliverTask(UObject* WorldContextObject, int64 TaskId);
+    static UPDSAsync_DeliverTask* PDI_DeliverTask(UObject* WorldContextObject, int32 TaskId);
 
-	void OnCompleted(UItemData* Rewards, const FString& ErrorMessage) const;
+	void OnCompleted(UItemData* Rewards, bool bSuccess) const;
 
 	virtual void Activate() override;
 
 private:
 
-	int64 T_TaskId;
+	int32 T_TaskId;
+
+	FDelegateHandle Handle;
 };

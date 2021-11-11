@@ -25,5 +25,9 @@ public:
 
 	virtual void Activate() override;
 
-	void OnCompleted(const FString& ErrorMessage) const;
+	void OnCompleted(bool bSuccess) const;
+
+private:
+
+	FDelegateHandle Handle;
 };
