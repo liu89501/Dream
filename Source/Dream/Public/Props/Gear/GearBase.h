@@ -3,10 +3,19 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DreamType.h"
 #include "PropsInterface.h"
 #include "GameFramework/Actor.h"
 #include "GearBase.generated.h"
+
+UENUM(BlueprintType)
+enum class EGearType : uint8
+{
+	None,
+    Head,
+    Hand,
+    Leg,
+    Shoe
+};
 
 UCLASS()
 class DREAM_API AGearBase : public AActor, public IPropsInterface

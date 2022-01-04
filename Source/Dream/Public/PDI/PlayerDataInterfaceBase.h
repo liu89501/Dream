@@ -79,10 +79,12 @@ template<int32 Mark> struct TService : TServiceBase<Mark> { };
 
 DEFINED_SERVICE_INFO(1, FString, TService_ServerLogin);
 DEFINED_SERVICE_INFO(2, FLoginParameter, TService_ClientLogin);
-DEFINED_SERVICE_INFO(3, FRunServerParameter, TService_RunDedicatedServer);
+DEFINED_SERVICE_INFO(3, FSearchServerParam, TService_SearchServer);
 DEFINED_SERVICE_INFO(4, FDedicatedServerInformation, TService_RegisterServer);
 DEFINED_SERVICE_INFO(5, FUpdateServerPlayerParam, TService_UpdateServer);
 DEFINED_SERVICE_INFO(6, FLaunchNotifyParam, TService_NotifyServer);
+
+//DEFINED_SERVICE_INFO(7, void, TService_ReceiveServerReady);
 
 template<typename S>
 TSharedRef<TArray<uint8>, ESPMode::ThreadSafe> PDIBuildParam(const typename S::Type& Param)
@@ -120,9 +122,13 @@ public:
 
 	virtual void Login() override;
 	virtual void Logout() override;
+
+	virtual int32 GetClientPlayerID() override;
+
+	virtual TSharedPtr<FInternetAddr> GetBackendServerAddr() override;
 	
 	// local
-	virtual void RunNewDedicatedServer(const FRunServerParameter& Parameter) override;
+	virtual void SearchDedicatedServer(const FSearchServerParam& Param) override;
 
 	// server
 	virtual void RegisterServer(const FDedicatedServerInformation& Information) override;
@@ -132,12 +138,14 @@ public:
 	virtual FPlayerDataDelegate& GetPlayerDataDelegate() override;
 	virtual FOnServerConnectionLose& OnServerConnectionLoseDelegate() override;
 
+	virtual void ReconnectToSpecifiedServer(uint32 Address, uint32 Port, FOnReconnectServer Delegate) override;
+
 public:
 
-	void OnReceiveLoginMessage(FPacketArchiveReader& Data);
-	void OnReceiveGetServerMessage(FPacketArchiveReader& Data);
+	void OnReceiveClientLoginMessage(FPacketArchiveReader& Data);
+	void OnReceiveServerLoginMessage(FPacketArchiveReader& Data);
+	void OnReceiveSearchServerMessage(FPacketArchiveReader& Data);
 	void OnReceiveRegisterServerMessage(FPacketArchiveReader& Data);
-	void OnReceiveNotifyBSMessage(FPacketArchiveReader& Data);
 
 	FORCEINLINE FTCPSocketSender* GetSender() const
 	{
@@ -159,9 +167,14 @@ protected:
 private:
 
 	bool ConnectToServer();
+	
 	void ShutdownSocket();
 
+	bool HandleConnect(TSharedPtr<FInternetAddr> Addr);
+
 	FSocket* Socket;
+
+	ISocketSubsystem* SocketSubsystem;
 
 	/* Server Host Name */
 	FString ServerHostName;
@@ -171,9 +184,12 @@ private:
 
 	/** 第三方服务子系统名称 */
 	FString OSSName;
-	
+
 	/* Encrypt Tool */
 	FAESUtils AESUtils;
+
+	/** 用户ID 只在客户端有效 */
+	int32 ClientPlayerId;
 
 	TMap<int32, FOnReceiveMessage> CallbackDelegates;
 	

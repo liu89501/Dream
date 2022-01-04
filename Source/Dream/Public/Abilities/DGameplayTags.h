@@ -19,9 +19,14 @@ struct MyCustomizeTags
     FGameplayTag Condition_Firing;
     FGameplayTag Condition_KilledEnemy;
     FGameplayTag Condition_HitEnemy;
+    FGameplayTag Condition_Crit; // 暴击时
 
     // 生命偷取 SetByCallerTag
-    FGameplayTag HealthStealSetByCallerTag;
+    FGameplayTag SetByCaller_HealthSteal;
+
+    /** GameplayExecution中的临时变量标签 */
+    FGameplayTag Exec_Temporary_PercentageDmgInc; // 百分比增伤
+    FGameplayTag Exec_Temporary_FixedDamage; // 固定伤害
 };
 
 static const MyCustomizeTags& CustomizeTags()

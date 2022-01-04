@@ -21,16 +21,15 @@ class UPDSAsync_PayItem : public UBlueprintAsyncActionBase
 public:
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category=PDI)
-    static UPDSAsync_PayItem* PDI_BuyItem(UObject* WorldContextObject, int32 StoreId, int64 ItemId);
+    static UPDSAsync_PayItem* PDI_BuyItem(UObject* WorldContextObject, int64 ItemId);
 
 	UFUNCTION()
-	void OnLoadCompleted(bool bSuccess) const;
+	void OnLoadCompleted(bool bSuccess);
 
 	virtual void Activate() override;
 
 private:
 
-	int32 T_StoreId;
 	int64 T_ItemId;
 	FDelegateHandle Handle;
 	

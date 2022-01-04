@@ -4,43 +4,48 @@
 #include "DreamGameInstance.h"
 #include "Engine.h"
 #include "DreamType.h"
-#include "MoviePlayer.h"
 #include "PlayerDataInterface.h"
 #include "PlayerDataInterfaceStatic.h"
 #include "PlayerGameData.h"
-#include "UserWidget.h"
+#include "UI/SDialog.h"
+#include "UI/SSubtitle.h"
 
 UDreamGameInstance::UDreamGameInstance()
 {
-
 }
 
-FSurfaceImpactEffect EmptySurfaceImpactEffect = FSurfaceImpactEffect();
-
-const FSurfaceImpactEffect& UDreamGameInstance::GetSurfaceImpactEffect(EPhysicalSurface SurfaceType)
+SSubtitle* UDreamGameInstance::GetSubtitleWidget() const
 {
-	const FSurfaceImpactEffect* EffectPtr = SurfaceImpactEffects.Find(SurfaceType);
-	return EffectPtr ? *EffectPtr : EmptySurfaceImpactEffect;
+	return Subtitle.Get();
 }
 
 void UDreamGameInstance::Init()
 {
 	Super::Init();
 
-	FPDIStatic::Startup();
+#if !UE_SERVER
 
+	SDialog::InitInstance();
+	
+#endif
+	
+	
 #if WITH_EDITOR
 
 	FPDIStatic::Get()->Login();
 	
 #endif
+}
 
+void UDreamGameInstance::OnStart()
+{
+	Super::OnStart();
 
-	if (!IsRunningDedicatedServer())
+	// Client Only 
+	if (UGameViewportClient* ViewportClient = GetGameViewportClient())
 	{
-		LoadingScreenWidget = CreateWidget(this, LoadingScreenWidgetClass);
-		FCoreUObjectDelegates::PreLoadMap.AddUObject(this, &UDreamGameInstance::OnPreLoadMap);
-		FCoreUObjectDelegates::PostLoadMapWithWorld.AddUObject(this, &UDreamGameInstance::OnPostLoadMap);
+		SAssignNew(Subtitle, SSubtitle).DisplayMode(EDisplayMode::OnePerFrame);
+		ViewportClient->AddViewportWidgetContent(Subtitle.ToSharedRef(), EWidgetOrder::Subtitle);
 	}
 }
 
@@ -48,22 +53,19 @@ void UDreamGameInstance::Shutdown()
 {
 	Super::Shutdown();
 
-	FPDIStatic::Shutdown();
-}
-
-void UDreamGameInstance::OnPreLoadMap(const FString& MapName)
-{
-	/*if (MapName == TEXT("/Game/Maps/MainMenuUI"))
+	if (UGameViewportClient* ViewportClient = GetGameViewportClient())
 	{
-		return;
-	}*/
+		if (Subtitle.IsValid())
+		{
+			ViewportClient->RemoveViewportWidgetContent(Subtitle.ToSharedRef());
+			Subtitle.Reset();
+		}
+	}
 
-	FLoadingScreenAttributes Attr;
-	Attr.WidgetLoadingScreen = LoadingScreenWidget->TakeWidget();
-	GetMoviePlayer()->SetupLoadingScreen(Attr);
-}
+#if !UE_SERVER
 
-void UDreamGameInstance::OnPostLoadMap(UWorld* LoadedWorld)
-{
-	GetMoviePlayer()->StopMovie();
+	SDialog::ResetInstance();
+
+#endif
+	
 }

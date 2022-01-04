@@ -41,11 +41,12 @@ public class Dream : ModuleRules
             "HTTP",
             "Slate",
             "SlateCore",
-            "MoviePlayer",
             "PhysicsCore",
             "OnlineSubsystem",
             "OnlineSubsystemSteam",
-            "AIModule"
+            "AIModule",
+            "AssetRegistry",
+            "DreamLoadingScreen"
         });
 
         AddEngineThirdPartyPrivateStaticDependencies(Target, "Steamworks");

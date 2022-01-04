@@ -1,26 +1,17 @@
 #include "PDI/PlayerDataInterfaceStatic.h"
+
+#include "PlayerDataInterfaceNull.h"
 #include "PDI/PlayerDataInterface.h"
 #include "PDI/PlayerLocalDataInterface.h"
 #include "PDI/PlayerServerDataInterface.h"
 
 FPlayerDataInterface* FPDIStatic::Singleton = nullptr;
-UTaskDataAsset* FPDIStatic::TaskDataAsset = nullptr;
 
-void FPDIStatic::Startup()
+void FPDIStatic::Initialize()
 {
 	if (Singleton == nullptr)
 	{
-		TaskDataAsset = LoadObject<UTaskDataAsset>(nullptr, TEXT("/Game/Main/Asset/DA_TaskList"));
-		checkf(TaskDataAsset, TEXT("Load TaskDataAsset Failure"));
-		
-		if (FPDIStatic::IsLocalInterface())
-		{
-			Singleton = new FPlayerLocalDataInterface();
-		}
-		else
-		{
-			Singleton = new FPlayerServerDataInterface();
-		}
+		Singleton = new FPlayerServerDataInterface();
 
 		Singleton->Initialize();
 	}
@@ -57,9 +48,4 @@ bool FPDIStatic::IsLocalInterface()
 {
 	static bool IsLocalPDI = IsLocal();
 	return IsLocalPDI;
-}
-
-UTaskDataAsset* FPDIStatic::GetTaskDataAsset()
-{
-	return TaskDataAsset;
 }

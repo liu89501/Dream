@@ -1,86 +1,140 @@
-﻿
-#include "SDialog.h"
-#include "Engine.h"
+// Fill out your copyright notice in the Description page of Project Settings.
 
-#define LOCTEXT_NAMESPACE "Dream.Dialog"
 
+#include "UI/SDialog.h"
+#include "SImage.h"
+#include "SlateColorBrush.h"
+#include "Style/DialogSlateWidgetStyle.h"
+#include "Style/DreamStyle.h"
+#include "SlateOptMacros.h"
+
+TSharedPtr<SDialog> SDialog::SINGLETON;
+
+BEGIN_SLATE_FUNCTION_BUILD_OPTIMIZATION
 void SDialog::Construct(const FArguments& InArgs)
 {
-	FButtonStyle DefultButtonStyle;
-	FSlateColorBrush Normal(FLinearColor(0, 1, 1, 0.8f));
-	FSlateColorBrush Hover(FLinearColor(0, 1, 1, 0.6f));
-	FSlateColorBrush Press(FLinearColor(0, 1, 1, 0.5f));
-	
-	DefultButtonStyle.SetNormal(Normal);
-	DefultButtonStyle.SetHovered(Hover);
-	DefultButtonStyle.SetPressed(Press);
-	ButtonStyle = DefultButtonStyle;
+	const FDialogSlateStyle& DialogStyle = FDreamStyle::Get().GetWidgetStyle<FDialogSlateStyle>("DialogStyle");
 
-	FSlateBrush DefaultInnerBackground;
-	DefaultInnerBackground.TintColor = FLinearColor(0, 0, 0);
-	InnerBackground = DefaultInnerBackground;
-
-	FSlateFontInfo FontInfo(InArgs._FontBase, 22);
+	LineBrush = MakeShared<FSlateColorBrush>(FLinearColor::White);
+	LineBrush->SetImageSize(FVector2D(4.f, 4.f));
 
 	ChildSlot
+	[
+		SNew(SOverlay)
+		+ SOverlay::Slot()
+		.HAlign(HAlign_Fill)
+		.VAlign(VAlign_Bottom)
 		[
 			SNew(SOverlay)
 			+ SOverlay::Slot()
-			.HAlign(HAlign_Center)
-			.VAlign(VAlign_Center)
 			[
-				SNew(SBox)
-				.WidthOverride(500.f)
-				.HeightOverride(200.f)
+				SNew(SImage)
+				.Image(&DialogStyle.BackgroundBrush)
+			]
+			+ SOverlay::Slot()
+			.HAlign(HAlign_Left)
+			.VAlign(VAlign_Fill)
+			[
+				SNew(SImage)
+                .Image(LineBrush.Get())
+			]
+			+ SOverlay::Slot()
+			.HAlign(HAlign_Left)
+			.VAlign(VAlign_Center)
+			.Padding(150.f, 0.f)
+			[
+				SNew(SHorizontalBox)
+				+ SHorizontalBox::Slot()
+				.HAlign(HAlign_Center)
+				.VAlign(VAlign_Center)
+				.AutoWidth()
+				.Padding(0.f)
 				[
-					SNew(SOverlay)
-					+ SOverlay::Slot()
-					.HAlign(HAlign_Fill)
-					.VAlign(VAlign_Fill)
+					SAssignNew(Icon, SImage)
+				]
+				+ SHorizontalBox::Slot()
+				.HAlign(HAlign_Left)
+				.VAlign(VAlign_Center)
+				.Padding(30.f, 0.f)
+				.AutoWidth()
+				[
+					SNew(SVerticalBox)
+					+ SVerticalBox::Slot()
+					.VAlign(VAlign_Center)
+					.Padding(0.f, 8.f)
 					[
-						SNew(SImage)
-						.Image(&InnerBackground)
+						SAssignNew(Title, STextBlock)
+						.TextStyle(&DialogStyle.TitleTextStyle)
 					]
-					+ SOverlay::Slot()
-					.HAlign(HAlign_Fill)
-					.VAlign(VAlign_Fill)
-					.Padding(FMargin(20.f, 0))
+					+ SVerticalBox::Slot()
+					.Padding(0.f, 8.f)
+					.VAlign(VAlign_Center)
 					[
-						SNew(SVerticalBox)
-						+ SVerticalBox::Slot()
-						.MaxHeight(150.f)
-						.Padding(FMargin(0, 20.f))
-						[
-							SNew(STextBlock)
-							.Text(InArgs._Content)
-							.Font(FontInfo)
-						]
-						+ SVerticalBox::Slot()
-						.MaxHeight(50.f)
-						[
-							SNew(SButton)
-							.ButtonStyle(&ButtonStyle)
-							.OnClicked(this, &SDialog::OnClick)
-							[
-								SNew(STextBlock)
-								.Text(LOCTEXT("Dialog_SureText", "确定"))
-								.Justification(ETextJustify::Center)
-								.LineHeightPercentage(1.f)
-								.Font(FontInfo)
-								.ColorAndOpacity(FSlateColor(FLinearColor(1, 1, 1)))
-							]
-						]
+						SAssignNew(Content, STextBlock)
+						.TextStyle(&DialogStyle.ContentTextStyle)
 					]
 				]
-
 			]
-		];
-}
 
-FReply SDialog::OnClick()
+		]
+	];
+}
+END_SLATE_FUNCTION_BUILD_OPTIMIZATION
+
+void SDialog::UpdateDialog(EDialogType DialogType, const FText& InContent) const
 {
-	FGenericPlatformMisc::RequestExit(false);
-	return FReply::Handled();
+	if (Icon.IsValid())
+	{
+		const FDialogSlateStyle& DialogStyle = FDreamStyle::Get().GetWidgetStyle<FDialogSlateStyle>("DialogStyle");
+
+		if (const FDialogInformation* IconInf = DialogStyle.Icons.Find(DialogType))
+		{
+			Icon->SetImage(&IconInf->DialogIcon);
+			LineBrush->TintColor = IconInf->DialogIcon.TintColor;
+
+			if (Title.IsValid())
+			{
+				Title->SetText(IconInf->DialogTitle);
+			}
+		}
+	}
+
+	if (Content.IsValid())
+	{
+		Content->SetText(InContent);
+	}
 }
 
-#undef LOCTEXT_NAMESPACE
+void SDialog::PlayFadeInAnim(float ViewportWidth)
+{
+	bPlayAnimation = true;
+	FadeInValue = ViewportWidth;
+}
+
+void SDialog::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+{
+	if (bPlayAnimation)
+	{
+		FadeInValue = FMath::FInterpTo(FadeInValue, 0, InDeltaTime, 30.f);
+
+		FTransform2D NewTransform;
+		NewTransform.SetTranslation(FVector2D(-FadeInValue, 0));
+		RenderTransform.Set(NewTransform);
+
+		if (FMath::IsNearlyZero(FadeInValue))
+		{
+			bPlayAnimation = false;
+		}
+	}
+}
+
+void SDialog::InitInstance()
+{
+	SAssignNew(SINGLETON, SDialog);
+}
+
+void SDialog::ResetInstance()
+{
+	SINGLETON.Reset();
+	SINGLETON = nullptr;
+}

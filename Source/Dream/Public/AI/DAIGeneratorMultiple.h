@@ -6,7 +6,7 @@
 #include "DAIGeneratorBase.h"
 #include "DAIGeneratorMultiple.generated.h"
 
-UCLASS()
+UCLASS(Abstract)
 class DREAM_API ADAIGeneratorMultiple : public ADAIGeneratorBase
 {
 	GENERATED_BODY()

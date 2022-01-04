@@ -3,6 +3,7 @@
 #include "DProjectile.h"
 #include "DCharacterPlayer.h"
 #include "DProjectileComponent.h"
+#include "DProjectSettings.h"
 #include "DreamGameInstance.h"
 #include "ShootWeapon.h"
 #include "UnrealNetwork.h"
@@ -42,6 +43,12 @@ ADProjectile::ADProjectile()
     InitialLifeSpan = 5.f;
 }
 
+void ADProjectile::PostInitializeComponents()
+{
+    Super::PostInitializeComponents();
+    SphereCollision->MoveIgnoreActors.Add(GetInstigator());
+}
+
 void ADProjectile::OnRep_Impact()
 {
     if (bRadialDamage)
@@ -76,45 +83,41 @@ void ADProjectile::OnRep_Impact()
     }
     else
     {
-        if (UDreamGameInstance* GameInstance = Cast<UDreamGameInstance>(GetGameInstance()))
+        FHitResult HitInfo;
+
+        FVector Location = GetActorLocation();
+
+        FCollisionQueryParams CollisionQuery;
+        CollisionQuery.bReturnPhysicalMaterial = true;
+        CollisionQuery.AddIgnoredActor(this);
+
+        UWorld* World = GetWorld();
+
+        bool bHit = World->SweepSingleByChannel(HitInfo, Location, Location + 2.f, FQuat::Identity,
+                                                ECC_Visibility,
+                                                FCollisionShape::MakeSphere(
+                                                    SphereCollision->GetScaledSphereRadius() + 8.f), CollisionQuery);
+
+        EPhysicalSurface SurfaceType = bHit ? SurfaceType = HitInfo.PhysMaterial->SurfaceType : EPhysicalSurface::SurfaceType_Default;
+
+        const FSurfaceImpactEffect& SurfaceEffect = UDProjectSettings::GetProjectSettings()->GetSurfaceImpactEffect(SurfaceType);
+
+        FRotator Rotation = GetActorRotation();
+        if (SurfaceEffect.ImpactParticles)
         {
-            FHitResult HitInfo;
+            FRotator ParticleRot(Rotation.Pitch - 90.f, Rotation.Yaw, Rotation.Roll);
+            UGameplayStatics::SpawnEmitterAtLocation(this, SurfaceEffect.ImpactParticles, Location, ParticleRot, ParticlesSize);
+        }
 
-            FVector Location = GetActorLocation();
+        if (SurfaceEffect.ImpactDecal)
+        {
+            FRotator DecalRot(Rotation.Pitch, Rotation.Yaw, FMath::FRandRange(-180.f, 180.f));
+            UGameplayStatics::SpawnDecalAtLocation(this, SurfaceEffect.ImpactDecal, DecalSize, Location, DecalRot, 10.f);
+        }
 
-            FCollisionQueryParams CollisionQuery;
-            CollisionQuery.bReturnPhysicalMaterial = true;
-            CollisionQuery.AddIgnoredActor(this);
-
-            UWorld* World = GetWorld();
-
-            bool bHit = World->SweepSingleByChannel(HitInfo, Location, Location + 2.f, FQuat::Identity,
-                                                    ECC_Visibility,
-                                                    FCollisionShape::MakeSphere(
-                                                        SphereCollision->GetScaledSphereRadius() + 8.f), CollisionQuery);
-
-            EPhysicalSurface SurfaceType = bHit ? SurfaceType = HitInfo.PhysMaterial->SurfaceType
-                                               : EPhysicalSurface::SurfaceType_Default;
-
-            const FSurfaceImpactEffect& SurfaceEffect = GameInstance->GetSurfaceImpactEffect(SurfaceType);
-
-            FRotator Rotation = GetActorRotation();
-            if (SurfaceEffect.ImpactParticles)
-            {
-                FRotator ParticleRot(Rotation.Pitch - 90.f, Rotation.Yaw, Rotation.Roll);
-                UGameplayStatics::SpawnEmitterAtLocation(this, SurfaceEffect.ImpactParticles, Location, ParticleRot, ParticlesSize);
-            }
-
-            if (SurfaceEffect.ImpactDecal)
-            {
-                FRotator DecalRot(Rotation.Pitch, Rotation.Yaw, FMath::FRandRange(-180.f, 180.f));
-                UGameplayStatics::SpawnDecalAtLocation(this, SurfaceEffect.ImpactDecal, DecalSize, Location, DecalRot, 10.f);
-            }
-
-            if (SurfaceEffect.ImpactSound)
-            {
-                UGameplayStatics::SpawnSoundAtLocation(this, SurfaceEffect.ImpactSound, Location);
-            }
+        if (SurfaceEffect.ImpactSound)
+        {
+            UGameplayStatics::SpawnSoundAtLocation(this, SurfaceEffect.ImpactSound, Location);
         }
     }
 }

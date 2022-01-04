@@ -3,14 +3,12 @@
 
 // ReSharper disable CppMemberFunctionMayBeConst
 #include "PDI/PlayerDataInterfaceType.h"
-#include "DExperience.h"
+#include "DEquipmentPerkPool.h"
 #include "DGameplayStatics.h"
-#include "DModuleBase.h"
-#include "DMoney.h"
 #include "DreamGameInstance.h"
-#include "ShootWeapon.h"
+#include "DreamWidgetStatics.h"
 
-DEFINE_LOG_CATEGORY(LogPDS)
+#define LOCTEXT_NAMESPACE "PlayerDataType"
 
 /*FArchive& operator<<(FArchive& Ar, UClass*& Class)
 {
@@ -30,288 +28,296 @@ DEFINE_LOG_CATEGORY(LogPDS)
 	}
 }*/
 
+void FQuestActionContainer::SerializeData(FArchive& Ar)
+{
+	FQuestActionBase::SerializeData(Ar);
+	
+	if (Ar.IsSaving())
+	{
+		int32 ActionNum = Actions.Num();
+		Ar << ActionNum;
+
+		for (TSharedPtr<FQuestActionBase> Action : Actions)
+		{
+			Action->SerializeData(Ar);
+		}
+	}
+}
+
+void FQuestAction_KilledTarget::SerializeData(FArchive& Ar)
+{
+	FQuestActionBase::SerializeData(Ar);
+
+	Ar << TargetPawn;
+}
+
+void FQuestAction_Event::SerializeData(FArchive& Ar)
+{
+	FQuestActionBase::SerializeData(Ar);
+	Ar << EventName;
+}
+
 float UDQuestCondition::BP_GetQuestProgressPercent() const
 {
 	return GetQuestProgressPercent();
 }
 
-float UDQuestCondition::GetQuestProgressPercent() const
+FText UDQuestCondition::BP_GetConditionDesc() const
 {
-	return TargetValue == 0 ? 0 : CurrentValue / static_cast<float>(TargetValue);
-}
-
-bool UDQuestCondition::UpdateCondition(const FQuestActionHandle& Handle)
-{
-	return false;
+	return NativeGetConditionDesc();
 }
 
 bool UDQuestCondition::IsCompleted() const
 {
-	return TargetValue == CurrentValue;
+	return bCompleted;
 }
 
-void UDQuestCondition::SerializeItemData(FArchive& Ar)
+FText UDQuestCondition::NativeGetConditionDesc() const
 {
+	return FText::FromString(TEXT(""));
 }
 
-bool UDQuestCondition_KillTarget::UpdateCondition(const FQuestActionHandle& Handle)
+float UDQuestCondition::GetQuestProgressPercent() const
 {
-	if (IsCompleted())
-	{
-		return true;
-	}
-	
-	if (FQuestAction* QuestAction = Handle.GetData())
-	{
-		if (QuestAction->GetStructType() == FQuestAction_KilledTarget::StaticStruct())
-		{
-			FQuestAction_KilledTarget* Action_KilledTarget = static_cast<FQuestAction_KilledTarget*>(QuestAction);
-			if (Action_KilledTarget->GetTargetClass()->IsChildOf(*TargetType))
-			{
-				FPlatformAtomics::InterlockedExchange(&CurrentValue, FMath::Min(CurrentValue + 1, TargetValue));
-			}
-		}
-	}
-
-	return IsCompleted();
+	return 0;
 }
 
-void UDQuestCondition_KillTarget::SerializeItemData(FArchive& Ar)
+void UDQuestCondition::SerializeData(FArchive& Ar)
 {
-	Ar << CurrentValue;
-	Ar << TargetValue;
-	Ar << TargetType;
-}
-
-UClass* UItemData::GetItemClass() const
-{
-	return nullptr;
-}
-
-int32 UItemData::GetItemAmount() const
-{
-	return 1;
-}
-
-EItemType::Type UItemData::NativeGetItemType() const
-{
-	return EItemType::INVALID;
-}
-
-bool UItemData::IsValidData() const
-{
-	return true;
-}
-
-const FPropsInfo& UItemData::GetPropsInformation() const
-{
-	if (UClass* ItemClass = GetItemClass())
-	{
-		if (IPropsInterface* PropsInterface = Cast<IPropsInterface>(ItemClass->GetDefaultObject()))
-		{
-			return PropsInterface->GetPropsInfo();
-		}
-	}
-
-	return FEmptyStruct::EmptyPropsInfo;
-}
-
-TEnumAsByte<EItemType::Type> UItemData::GetItemType() const
-{
-	return NativeGetItemType();
-}
-
-void UItemDataContainer::AddItem(UItemData* ItemData)
-{
-	for (UItemData* Item : FItemDataRange(ItemData))
-	{
-		Items.Add(Item);
-	}
-}
-
-void UItemDataContainer::SetItems(const TArray<UItemData*>& NewItems)
-{
-	Items = NewItems;
-}
-
-bool UItemDataContainer::IsValidData() const
-{
-	return Items.Num() > 0;
-}
-
-void UItemData::SerializeItemData(FArchive& Ar)
-{
-	Ar << SerializeMark;
-	Ar << ItemId;
-	Ar << PlayerId;
-}
-
-void UItemData::InitializeExtraProperties()
-{
-}
-
-void UItemDataContainer::SerializeItemData(FArchive& Ar)
-{
-	Super::SerializeItemData(Ar);
-
-	int32 ItemNum;
-
 	if (Ar.IsSaving())
 	{
-		ItemNum = Items.Num();
-		Ar << ItemNum;
+		Ar << ConditionGUID; 
+	}
 
-		for (UItemData* ItemData : Items)
+	Ar << bCompleted;
+}
+
+UDQuestCondition* UDQuestCondition::Decode(FArchive& Ar)
+{
+	check(Ar.IsLoading());
+	
+	ETaskCondGUID ConditionGUID;
+	Ar << ConditionGUID;
+
+	UDQuestCondition* Condition;
+
+	switch (ConditionGUID)
+	{
+	case ETaskCondGUID::KILL_TARGET:
+		Condition = NewObject<UDQuestCondition_KillTarget>();
+		break;
+	case ETaskCondGUID::EVENT:
+		Condition = NewObject<UDQuestCondition_Event>();
+		break;
+	case ETaskCondGUID::CONTAINER:
+		Condition = NewObject<UDQuestCondition_Container>();
+		break;
+	default:
+		Condition = nullptr;
+	}
+
+	if (Condition != nullptr)
+	{
+		Condition->ConditionGUID = ConditionGUID;
+		Condition->SerializeData(Ar);
+	}
+
+	return Condition;
+}
+
+float UDQuestCondition_Count::GetQuestProgressPercent() const
+{
+	return TargetValue == 0 ? 0 : CurrentValue / static_cast<float>(TargetValue);
+}
+
+void UDQuestCondition_Count::SerializeData(FArchive& Ar)
+{
+	Super::SerializeData(Ar);
+
+	Ar << CurrentValue;
+	Ar << TargetValue;
+}
+
+float UDQuestCondition_Container::GetQuestProgressPercent() const
+{
+	int32 Num = Conditions.Num();
+	if (Num == 0)
+	{
+		return 0.f;
+	}
+
+	float PercentAvg = 0.f;
+	for (UDQuestCondition* Condition : Conditions)
+	{
+		check(Condition);
+		PercentAvg += Condition->GetQuestProgressPercent();
+	}
+
+	return PercentAvg / Num;
+}
+
+void UDQuestCondition_Container::SerializeData(FArchive& Ar)
+{
+	Super::SerializeData(Ar);
+
+	int32 ConditionNum = Conditions.Num();
+	Ar << ConditionNum;
+	
+	if (Ar.IsLoading())
+	{
+		Conditions.SetNumZeroed(ConditionNum);
+		for (int32 N = 0; N < ConditionNum; N++)
 		{
-			FItemDataHandle Handle(ItemData);
-			Ar << Handle;
+			Conditions[N] = UDQuestCondition::Decode(Ar);
 		}
 	}
 	else
 	{
-		Ar << ItemNum;
-		
-		for (int32 N = 0; N < ItemNum; N++)
+		for (int32 N = 0; N < ConditionNum; N++)
 		{
-			FItemDataHandle Handle;
-			Ar << Handle;
-			Items.Add(Handle.Get());
+			Conditions[N]->SerializeData(Ar);
 		}
 	}
 }
 
-UItemData* UItemDataContainer::GetNextItem()
-{
-	if (Items.IsValidIndex(ItemIndex))
-	{
-		return Items[ItemIndex++];
-	}
-	return nullptr;
-}
-
 #if WITH_EDITOR
 
-void UItemDataContainer::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
+void UDQuestCondition_Container::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
-	if (PropertyChangedEvent.Property && PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(UItemDataContainer, Items))
+	if (PropertyChangedEvent.Property == nullptr)
 	{
-		for (TArray<UItemData*>::TIterator Iterator = Items.CreateIterator(); Iterator; ++Iterator)
+		return;
+	}
+
+	if (PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(UDQuestCondition_Container, Conditions))
+	{
+		for (TArray<UDQuestCondition*>::TIterator Iterator = Conditions.CreateIterator(); Iterator; ++Iterator)
 		{
-			UItemData* Current = *Iterator;
-			if (Current && Current->IsA<UItemDataContainer>())
+			UDQuestCondition* Current = *Iterator;
+			if (Current && Current->IsA<UDQuestCondition_Container>())
 			{
 				Iterator.RemoveCurrent();
 			}
 		}
 	}
 }
-
 #endif
 
-void UItemDataTradable::SerializeItemData(FArchive& Ar)
+FText UDQuestCondition_KillTarget::NativeGetConditionDesc() const
 {
-	Super::SerializeItemData(Ar);
-	Ar << ItemPrice;
+	static FText Desc = LOCTEXT("COND_KillTarget", "击杀目标");
+	return Desc;
+}
+
+void UDQuestCondition_KillTarget::SerializeData(FArchive& Ar)
+{
+	Super::SerializeData(Ar);
+	
+	Ar << TargetType;
+}
+
+float UDQuestCondition_Event::GetQuestProgressPercent() const
+{
+	return bCompleted ? 1.f : 0.f;
+}
+
+FText UDQuestCondition_Event::NativeGetConditionDesc() const
+{
+	static FText Desc = LOCTEXT("COND_Event", "完成事件");
+    return Desc;
+}
+
+void UDQuestCondition_Event::SerializeData(FArchive& Ar)
+{
+	Super::SerializeData(Ar);
+
+	Ar << EventName;
 }
 
 void UItemDataEquipment::SerializeItemData(FArchive& Ar)
 {
 	Super::SerializeItemData(Ar);
-	
+
 	Ar << Attributes;
 }
 
-
-void UItemDataWeapon::SerializeItemData(FArchive& Ar)
+UItemDataEquipment* UItemDataEquipment_Random::CastToEquipment()
 {
-	Super::SerializeItemData(Ar);
+	if (AttrPool)
+	{
+		UItemDataEquipment* Equipment = NewObject<UItemDataEquipment>();
+		AttrPool->GenerateAttributes(Equipment->Attributes);
+
+		return Equipment;
+	}
 	
-	Ar << WeaponClass;
-
-	if (Ar.IsLoading())
-	{
-		InitializeExtraProperties();
-	}
+	return nullptr;
 }
 
-UClass* UItemDataWeapon::GetItemClass() const
-{
-	return WeaponClass;
-}
-
-void UItemDataWeapon::AttemptAssignAttributes()
-{
-	if (!bFixedAttributes)
-	{
-		AShootWeapon* WeaponCDO = GetItemClass()->GetDefaultObject<AShootWeapon>();
-		Attributes = FEquipmentAttributesAssign::AssignAttributes(WeaponCDO->AttributesAssign);
-	}
-}
-
-void UItemDataWeapon::InitializeExtraProperties()
-{
-	AShootWeapon* CDO = GetItemClass()->GetDefaultObject<AShootWeapon>();
-	RateOfFire = CDO->RateOfFire;
-	Magazine = CDO->AmmoNum;
-	FireMode = UEnum::GetDisplayValueAsText(CDO->FireMode);
-}
-
-void UItemDataModule::SerializeItemData(FArchive& Ar)
+void UItemDataNumericalValue::SerializeItemData(FArchive& Ar)
 {
 	Super::SerializeItemData(Ar);
 
-	Ar << ModuleClass;
+	Ar << Value;
+}
 
-	if (Ar.IsLoading())
+void UItemData::SerializeItemData(FArchive& Ar)
+{
+	if (Ar.IsSaving())
 	{
-		InitializeExtraProperties();
+		Ar << ItemGuid;
 	}
 }
 
-UClass* UItemDataModule::GetItemClass() const
+UItemData* UItemData::Decode(FArchive& Ar)
 {
-	return ModuleClass;
-}
+	check(Ar.IsLoading());
 
-void UItemDataModule::AttemptAssignAttributes()
-{
-	if (!bFixedAttributes)
-	{
-		UDModuleBase* ModuleCDO = GetItemClass()->GetDefaultObject<UDModuleBase>();
-		Attributes = FEquipmentAttributesAssign::AssignAttributes(ModuleCDO->AttributesAssign);
-	}
-}
+	int32 Guid;
+	Ar << Guid;
 
-void UItemDataModule::InitializeExtraProperties()
-{
-	UDModuleBase* ModuleCDO = GetItemClass()->GetDefaultObject<UDModuleBase>();
-	Category = ModuleCDO->Category;
-}
+	int32 ItemType = ::GetItemType(Guid);
 
-UClass* UItemDataExperience::GetItemClass() const
-{
-	return UDExperience::StaticClass();
-}
-
-void UItemDataExperience::SerializeItemData(FArchive& Ar)
-{
-	Super::SerializeItemData(Ar);
+	UItemData* ItemData;
 	
-	Ar << ExperienceAmount;
+	switch (ItemType)
+	{
+		case EItemType::Weapon:
+		case EItemType::Module:
+			ItemData = NewObject<UItemDataEquipment>();
+			break;
+		case EItemType::Experience:
+		case EItemType::Material:
+			ItemData = NewObject<UItemDataNumericalValue>();
+			break;
+		default:
+			ItemData = nullptr;
+	}
+
+	if (ItemData != nullptr)
+	{
+		ItemData->ItemGuid = Guid;
+		ItemData->SerializeItemData(Ar);
+	}
+
+	return ItemData;
 }
 
-UClass* UItemDataMoney::GetItemClass() const
+UClass* UItemData::GetItemClass() const
 {
-	return UDMoney::StaticClass();
+	return UDreamWidgetStatics::GetItemClassByGuid(ItemGuid);
 }
 
-void UItemDataMoney::SerializeItemData(FArchive& Ar)
+const FPropsInfo& UItemData::GetPropsInfo() const
 {
-	Super::SerializeItemData(Ar);
-	
-	Ar << MoneyAmount;
+	return UDreamWidgetStatics::GetPropsInfoByItemGuid(ItemGuid);
+}
+
+TEnumAsByte<EItemType::Type> UItemData::GetItemType() const
+{
+	return ::GetItemType(ItemGuid);
 }
 
 UItemData* FItemDataHandle::Get() const
@@ -319,30 +325,9 @@ UItemData* FItemDataHandle::Get() const
 	return ItemData;
 }
 
-
-UDQuestCondition* FQuestConditionHandle::Get() const
+FString FSearchServerResult::GetConnectURL(int32 PlayerID) const
 {
-	return QuestCondition;
+	return FString::Printf(TEXT("%s?PlayerId=%d"), *ServerAddress, PlayerID);
 }
 
-bool UTaskDataAsset::GetInformationByTaskId(int32 TaskId, FTaskInformation& Information)
-{
-	if (Tasks.IsValidIndex(TaskId - 1))
-	{
-		Information = Tasks[TaskId - 1];
-
-		return true;
-	}
-
-	return false;
-}
-
-void UTaskDataAsset::PreSave(const ITargetPlatform* TargetPlatform)
-{
-	Super::PreSave(TargetPlatform);
-
-	for (int32 N = 0; N < Tasks.Num(); N++)
-	{
-		Tasks[N].TaskId = N + 1;
-	}
-}
+#undef LOCTEXT_NAMESPACE

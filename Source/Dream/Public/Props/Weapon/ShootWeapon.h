@@ -204,6 +204,44 @@ enum class EWeaponType : uint8
 	PrecisionRifle UMETA(DisplayName="精准步枪") 
 };
 
+UENUM(BlueprintType)
+enum class EAmmoType : uint8
+{
+	Level1,
+    Level2,
+    Level3
+};
+
+USTRUCT(BlueprintType)
+struct FWeaponTrailVFX
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere)
+	class UNiagaraSystem* TrailEffect;
+	UPROPERTY(EditAnywhere)
+	float MinimumSpawnDistance;
+	UPROPERTY(EditAnywhere)
+	float TrailFlyingSpeed;
+	UPROPERTY(EditAnywhere)
+	FVector SpawnPositionOffset;
+	UPROPERTY(EditAnywhere)
+	FName TrailEndLocationParamName;
+	UPROPERTY(EditAnywhere)
+	FName TrailLifeTimeParamName;
+
+
+	FWeaponTrailVFX()
+        : TrailEffect(nullptr),
+          MinimumSpawnDistance(200.f),
+          TrailFlyingSpeed(25000.f),
+          SpawnPositionOffset(FVector::ZeroVector),
+          TrailEndLocationParamName(TEXT("EndPosition")),
+          TrailLifeTimeParamName(TEXT("NCLifeTime"))
+	{
+	}
+};
+
 USTRUCT(BlueprintType)
 struct FWeaponShootMuzzle
 {
@@ -231,23 +269,37 @@ public:
 	}
 };
 
-USTRUCT(BlueprintType)
-struct FWeaponAnimAdjustData
+USTRUCT()
+struct FRadialDamageProjectileInfo
 {
-	GENERATED_BODY()
+	GENERATED_USTRUCT_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	FVector RHandIKEffectorLocation;
+public:
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	FVector RHandIKJointTargetLocation;
+	FRadialDamageProjectileInfo() :
+        Origin(FVector::ZeroVector),
+        DamageRadius(0.f)
+	{
+	}
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	FTransform LeftHandIKEffectorTransform;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	FRotator LHandRotation;
+	FRadialDamageProjectileInfo(
+        const FVector& InOrigin,
+        float InDamageRadius)
+
+        : Origin(InOrigin),
+          DamageRadius(InDamageRadius)
+	{
+	}
+
+public:
+
+	UPROPERTY()
+	FVector_NetQuantize Origin;
+	UPROPERTY()
+	float DamageRadius;
 };
+
 
 USTRUCT(BlueprintType)
 struct DREAM_API FCharacterMontage
@@ -313,9 +365,6 @@ public:
 	/** 武器属性 */
 	UPROPERTY(BlueprintReadOnly, Category = Weapon)
 	FEquipmentAttributes WeaponAttribute;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Weapon)
-	FEquipmentAttributesAssign AttributesAssign;
 	
 	/** 瞄准时的摄像机FOV */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Weapon)
@@ -333,12 +382,14 @@ public:
 	FTransform WeaponSocketOffset;
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
 	FTransform WeaponHolsterSocketOffset;
+
+	/** 武器预览时的变换 */
+	UPROPERTY(EditAnywhere, Category = Weapon)
+	FTransform PreviewTransform;
 	
 	/** WeaponUI */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Weapon|UI")
 	FSlateBrush CrosshairBrush;
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Weapon|UI")
-	FSlateBrush MagazineBrush;
 
 	/** (射程) 枪械瞄准时的射线检测长度 */
 	UPROPERTY(EditDefaultsOnly, Category = Weapon)
@@ -453,20 +504,19 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName = "OnWeaponEnable", DisplayName = "OnWeaponEnable"), Category = "Weapon|Event")
 	void BP_OnWeaponEnable(bool bEnable);
 
-	
-	
 public:
 
 	virtual const FPropsInfo& GetPropsInfo() const override;
 
 	virtual ERewardNotifyMode GetRewardNotifyMode() const override;
 
+	virtual FTransform GetPreviewRelativeTransform() const override;
+
 	// ServerOnly
 	virtual void ApplyPointDamage(const FHitResult& HitInfo);
 	virtual void ApplyRadialDamage(const FRadialDamageProjectileInfo& RadialDamage);
 
 	const FSlateBrush& GetDynamicCrosshairBrush();
-	const FSlateBrush& GetDynamicMagazineBrush();
 
 	virtual void SetWeaponAim(bool NewAimed);
 
@@ -483,6 +533,8 @@ public:
 	{
 		return LastFireTime;
 	}
+
+	void AttachToCharacter(bool bActiveSocket, USkeletalMeshComponent* Mesh);
 
 protected:
 

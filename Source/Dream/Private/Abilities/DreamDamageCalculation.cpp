@@ -2,12 +2,9 @@
 
 
 #include "Abilities/DreamDamageCalculation.h"
-
-
 #include "DCharacterBase.h"
 #include "DGameplayTags.h"
 #include "DGE_DamageHealthSteal.h"
-#include "DreamGameplayType.h"
 #include "GenericTeamAgentInterface.h"
 #include "Abilities/DreamAttributeSet.h"
 #include "Kismet/KismetMathLibrary.h"
@@ -16,11 +13,16 @@ UDreamDamageCalculation::UDreamDamageCalculation()
 {
     RelevantAttributesToCapture.Add(DreamAttrStatics().DefensePowerDef);
     RelevantAttributesToCapture.Add(DreamAttrStatics().AttackPowerDef);
-    RelevantAttributesToCapture.Add(DreamAttrStatics().DamageDef);
     RelevantAttributesToCapture.Add(DreamAttrStatics().CriticalRateDef);
     RelevantAttributesToCapture.Add(DreamAttrStatics().CriticalDamageDef);
-    RelevantAttributesToCapture.Add(DreamAttrStatics().IncreaseAtkPowPercentageDef);
-    RelevantAttributesToCapture.Add(DreamAttrStatics().HealthStealPercentageDef);
+    RelevantAttributesToCapture.Add(DreamAttrStatics().HealthStealDef);
+    RelevantAttributesToCapture.Add(DreamAttrStatics().WeaponDamageAssaultRifleDef);
+    RelevantAttributesToCapture.Add(DreamAttrStatics().WeaponDamageGrenadeLaunchDef);
+    RelevantAttributesToCapture.Add(DreamAttrStatics().WeaponDamageShotgunDef);
+    RelevantAttributesToCapture.Add(DreamAttrStatics().WeaponDamageSniperRifleDef);
+    RelevantAttributesToCapture.Add(DreamAttrStatics().WeaponDamagePrecisionRifleDef);
+
+    ValidTransientAggregatorIdentifiers.AddTag(CustomizeTags().Exec_Temporary_PercentageDmgInc);
 }
 
 void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustomExecutionParameters& ExecutionParams,
@@ -63,11 +65,8 @@ void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustom
     float AttackPower = 0.f;
     ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DreamAttrStatics().AttackPowerDef, EvaluationParameters, AttackPower);
 
-    float IncreaseAtkPowPercentage = 0.f;
-    ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DreamAttrStatics().IncreaseAtkPowPercentageDef, EvaluationParameters, IncreaseAtkPowPercentage);
-
-    float Damage = 0.f;
-    ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DreamAttrStatics().DamageDef, EvaluationParameters, Damage);
+    float PercentageDmgInc = 0.f;
+    ExecutionParams.AttemptCalculateTransientAggregatorMagnitude(CustomizeTags().Exec_Temporary_PercentageDmgInc, EvaluationParameters, PercentageDmgInc);
 
     FDreamGameplayEffectContext* DreamEffectContext = nullptr;
     
@@ -82,6 +81,7 @@ void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustom
     float CriticalDamageAddition = 0.f;
     float DamageFalloffPercentage = 0.f;
     float IncreaseDamagePercentage = 0.f;
+    float DamageTypeIncPercentage = 0.f;
 
     if (DreamEffectContext)
     {
@@ -95,11 +95,18 @@ void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustom
             ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DreamAttrStatics().CriticalDamageDef, EvaluationParameters, CriticalDamageAddition);
         }
         
-        // 伤害距离衰减
+        // 距离伤害衰减
         DamageFalloffPercentage = 1.f - DreamEffectContext->GetDamageFalloffPercentage();
 
         // 弱点增伤
         IncreaseDamagePercentage = DreamEffectContext->GetWeakPointIncreaseDamagePercentage();
+
+        // 武器类型增伤
+        FGameplayEffectAttributeCaptureDefinition CaptureDef;
+        if (GetAttributeCaptureFromDamageType(DreamEffectContext->GetDamageType(), CaptureDef))
+        {
+            ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(CaptureDef, EvaluationParameters, DamageTypeIncPercentage);
+        }
 
         // 造成得伤害 * 弹片数量
         //DamageDone *= DreamEffectContext->GetHitPoints().Num();
@@ -111,9 +118,9 @@ void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustom
         CharacterLevel = TargetCharacter->GetCharacterLevel();
     }
 
-    float DamageDone = (AttackPower + Damage)
-        * (1 + IncreaseAtkPowPercentage + IncreaseDamagePercentage)
-        * (1 + CriticalDamageAddition)
+    float DamageDone = AttackPower
+        * (1 + PercentageDmgInc + IncreaseDamagePercentage + CriticalDamageAddition)
+        * (1 + DamageTypeIncPercentage)
         * (1 - DamageFalloffPercentage - DefensePower / (DefensePower + 1500 - 20 * CharacterLevel));
     
     DamageDone = FMath::Max(DamageDone, 1.f);
@@ -123,16 +130,54 @@ void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustom
 
     // 生命偷取计算
     float HealthStealPercentage = 0.f;
-    ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DreamAttrStatics().HealthStealPercentageDef, EvaluationParameters, HealthStealPercentage);
+    ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DreamAttrStatics().HealthStealDef, EvaluationParameters, HealthStealPercentage);
     
     // 对源应用回血效果
     float TreatmentAmount = HealthStealPercentage * DamageDone;
     if (TreatmentAmount > 1.f)
     {
         FGameplayEffectSpec TreatmentEffectSpec(GetDefault<UDGE_DamageHealthSteal>(), SourceAbilitySystem->MakeEffectContext());
-        TreatmentEffectSpec.SetSetByCallerMagnitude(CustomizeTags().HealthStealSetByCallerTag, TreatmentAmount);
+        TreatmentEffectSpec.SetSetByCallerMagnitude(CustomizeTags().SetByCaller_HealthSteal, TreatmentAmount);
         SourceAbilitySystem->ApplyGameplayEffectSpecToSelf(TreatmentEffectSpec);
     }
 
     OutExecutionOutput.AddOutputModifier(FGameplayModifierEvaluatedData(DreamAttrStatics().DamageProperty, EGameplayModOp::Additive, DamageDone));
+}
+
+bool UDreamDamageCalculation::GetAttributeCaptureFromDamageType(EDDamageType DamageType, FGameplayEffectAttributeCaptureDefinition& OutDef) const
+{
+    bool bValid = true;
+    
+    switch (DamageType)
+    {
+    case EDDamageType::Weapon_Shotgun:
+
+        OutDef = DreamAttrStatics().WeaponDamageShotgunDef;
+        break;
+
+    case EDDamageType::Weapon_AssaultRifle:
+            
+        OutDef = DreamAttrStatics().WeaponDamageAssaultRifleDef;
+        break;
+
+    case EDDamageType::Weapon_GrenadeLaunch:
+
+        OutDef = DreamAttrStatics().WeaponDamageGrenadeLaunchDef;
+        break;
+        
+    case EDDamageType::Weapon_PrecisionRifle:
+
+        OutDef = DreamAttrStatics().WeaponDamagePrecisionRifleDef;
+        break;
+        
+    case EDDamageType::Weapon_SniperRifle:
+
+        OutDef = DreamAttrStatics().WeaponDamageSniperRifleDef;
+        break;
+        
+    default:
+        bValid = false;
+    }
+
+    return bValid;
 }

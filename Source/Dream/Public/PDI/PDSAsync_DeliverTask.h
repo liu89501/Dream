@@ -1,7 +1,6 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
-
 #include "PlayerDataInterfaceType.h"
 #include "Kismet/BlueprintAsyncActionBase.h"
 #include "PDSAsync_DeliverTask.generated.h"
@@ -12,7 +11,7 @@ class UPDSAsync_DeliverTask: public UBlueprintAsyncActionBase
 {
 	GENERATED_BODY()
 
-	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAsyncTaskCompoleteDelegate, UItemData*, Rewards);
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE(FAsyncTaskCompoleteDelegate);
 
 	UPROPERTY(BlueprintAssignable)
 	FAsyncTaskCompoleteDelegate	OnSuccess;
@@ -23,15 +22,15 @@ class UPDSAsync_DeliverTask: public UBlueprintAsyncActionBase
 public:
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category="PDI")
-    static UPDSAsync_DeliverTask* PDI_DeliverTask(UObject* WorldContextObject, int32 TaskId);
+    static UPDSAsync_DeliverTask* PDI_DeliverTask(UObject* WorldContextObject, int64 TaskId);
 
-	void OnCompleted(UItemData* Rewards, bool bSuccess) const;
+	void OnCompleted(bool bSuccess);
 
 	virtual void Activate() override;
 
 private:
 
-	int32 T_TaskId;
+	int64 T_TaskId;
 
 	FDelegateHandle Handle;
 };

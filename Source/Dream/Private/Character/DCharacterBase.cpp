@@ -1,9 +1,9 @@
 ﻿#include "DCharacterBase.h"
 
+#include "DPlayerState.h"
 #include "DrawDebugHelpers.h"
 #include "Kismet/GameplayStatics.h"
 #include "Perception/AIPerceptionStimuliSourceComponent.h"
-#include "DreamGameMode.h"
 #include "UnrealNetwork.h"
 #include "DreamType.h"
 #include "DreamAttributeSet.h"
@@ -15,8 +15,7 @@ ADCharacterBase::ADCharacterBase()
     //StimuliSource = CreateDefaultSubobject<UAIPerceptionStimuliSourceComponent>(TEXT("StimuliSource"));
     AttributeSet = CreateDefaultSubobject<UDreamAttributeSet>(TEXT("DreamAttributeSet"));
     AbilitySystem = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystem"));
-    MiniMapData = CreateDefaultSubobject<UMiniMapDataComponent>(TEXT("MiniMapData"));
-    MiniMapData->SetAutoActivate(false);
+    IconComponent = CreateDefaultSubobject<UIconComponent>(TEXT("Icon"));
 
     AbilitySystem->SetIsReplicated(true);
 }
@@ -55,22 +54,32 @@ bool ADCharacterBase::IsDeath() const
 
 void ADCharacterBase::HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle)
 {
-    ADCharacterBase* LocalInstigator = Cast<ADCharacterBase>(Handle.GetInstigator());
+    ADCharacterBase* DamageInstigator = Cast<ADCharacterBase>(Handle.GetInstigator());
     
-    if (LocalInstigator == nullptr || LocalInstigator->IsPendingKill())
+    if (DamageInstigator == nullptr || DamageInstigator->IsPendingKill())
     {
         return;
     }
 
+    if (ADPlayerState* State = Cast<ADPlayerState>(DamageInstigator->GetPlayerState()))
+    {
+        State->RecordDamage(DamageDone);
+
+        if (IsDeath())
+        {
+            State->IncreaseKills();
+        }
+    }
+
     const FHitResult* HitResult = Handle.GetHitResult();
-    BP_HandleDamage(DamageDone, HitResult ? *HitResult : FHitResult(), LocalInstigator);
+    BP_HandleDamage(DamageDone, HitResult ? *HitResult : FHitResult(), DamageInstigator);
 
     bool bDeath = IsDeath();
-    LocalInstigator->HitEnemy(FDamageTargetInfo(DamageDone, bDeath, Handle), this);
+    DamageInstigator->HitEnemy(FDamageTargetInfo(DamageDone, bDeath, Handle), this);
 
-    if (bDeath)
+    if (IsDeath())
     {
-        OnDeath(LocalInstigator);
+        OnDeath(DamageInstigator);
     }
 }
 
@@ -111,9 +120,9 @@ void ADCharacterBase::SetGenericTeamId(const FGenericTeamId& NewTeamID)
     TeamID = NewTeamID;
 }
 
-UMiniMapDataComponent* ADCharacterBase::GetMiniMapDataComponent() const
+UIconComponent* ADCharacterBase::GetIconComponent() const
 {
-    return MiniMapData;
+    return IconComponent;
 }
 
 float ADCharacterBase::GetWeaknessIncreaseDamagePercentage(const FName& BoneName)
@@ -129,6 +138,7 @@ FGenericTeamId ADCharacterBase::GetGenericTeamId() const
 
 float ADCharacterBase::GetHealthPercent() const
 {
-    float MaxHealth = AttributeSet->GetMaxHealth();
+    // 最大生命值直接获取永久更改的基值
+    float MaxHealth = AttributeSet->MaxHealth.GetBaseValue();
     return MaxHealth > 0 ? AttributeSet->GetHealth() / MaxHealth : 0;
 }

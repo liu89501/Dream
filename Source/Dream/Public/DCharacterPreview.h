@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "DItemPreview.h"
 #include "DreamType.h"
+#include "PlayerDataInterfaceType.h"
 #include "ShootWeapon.h"
 
 
@@ -18,11 +19,13 @@ class DREAM_API ADCharacterPreview : public ADItemPreview
 {
 	GENERATED_BODY()
 
-
 public:
 
+	ADCharacterPreview();
+	
+	
 	UFUNCTION(BlueprintCallable, Category=CharacterPreview)
-	void InitialPreviewCharacter(ADCharacterPlayer* Character);
+	void InitPreviewCharacterFromPlayerInfo(int32 InUseWeaponSlot, const FPlayerInfo& PlayerInfo);
 
 	UFUNCTION(BlueprintCallable, Category=CharacterPreview)
 	void UpdatePreviewWeapon(TSubclassOf<AShootWeapon> WeaponClass, int32 NewIndex);
@@ -44,6 +47,11 @@ public:
 
 private:
 
+	int32 UseWeaponSlot;
+
 	UPROPERTY()
-	ADCharacterPlayer* OwningCharacter;
+	USkeletalMeshComponent* PreviewCharacterMesh;
+
+	UPROPERTY()
+	TArray<AShootWeapon*> EquippedWeapons;
 };

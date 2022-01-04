@@ -6,11 +6,8 @@
 // Sets default values
 ADNPCCharacter::ADNPCCharacter()
 {
- 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = false;
-
-	MiniMapDataComp = CreateDefaultSubobject<UMiniMapDataComponent>(TEXT("MiniMapDataComp"));
-	MiniMapDataComp->SetAutoActivate(false);
+	IconComponent = CreateDefaultSubobject<UIconComponent>(TEXT("IconComponent"));
 }
 
 // Called when the game starts or when spawned
@@ -25,8 +22,8 @@ void ADNPCCharacter::Tick(float DeltaTime)
 	Super::Tick(DeltaTime);
 }
 
-UMiniMapDataComponent* ADNPCCharacter::GetMiniMapDataComponent() const
+UIconComponent* ADNPCCharacter::GetIconComponent() const
 {
-	return MiniMapDataComp;
+	return IconComponent;
 }
 

@@ -20,7 +20,7 @@ void UPDSAsync_EquipModule::Activate()
 	FPDIStatic::Get()->EquipModule(FEquipModuleParam(T_ModuleId, T_Category));
 }
 
-void UPDSAsync_EquipModule::OnCompleted(bool bSuccess) const
+void UPDSAsync_EquipModule::OnCompleted(bool bSuccess)
 {
 	FPDIStatic::Get()->RemoveOnEquipModule(Handle);
 	if (bSuccess)

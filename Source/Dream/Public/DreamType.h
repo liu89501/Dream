@@ -3,12 +3,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Engine/DataTable.h"
 #include "DreamType.generated.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogDream, Log, All);
 
-#define DREAM_LOG(Verbosity, Format, ...) UE_LOG(LogDream, Verbosity, TEXT("%s: %s"), *UEnum::GetValueAsString(GetLocalRole()), *FString::Printf(Format, ##__VA_ARGS__));
 #define DREAM_NLOG(Verbosity, Format, ...) UE_LOG(LogDream, Verbosity, TEXT("%s"), *FString::Printf(Format, ##__VA_ARGS__));
 
 #define Collision_ObjectType_Projectile ECollisionChannel::ECC_GameTraceChannel1
@@ -16,17 +14,19 @@ DECLARE_LOG_CATEGORY_EXTERN(LogDream, Log, All);
 
 #define IfStandalone(Key) if (GetNetMode() == NM_Standalone) { Key; }
 
-#define DNUMBER_ZERO (0)
-#define DNUMBER_ONE (1)
-
-#define PROBABILITY_UINT 100
 
 namespace DreamActorTagName
 {
-	extern const FName Teammate;
-	extern const FName Enemy;
 	extern const FName Death;
 }
+
+
+UENUM(BlueprintType)
+enum class EPawnType : uint8
+{
+	Shooter,
+    Monster
+};
 
 UENUM(BlueprintType)
 namespace EWidgetOrder
@@ -42,277 +42,11 @@ namespace EWidgetOrder
 		PlayerCtrlOuter,
 		InteractiveUI,
 		RewardPopup,
-		LoadingPopup
+		LoadingPopup,
+		Subtitle,
+		Max
 	};
 }
-
-UENUM(BlueprintType)
-enum class EGameType : uint8
-{
-	PVE,
-	PVP,
-	Permanent
-};
-
-UENUM(BlueprintType)
-enum class EGearType : uint8
-{
-	None,
-	Head,
-	Hand,
-	Leg,
-	Shoe
-};
-
-UENUM(BlueprintType)
-namespace EMessageType
-{
-	enum Type
-	{
-		Kill_Message,
-		Talk_Message,
-		TeamApply_Message,
-		All
-	};
-}
-
-UENUM()
-enum class EWeaponStatus : uint8
-{
-	Idle,
-	Firing,
-	Reloading,
-	Equipping
-};
-
-UENUM(BlueprintType)
-enum class EAmmoType : uint8
-{
-	Level1,
-	Level2,
-	Level3
-};
-
-UENUM(BlueprintType)
-enum class EAbilityType : uint8
-{
-	Initiative,
-	Passives
-};
-
-UENUM(BlueprintType)
-enum class EMiniMapDrawType : uint8
-{
-	Warning,
-	Sprite
-};
-
-UENUM(BlueprintType)
-enum class EOpportunity : uint8
-{
-	Immediately UMETA(ToolTip="即时", DisplayName="立即"),
-	Reloading UMETA(ToolTip="填装弹药时", DisplayName="装填弹药时"),
-	Injured UMETA(ToolTip="受到伤害时", DisplayName="受到伤害时"),
-	Firing UMETA(ToolTip="开火时", DisplayName="开火时"),
-	KilledEnemy UMETA(ToolTip="击杀敌方目标时", DisplayName="击杀敌方目标时"),
-};
-
-UENUM(BlueprintType)
-namespace ETalkType
-{
-	enum Type
-	{
-		Current,
-		World,
-		Team,
-		Private,
-		NONE
-	};
-}
-
-USTRUCT(BlueprintType)
-struct FWeaponTrailVFX
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere)
-	class UNiagaraSystem* TrailEffect;
-	UPROPERTY(EditAnywhere)
-	float MinimumSpawnDistance;
-	UPROPERTY(EditAnywhere)
-	float TrailFlyingSpeed;
-	UPROPERTY(EditAnywhere)
-	FVector SpawnPositionOffset;
-	UPROPERTY(EditAnywhere)
-	FName TrailEndLocationParamName;
-	UPROPERTY(EditAnywhere)
-	FName TrailLifeTimeParamName;
-
-
-	FWeaponTrailVFX()
-		: TrailEffect(nullptr),
-		  MinimumSpawnDistance(200.f),
-		  TrailFlyingSpeed(25000.f),
-		  SpawnPositionOffset(FVector::ZeroVector),
-		  TrailEndLocationParamName(TEXT("EndPosition")),
-		  TrailLifeTimeParamName(TEXT("NCLifeTime"))
-	{
-	}
-};
-
-struct FMiniMapData
-{
-public:
-	FMiniMapData() : PosNormalize(FVector2D::ZeroVector),
-					 Yaw(0),
-					 DistancePercentage(0),
-	                 DrawType(EMiniMapDrawType::Warning),
-	                 SpriteBrush(nullptr),
-	                 OverflowSpriteBrush(nullptr)
-	{
-	}
-
-	FMiniMapData(
-		const FVector2D& InPosNormalize,
-		float InYaw,
-		float InDistancePercentage,
-		EMiniMapDrawType InDrawType,
-		FSlateBrush* InSprite,
-		FSlateBrush* InOverflowSprite)
-		:
-		PosNormalize(InPosNormalize),
-		Yaw(InYaw),
-		DistancePercentage(InDistancePercentage),
-		DrawType(InDrawType),
-		SpriteBrush(InSprite),
-		OverflowSpriteBrush(InOverflowSprite)
-	{
-	}
-
-	FVector2D PosNormalize;
-	float Yaw;
-	float DistancePercentage;
-	EMiniMapDrawType DrawType;
-	FSlateBrush* SpriteBrush;
-	FSlateBrush* OverflowSpriteBrush;
-};
-
-USTRUCT()
-struct FDamageResult
-{
-	GENERATED_USTRUCT_BODY()
-
-public:
-
-	FDamageResult()
-		: Damage(0), bCritical(false)
-	{
-	}
-
-	FDamageResult(float InDamage, bool InbCritical)
-		: Damage(InDamage), bCritical(InbCritical)
-	{
-	}
-
-	float Damage;
-	bool bCritical;
-};
-
-USTRUCT(BlueprintType)
-struct FKillMessage
-{
-	GENERATED_USTRUCT_BODY()
-
-public:
-
-	FKillMessage() = default;
-
-	FKillMessage(FString InKillerName, FString InSufferName)
-		: KillerName(InKillerName), SufferName(InSufferName)
-	{
-	}
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FString KillerName;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FString SufferName;
-};
-
-USTRUCT(BlueprintType)
-struct FTalkMessage
-{
-	GENERATED_USTRUCT_BODY()
-
-public:
-
-	FTalkMessage() = default;
-
-	FTalkMessage(FString InPlayerName, FString InContent, TEnumAsByte<ETalkType::Type> InTalkType)
-		: PlayerName(InPlayerName), Content(InContent), TalkType(InTalkType)
-	{
-	}
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FString PlayerName;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FString Content;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	TEnumAsByte<ETalkType::Type> TalkType;
-};
-
-USTRUCT(BlueprintType)
-struct FPlayerAccountInfo
-{
-	GENERATED_USTRUCT_BODY()
-
-public:
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FString PlayerName;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FString AccountID;
-
-	bool operator==(const FPlayerAccountInfo& Other)
-	{
-		return Other.AccountID == AccountID;
-	}
-};
-
-USTRUCT()
-struct FRadialDamageProjectileInfo
-{
-	GENERATED_USTRUCT_BODY()
-
-public:
-
-	FRadialDamageProjectileInfo() :
-		Origin(FVector::ZeroVector),
-		DamageRadius(0.f)
-	{
-	}
-
-
-	FRadialDamageProjectileInfo(
-		const FVector& InOrigin,
-		float InDamageRadius)
-
-		: Origin(InOrigin),
-		  DamageRadius(InDamageRadius)
-	{
-	}
-
-public:
-
-	UPROPERTY()
-	FVector_NetQuantize Origin;
-	UPROPERTY()
-	float DamageRadius;
-};
-
 
 USTRUCT(BlueprintType)
 struct FSurfaceImpactEffect
@@ -325,84 +59,6 @@ struct FSurfaceImpactEffect
 	class USoundCue* ImpactSound;
 	UPROPERTY(EditAnywhere)
 	class UMaterialInterface* ImpactDecal;
-};
-
-
-USTRUCT(BlueprintType)
-struct FMatchmakingHandle
-{
-	GENERATED_USTRUCT_BODY()
-
-public:
-
-	UPROPERTY()
-	class UMatchmakingCallProxy* MatchmakingCallProxy;
-
-	bool IsValid() const
-	{
-		return MatchmakingCallProxy != nullptr;
-	}
-};
-
-
-USTRUCT(BlueprintType)
-struct FHttpRequestParameter
-{
-	GENERATED_USTRUCT_BODY()
-
-public:
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FString Name;
-
-	UPROPERTY(EditAnywhere, BlueprintReadWrite)
-	FString Value;
-};
-
-USTRUCT(BlueprintType)
-struct FLevelInformation
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, Meta = (MetaClass = "World"), BlueprintReadOnly)
-	FSoftObjectPath Map;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	FString GameNodeClassAlias;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	UTexture2D* MapIcon;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	FText Description;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	FText DisplayName;
-};
-
-UCLASS(Blueprintable)
-class ULevelListAsset : public UDataAsset
-{
-	GENERATED_BODY()
-
-public:
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-    TArray<FLevelInformation> Levels;
-};
-
-UCLASS(Blueprintable)
-class UCharacterMesh : public UDataAsset
-{
-	GENERATED_BODY()
-
-public:
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	USkeletalMesh* MasterMesh;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	TArray<USkeletalMesh*> SlaveMeshs;
 };
 
 namespace IPTools
@@ -418,9 +74,9 @@ struct FRandomProbability
 {
 public:
 
-	static int32 RandomProbability(const TArray<float>& Probability, int32 Unit = 100)
+	static int32 RandomProbability(const TArray<float>& Probability)
 	{
-		float RandomValue = FMath::FRandRange(0, Unit);
+		float RandomValue = FMath::FRandRange(0.f, 1.f);
 
 		int32 Index = INDEX_NONE;
 
@@ -438,16 +94,16 @@ public:
 
 		return Index;
 	}
-
+	
 	template <typename SourceType>
-	static SourceType RandomProbabilityEx(const TMap<SourceType, float>& ProbabilitySource, int32 Unit = 100)
+	static SourceType RandomProbabilityEx(const TMap<SourceType, float>& ProbabilitySource)
 	{
 		TArray<SourceType> Values;
 		TArray<float> Probability;
 
 		GetArrayPair(ProbabilitySource, Values, Probability);
 
-		int32 Index = RandomProbability(Probability, Unit);
+		int32 Index = RandomProbability(Probability);
 
 		if (Index == INDEX_NONE)
 		{
@@ -510,7 +166,7 @@ struct FArrayDistinctIterator
 		}
 	};
 
-	FORCEINLINE void operator++()
+	void operator++()
 	{
 		bool bIsAlreadyInSet = true;
 		do

@@ -3,11 +3,11 @@
 #pragma once
 
 #include "CoreMinimal.h"
-
-#include "DreamType.h"
-#include "UdpSocketReceiver.h"
+#include "GameplayTagContainer.h"
 #include "GameFramework/GameModeBase.h"
 #include "DreamGameMode.generated.h"
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnClientRPC);
 
 UCLASS(minimalapi)
 class ADreamGameMode : public AGameModeBase
@@ -20,11 +20,6 @@ public:
 
 public:
 	
-	EGameType GetGameType() const
-	{
-		return GameType;
-	}
-
 	float GetPlayerResurrectionTime() const
 	{
 		return PlayerResurrectionTime;
@@ -35,32 +30,56 @@ public:
 		return MaxPlayers;
 	}
 
+	TSubclassOf<UUserWidget> GetSettlementWidgetClass() const
+	{
+		return SettlementWidget;
+	}
+	
+	float GetSettlementWaitTime() const
+	{
+		return SettlementWaitTime;
+	}
 
+	void ReSpawnCharacter(ACharacter* Character);
+
+	FOnClientRPC& GetClientRPCDelegate(const FGameplayTag& Tag);
+	
+	void BroadcastClientRPCDelegate(const FGameplayTag& Tag);
+
+public:
+
+	
+	UFUNCTION(BlueprintCallable, Category = DreamGameMode)
+	void EndMatch();
+	
 public:
 
 	static int32 DEFAULT_MAX_PLAYERS;
 
 protected:
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = DreamGameMode)
-	EGameType GameType;
+	UPROPERTY(EditAnywhere, Category = DreamGameMode)
+	TSubclassOf<UUserWidget> SettlementWidget;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = DreamGameMode)
 	float PlayerResurrectionTime;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = DreamGameMode)
 	int32 MaxPlayers;
-	
-	UPROPERTY()
-	bool bAutoShutdown;
+
+	/**
+	 * 游戏结束时的等待时间，通常是到达这个时间时需要将玩家踢出世界
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = DreamGameMode)
+	float SettlementWaitTime;
 
 protected:
+
+	virtual void InitGameState() override;
 
 	virtual void PostLogin(APlayerController* NewPlayer) override;
 
 	virtual void Logout(AController* Exiting) override;
-
-	virtual void Tick(float DeltaSeconds) override;
 
 	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
 
@@ -70,9 +89,19 @@ protected:
 
 	virtual FString InitNewPlayer(APlayerController* NewPlayerController, const FUniqueNetIdRepl& UniqueId, const FString& Options, const FString& Portal = TEXT("")) override;
 
+	virtual bool GetPlayerRestartTransform(FTransform& RestartTransform);
+
 private:
 
-	FThreadSafeCounter PlayerNumCounter;
+	void OnReSpawnCharacter(ACharacter* Character);
 
-	float IdleTimeCount;
+	void OnResetGame() const;
+
+	void UpdateActivePlayers() const;
+
+	uint16 CurrentPlayers;
+
+	// 没有所有者的 同步Actor 如果需要接收客户端的RPC可以在这里添加一个委托
+	UPROPERTY()
+	TMap<FGameplayTag, FOnClientRPC> ClientRPC;
 };

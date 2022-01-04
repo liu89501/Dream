@@ -3,8 +3,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-
-#include "DPlayerState.h"
 #include "Engine/DataAsset.h"
 #include "DRewardPool.generated.h"
 
@@ -54,6 +52,9 @@ public:
 	UPROPERTY(EditAnywhere)
 	TArray<FRewardGroup> RewardGroup;
 
-	UFUNCTION(BlueprintCallable)
-	UItemData* GenerateRewards(ADPlayerState* PlayerState);
+	void GenerateRewards(TArray<UItemData*>& Rewards);
+
+private:
+
+	UItemData* HandleItemDetails(UItemData* SelectedItem) const;
 };

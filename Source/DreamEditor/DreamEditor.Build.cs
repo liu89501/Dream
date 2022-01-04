@@ -34,10 +34,12 @@ public class DreamEditor : ModuleRules
             "EditorStyle",
             "PropertyEditor",
             "ContentBrowser",
+            "EditorWidgets",
             "Dream",
             "UnrealEd",
             "BlueprintGraph",
-            "AIModule"
+            "AIModule",
+            "Settings"
         });
     }
 }

@@ -16,7 +16,6 @@
 FPlayerServerDataInterface::FPlayerServerDataInterface()
 {
 	CALLBACK_BINDING_RAW(TService_PlayerInfo::MarkId, this, &FPlayerServerDataInterface::OnReceivePlayerInformation);
-	CALLBACK_BINDING_RAW(TService_AddRewards::MarkId, this, &FPlayerServerDataInterface::OnReceiveAddPlayerRewards);
 	CALLBACK_BINDING_RAW(TService_EquipWeapon::MarkId, this, &FPlayerServerDataInterface::OnReceiveEquipWeapon);
 	CALLBACK_BINDING_RAW(TService_EquipModule::MarkId, this, &FPlayerServerDataInterface::OnReceiveEquipModule);
 	CALLBACK_BINDING_RAW(TService_LearningTalents::MarkId, this, &FPlayerServerDataInterface::OnReceiveLearningTalents);
@@ -24,10 +23,14 @@ FPlayerServerDataInterface::FPlayerServerDataInterface()
 	CALLBACK_BINDING_RAW(TService_PayItem::MarkId, this, &FPlayerServerDataInterface::OnReceivePayItem);
 	CALLBACK_BINDING_RAW(TService_GetTalents::MarkId, this, &FPlayerServerDataInterface::OnReceiveGetTalents);
 	CALLBACK_BINDING_RAW(TService_GetTasks::MarkId, this, &FPlayerServerDataInterface::OnReceiveGetTasks);
-	CALLBACK_BINDING_RAW(TService_DeliverTask::MarkId, this, &FPlayerServerDataInterface::OnReceiveDeliverTask);
 	CALLBACK_BINDING_RAW(TService_AcceptTask::MarkId, this, &FPlayerServerDataInterface::OnReceiveAcceptTask);
-	CALLBACK_BINDING_RAW(TService_UpdateTaskState::MarkId, this, &FPlayerServerDataInterface::OnReceiveUpdateTaskState);
+	CALLBACK_BINDING_RAW(TService_DeliverTask::MarkId, this, &FPlayerServerDataInterface::OnReceiveDeliverTask);
+	CALLBACK_BINDING_RAW(TService_UpdatedTrackingTask::MarkId, this, &FPlayerServerDataInterface::OnReceiveUpdatedTrackingTaskState);
 	CALLBACK_BINDING_RAW(TService_ModifyTrackingState::MarkId, this, &FPlayerServerDataInterface::OnReceiveModifyTrackingState);
+
+	
+	CALLBACK_BINDING_RAW(TReceive_PropertiesChange::MarkId, this, &FPlayerServerDataInterface::OnReceivePropertiesChange);
+	CALLBACK_BINDING_RAW(TReceive_Rewards::MarkId, this, &FPlayerServerDataInterface::OnReceiveReceiveRewards);
 }
 
 void FPlayerServerDataInterface::Initialize()
@@ -37,12 +40,12 @@ void FPlayerServerDataInterface::Initialize()
 	BroadcastOnInitialize(true);
 }
 
-void FPlayerServerDataInterface::AddPlayerRewards(const FItemDataHandle& Rewards)
+void FPlayerServerDataInterface::AddPlayerRewards(const FItemListHandle& Rewards)
 {
 	SocketSender->Send(PDIBuildParam<TService_AddRewards>(Rewards));
 }
 
-void FPlayerServerDataInterface::DeliverTask(int32 TaskId)
+void FPlayerServerDataInterface::DeliverTask(int64 TaskId)
 {
 	SocketSender->Send(PDIBuildParam<TService_DeliverTask>(TaskId));
 }
@@ -54,8 +57,7 @@ void FPlayerServerDataInterface::AcceptTask(const FAcceptTaskParam& Param)
 
 void FPlayerServerDataInterface::UpdateTaskState(const FQuestActionHandle& Handle)
 {
-	
-	// todo 更新任务进度状态
+	SocketSender->Send(PDIBuildParam<TService_UpdateTaskState>(Handle));
 }
 
 void FPlayerServerDataInterface::ModifyTrackingState(const FModifyTrackingParam& Param)
@@ -63,19 +65,50 @@ void FPlayerServerDataInterface::ModifyTrackingState(const FModifyTrackingParam&
 	SocketSender->Send(PDIBuildParam<TService_ModifyTrackingState>(Param));
 }
 
-void FPlayerServerDataInterface::AddTaskConditionStateChangeDelegate(int32 TaskId, FOnTaskConditionStateChange Delegate)
-{
-	Delegates.Add(TaskId, Delegate);
-}
-
-void FPlayerServerDataInterface::RemoveTaskConditionStateChangeDelegate(int32 TaskId)
-{
-	Delegates.Remove(TaskId);
-}
-
 const FPlayerProperties& FPlayerServerDataInterface::GetCachedProperties() const
 {
 	return CachedProperties;
+}
+
+int32 FPlayerServerDataInterface::GetCacheItemCount(int32 ItemGuid)
+{
+	int32 Value;
+
+	switch (GetItemType(ItemGuid))
+	{
+	case EItemType::Experience:
+		{
+			Value = CachedProperties.CurrentExperience;
+			break;
+		}
+	default:
+		{
+			int32* Count = CacheItemCount.Find(ItemGuid);
+			Value = Count ? *Count : 0;
+		}
+	}
+	
+	return Value;
+}
+
+void FPlayerServerDataInterface::IncreaseItemCount(int32 ItemGuid, int32 Delta)
+{
+	int32* ValuePtr;
+
+	switch (GetItemType(ItemGuid))
+	{
+	case EItemType::Experience:
+		{
+			ValuePtr = &CachedProperties.CurrentExperience;
+			break;
+		}
+	default:
+		{
+			ValuePtr = &CacheItemCount.FindOrAdd(ItemGuid);
+		}
+	}
+	
+	*ValuePtr = FMath::Max(0, *ValuePtr + Delta);
 }
 
 void FPlayerServerDataInterface::EquipModule(const FEquipModuleParam& Param)
@@ -83,9 +116,9 @@ void FPlayerServerDataInterface::EquipModule(const FEquipModuleParam& Param)
 	SocketSender->Send(PDIBuildParam<TService_EquipModule>(Param));
 }
 
-void FPlayerServerDataInterface::LearningTalents(const TArray<int32>& TalentIdArray)
+void FPlayerServerDataInterface::LearningTalents(int64 LearnedTalents)
 {
-	SocketSender->Send(PDIBuildParam<TService_LearningTalents>(TalentIdArray));
+	SocketSender->Send(PDIBuildParam<TService_LearningTalents>(LearnedTalents));
 }
 
 void FPlayerServerDataInterface::EquipWeapon(const FEquipWeaponParam& Param)
@@ -93,14 +126,14 @@ void FPlayerServerDataInterface::EquipWeapon(const FEquipWeaponParam& Param)
 	SocketSender->Send(PDIBuildParam<TService_EquipWeapon>(Param));
 }
 
-void FPlayerServerDataInterface::GetStoreItems(int32 StoreId)
+void FPlayerServerDataInterface::GetStoreItems(const FSearchStoreItemsParam& Param)
 {
-	SocketSender->Send(PDIBuildParam<TService_GetStoreItems>(StoreId));
+	SocketSender->Send(PDIBuildParam<TService_GetStoreItems>(Param));
 }
 
-void FPlayerServerDataInterface::PayItem(const FBuyItemParam& Param)
+void FPlayerServerDataInterface::PayItem(int64 ItemId)
 {
-	SocketSender->Send(PDIBuildParam<TService_PayItem>(Param));
+	SocketSender->Send(PDIBuildParam<TService_PayItem>(ItemId));
 }
 
 void FPlayerServerDataInterface::GetPlayerInfo(EGetEquipmentCondition Condition)
@@ -129,6 +162,11 @@ void FPlayerServerDataInterface::OnReceivePlayerInformation(FPacketArchiveReader
 		Reader << PlayerInfo;
 
 		CachedProperties = PlayerInfo.Properties;
+
+		for (const FPlayerMaterial& PlayerMaterial : PlayerInfo.Materials)
+		{
+			CacheItemCount.Add(PlayerMaterial.ItemGuid, PlayerMaterial.Num);
+		}
 	}
 
 	BroadcastOnGetPlayerInfo(PlayerInfo, bSuccess);
@@ -175,109 +213,47 @@ void FPlayerServerDataInterface::OnReceivePayItem(FPacketArchiveReader& Reader)
 	BroadcastOnBuyItem(bSuccess);
 }
 
-void FPlayerServerDataInterface::OnReceiveAddPlayerRewards(FPacketArchiveReader& Reader)
+void FPlayerServerDataInterface::OnReceiveReceiveRewards(FPacketArchiveReader& Reader)
 {
-	bool bSuccess;
-	Reader << bSuccess;
+	FItemListHandle Handle;
+	Reader << Handle;
 	
-	BroadcastOnAddPlayerRewards(bSuccess);
+	BroadcastOnReceiveRewards(Handle);
 }
 
 void FPlayerServerDataInterface::OnReceiveGetTalents(FPacketArchiveReader& Reader)
 {
 	bool bSuccess;
-	TArray<FTalentInfo> Talents;
-	
 	Reader << bSuccess;
+
+	int64 LearnedTalentsId = 0;
 	if (bSuccess)
 	{
-		Reader << Talents;
+		Reader << LearnedTalentsId;
 	}
 	
-	BroadcastOnGetTalents(Talents, bSuccess);
+	BroadcastOnGetTalents(LearnedTalentsId, bSuccess);
 }
 
 void FPlayerServerDataInterface::OnReceiveGetTasks(FPacketArchiveReader& Reader)
 {
 	bool bSuccess;
-	TArray<FTaskInformation> TaskInformations;
+	FSearchTaskResult Result;
 	
 	Reader << bSuccess;
 	if (bSuccess)
 	{
-		EGetTaskCondition Condition;
-		Reader << Condition;
-		
-		int32 TaskGroupId;
-		Reader << TaskGroupId;
-
-		UTaskDataAsset* TaskDataAsset = FPDIStatic::GetTaskDataAsset();
-
-		if (Condition == EGetTaskCondition::NotAccept)
-		{
-			TSet<int32> AcceptTaskId;
-			Reader << AcceptTaskId;
-
-			for (const FTaskInformation& Information : TaskDataAsset->Tasks)
-			{
-				if (AcceptTaskId.Contains(Information.TaskId))
-				{
-					continue;
-				}
-
-				FTaskInformation Duplicted(Information);
-				
-				Duplicted.CompleteCondition = NewObject<UDQuestCondition>(GetTransientPackage(),
-					Information.CompleteCondition->GetClass(), NAME_None, RF_NoFlags, Information.CompleteCondition);
-				
-				Duplicted.CompletedReward = NewObject<UItemData>(GetTransientPackage(),
-					Information.CompletedReward->GetClass(), NAME_None, RF_NoFlags, Information.CompletedReward);
-				
-				TaskInformations.Add(Duplicted);
-			}
-		}
-		else
-		{
-			TArray<FNetTaskInformation> NetTaskInformations;
-			Reader << NetTaskInformations;
-
-			for (const FNetTaskInformation& AcceptTask : NetTaskInformations)
-			{
-				FTaskInformation TaskInformation;
-				
-				if (TaskDataAsset->GetInformationByTaskId(AcceptTask.TaskId, TaskInformation))
-				{
-					TaskInformation.bTracking = AcceptTask.bTracking;
-					TaskInformation.TaskMark = AcceptTask.TaskMark;
-					TaskInformation.CompleteCondition->CurrentValue = AcceptTask.ProgressCurrentVal;
-
-					TaskInformation.CompleteCondition = NewObject<UDQuestCondition>(GetTransientPackage(),
-						TaskInformation.CompleteCondition->GetClass(), NAME_None, RF_NoFlags, TaskInformation.CompleteCondition);
-				
-					TaskInformation.CompletedReward = NewObject<UItemData>(GetTransientPackage(),
-                        TaskInformation.CompletedReward->GetClass(), NAME_None, RF_NoFlags, TaskInformation.CompletedReward);
-					
-					TaskInformations.Add(TaskInformation);
-				}
-			}
-		}
+		Reader << Result;
 	}
 	
-	BroadcastOnGetTasks(TaskInformations, bSuccess);
+	BroadcastOnGetTasks(Result, bSuccess);
 }
 
 void FPlayerServerDataInterface::OnReceiveDeliverTask(FPacketArchiveReader& Reader)
 {
 	bool bSuccess;
-	FItemDataHandle ItemData;
-	
 	Reader << bSuccess;
-	if (bSuccess)
-	{
-		Reader << ItemData;
-	}
-	
-	BroadcastOnDeliverTask(ItemData.Get(),bSuccess);
+	BroadcastOnDeliverTask(bSuccess);
 }
 
 void FPlayerServerDataInterface::OnReceiveAcceptTask(FPacketArchiveReader& Reader)
@@ -287,9 +263,13 @@ void FPlayerServerDataInterface::OnReceiveAcceptTask(FPacketArchiveReader& Reade
 	BroadcastOnAcceptTask(bSuccess);
 }
 
-void FPlayerServerDataInterface::OnReceiveUpdateTaskState(FPacketArchiveReader& Reader)
+void FPlayerServerDataInterface::OnReceiveUpdatedTrackingTaskState(FPacketArchiveReader& Reader)
 {
-	
+	TArray<FTaskInProgressInfo> UpdateInfo;
+	Reader << UpdateInfo;
+
+	//UE_LOG(LogDream, Verbose, TEXT("OnReceiveUpdatedTrackingTaskState: %d"), Tasks.Num());
+	BroadcastOnUpdateTaskCond(UpdateInfo);
 }
 
 void FPlayerServerDataInterface::OnReceiveModifyTrackingState(FPacketArchiveReader& Reader)
@@ -301,15 +281,8 @@ void FPlayerServerDataInterface::OnReceiveModifyTrackingState(FPacketArchiveRead
 
 void FPlayerServerDataInterface::OnReceivePropertiesChange(FPacketArchiveReader& Reader)
 {
-	bool bSuccess;
-	Reader << bSuccess;
-
-	if (bSuccess)
-	{
-		Reader << CachedProperties;
-
-		GetPlayerDataDelegate().OnPropertiesChange.Broadcast(CachedProperties);
-	}
+	Reader << CachedProperties;
+	GetPlayerDataDelegate().OnPropertiesChange.Broadcast(CachedProperties);
 }
 
 #undef LOCTEXT_NAMESPACE

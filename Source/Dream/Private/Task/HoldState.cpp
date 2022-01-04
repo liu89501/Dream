@@ -5,17 +5,16 @@
 
 UHoldState* UHoldState::CreateHoldState(UObject* WCO, float InHoldTime, const FHoldStateHandle& Handle)
 {
-	if (UWorld* World = GEngine->GetWorldFromContextObject(WCO, EGetWorldErrorMode::LogAndReturnNull))
-	{
-		UHoldState* HoldState = NewObject<UHoldState>(WCO);
-		HoldState->HoldTime = InHoldTime;
-		HoldState->UpdateDelta = World->GetDeltaSeconds();
-		HoldState->Handle_Task = Handle.Handle_Task;
-		World->GetTimerManager().SetTimer(*Handle.Handle_Task, HoldState, &UHoldState::OnTaskTick, HoldState->UpdateDelta, true);
-		return HoldState;
-	}
+	UHoldState* HoldState = NewObject<UHoldState>(WCO);
+	HoldState->HoldTime = InHoldTime;
+	HoldState->Handle_Task = Handle.Handle_Task;
+	return HoldState;
+}
 
-	return nullptr;
+void UHoldState::Activate()
+{
+	UpdateDelta = GetWorld()->GetDeltaSeconds();
+	GetWorld()->GetTimerManager().SetTimer(*Handle_Task, this, &UHoldState::OnTaskTick, UpdateDelta, true);
 }
 
 void UHoldState::OnTaskTick()

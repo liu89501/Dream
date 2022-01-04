@@ -1,29 +1,39 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "SPlayerHUD.h"
+#include "SMinimap.h"
+#include "DCharacterPlayer.h"
 #include "SImage.h"
 #include "SCanvas.h"
 #include "SBoxPanel.h"
 #include "Engine.h"
-#include "SBox.h"
 #include "SOverlay.h"
 #include "STextBlock.h"
 #include "SlateOptMacros.h"
-#include "Dream.h"
-#include "Engine/LocalPlayer.h"
+#include "SStateIcon.h"
+#include "Style/DreamStyle.h"
+#include "Style/PlayerHUDStyle.h"
+
+#define LOCTEXT_NAMESPACE "PlayerHUD"
 
 BEGIN_SLATE_FUNCTION_BUILD_OPTIMIZATION
 void SPlayerHUD::Construct(const FArguments& InArgs)
 {
-	CrosshairBrush = InArgs._CrosshairBrush;
-	MagazineBrush = InArgs._MagazineBrush;
+	const ISlateStyle& SlateStyle = FDreamStyle::Get();
+	const FPlayerHUDWidgetStyle& HUDStyle = SlateStyle.GetWidgetStyle<FPlayerHUDWidgetStyle>("PlayerHUDStyle");
+	const FSlateBrush* BlackBackgroundBrush = SlateStyle.GetBrush("Dream.BlackTranslucentBackground");
 
-	//FSlateFontInfo HealthFont(InArgs._FontBase, 12);
-	FSlateFontInfo AmmosFont(InArgs._FontBase, 32);
-	FSlateFontInfo MagFont(InArgs._FontBase, 14);
+	OwnerPlayer = InArgs._InOwnerPlayer;
+	StateGridMaxColumn = InArgs._StateGridMaxColumn;
 
-	FText DefaultText = FText::FromString(TEXT("0"));
+	HitMarkDisplayTime = InArgs._HitMarkDisplayTime;
+
+
+	// 受伤标记
+	HurtBrush = HUDStyle.HurtBrush;
+	HurtDynamic = SlateUtils::GetDynamicFromBrush(HurtBrush, InArgs._InOwnerPlayer);
+	HurtAnim.AddInterpFloat(HUDStyle.HurtAnimCurve,
+        FOnTimelineFloatStatic::CreateRaw(this, &SPlayerHUD::OnHurtMarkOpacityUpdate));
 
 	ChildSlot
 		[
@@ -32,214 +42,317 @@ void SPlayerHUD::Construct(const FArguments& InArgs)
 			.HAlign(HAlign_Center)
 			.VAlign(VAlign_Center)
 			[
-				SAssignNew(CrossHair, SBox)
-				.WidthOverride(180.f)
-				.HeightOverride(180.f)
-				[
-					SNew(SImage)
-					.Image(&CrosshairBrush)
-				]
-
+				SAssignNew(Crosshair, SImage)
+                .Visibility(EVisibility::Collapsed)
 			]
 			+ SOverlay::Slot()
-			.VAlign(VAlign_Bottom)
-			.HAlign(HAlign_Left)
-			.Padding(40.f)
+			.HAlign(HAlign_Center)
+			.VAlign(VAlign_Center)
 			[
-				SNew(SBox)
-				.WidthOverride(300.f)
-				[
-					SNew(SVerticalBox)
-					+ SVerticalBox::Slot()
-					.Padding(4.f)
-					.AutoHeight()
-					.HAlign(HAlign_Fill)
-					[
-						SNew(SBox)
-						.HeightOverride(10.f)
-						[
-							SNew(SOverlay)
-							+SOverlay::Slot()
-							[
-								SNew(SImage)
-                                .Image(InArgs._HealthBrush)
-							]
-						]
-						/*SNew(SOverlay)
-						+ SOverlay::Slot()
-						.VAlign(VAlign_Bottom)
-						[
-							SNew(SBox)
-							.HeightOverride(10.f)
-							[
-								SNew(SImage)
-								.Image(InArgs._HealthBrush)
-							]
-						]*/
-						/*+ SOverlay::Slot()
-						.HAlign(HAlign_Right)
-						.VAlign(VAlign_Top)
-						[
-							SAssignNew(HealthText, STextBlock)
-							.Margin(FMargin(6, 0))
-							.Text(DefaultText)
-							.Font(HealthFont)
-						]*/
-					]
-					+ SVerticalBox::Slot()
-					.Padding(4.f, 1.f)
-					.HAlign(HAlign_Left)
-					.AutoHeight()
-					[
-						SNew(SBox)
-						.HeightOverride(6.f)
-						.WidthOverride(210.f)
-						[
-							SNew(SImage)
-							.Image(InArgs._ShieldBrush)
-						]
-						/*SNew(SOverlay)
-						+ SOverlay::Slot()
-						[
-							SNew(SBox)
-							.HeightOverride(5.f)
-							.WidthOverride(240.f)
-							[
-								SNew(SImage)
-								.Image(InArgs._ShieldBrush)
-							]
-						]*/
-						/*+ SOverlay::Slot()
-						.HAlign(HAlign_Right)
-						.VAlign(VAlign_Top)
-						[
-							SAssignNew(ShieldText, STextBlock)
-							.Margin(FMargin(6, 0))
-							.Text(DefaultText)
-							.Font(HealthFont)
-						]*/
-					]
-				]
+				SAssignNew(HitMark, SImage)
+				.Image(&HUDStyle.HitMarkBrush)
+                .Visibility(EVisibility::Collapsed)
+			]
+			+ SOverlay::Slot()
+			.HAlign(HAlign_Center)
+            .VAlign(VAlign_Center)
+			[
+				SAssignNew(HurtMark, SImage)
+				.Image(&HurtBrush)
+                .RenderOpacity(0)
 			]
 			+ SOverlay::Slot()
 			.HAlign(HAlign_Right)
-			.VAlign(VAlign_Bottom)
+			.VAlign(VAlign_Top)
 			.Padding(40.f)
 			[
 				SNew(SBox)
-				.WidthOverride(300.f)
+				.HeightOverride(260.f)
+				.WidthOverride(260.f)
 				[
-
+					SNew(SMinimap)
+					.DrawItemsIterator(InArgs._MinimapDataIterator)
+				]
+			]
+			+ SOverlay::Slot()
+            .HAlign(HAlign_Center)
+            .VAlign(VAlign_Bottom)
+            .Padding(0, 0, 0, 80.f)
+            [
+            	SNew(SBox)
+            	.WidthOverride(510.f)
+            	[
+            		SAssignNew(StatePanel, SWrapBox)
+                    .RenderTransform(FTransform2D(FQuat2D(FVector2D(-1, 0))))  // 将panel倒过来, 这么做的目的是为了让内容从下往上增长
+                    .RenderTransformPivot(FVector2D(0.5f, 0.5f))
+            	]
+            ]
+			+ SOverlay::Slot()
+			.VAlign(VAlign_Bottom)
+			.HAlign(HAlign_Right)
+			.Padding(40.f)
+			[
+				SNew(SVerticalBox)
+				+ SVerticalBox::Slot()
+				.Padding(6.f)
+				.HAlign(HAlign_Fill)
+				.AutoHeight()
+				[
 					SNew(SVerticalBox)
-					+ SVerticalBox::Slot()
-					.VAlign(VAlign_Bottom)
-					[
+	                + SVerticalBox::Slot()
+	                .VAlign(VAlign_Bottom)
+	                .HAlign(HAlign_Right)
+	                .Padding(FMargin(0, 0, 0, 4.f))
+	                [
 						SNew(SHorizontalBox)
 						+ SHorizontalBox::Slot()
 						.VAlign(VAlign_Bottom)
 						.AutoWidth()
 						[
 							SAssignNew(AmmoText, STextBlock)
-							.Text(DefaultText)
-							.Font(AmmosFont)
+	                        .TextStyle(&HUDStyle.AmmoTextStyle)
 						]
 						+ SHorizontalBox::Slot()
 						.VAlign(VAlign_Bottom)
-						.Padding(FMargin(0, 0, 0, 4.f))
 						.AutoWidth()
 						[
 							SNew(STextBlock)
-							.Font(MagFont)
-							.Text(FText::FromString(TEXT("/")))
+	                        .TextStyle(&HUDStyle.AmmoTextStyle)
+	                        .Text(FText::FromString(TEXT("/")))
 						]
 						+ SHorizontalBox::Slot()
 						.VAlign(VAlign_Bottom)
-						.Padding(FMargin(0, 0, 0, 4.f))
 						.AutoWidth()
 						[
 							SAssignNew(MagText, STextBlock)
-							.Font(MagFont)
-							.Text(DefaultText)
+	                        .TextStyle(&HUDStyle.MagazineTextStyle)
 						]
 					]
 					+ SVerticalBox::Slot()
 					.AutoHeight()
 					[
 						SNew(SBox)
-						.HeightOverride(10.f)
-						.VAlign(VAlign_Center)
-						[
-							SNew(SImage)
-							.Image(&MagazineBrush)
-						]
+		                .HeightOverride(8.f)
+		                [
+							SNew(SOverlay)
+							+ SOverlay::Slot()
+							[
+								SNew(SImage)
+								.Image(BlackBackgroundBrush)
+							]
+							+ SOverlay::Slot()
+							.Padding(1)
+							[
+								SAssignNew(Magazine, SProgressBar)
+								.Style(&HUDStyle.MagazineStyle)
+								.BarFillType(EProgressBarFillType::RightToLeft)
+							]
+                		]
 					]
 				]
+				+ SVerticalBox::Slot()
+                .Padding(6.f)
+                .AutoHeight()
+                .HAlign(HAlign_Fill)
+                [
+                	SNew(SBox)
+                	.HeightOverride(8.f)
+                	.WidthOverride(240.f)
+                	[
+	                    SNew(SOverlay)
+	                    + SOverlay::Slot()
+	                    [
+							SNew(SImage)
+                            .Image(BlackBackgroundBrush)
+	                    ]
+	                    + SOverlay::Slot()
+	                    .Padding(1)
+	                    [
+		                    SAssignNew(HealthBackground, SProgressBar)
+                            .Percent(1)
+                            .Style(&HUDStyle.HealthBarBackgroundStyle)
+                            .BarFillType(EProgressBarFillType::RightToLeft)
+	                    ]
+	                    + SOverlay::Slot()
+	                    .Padding(1)
+	                    [
+		                    SAssignNew(HealthBar, SProgressBar)
+		                    .Style(&HUDStyle.HealthBarStyle)
+		                    .BarFillType(EProgressBarFillType::RightToLeft)
+	                    ]
+                	]
+                ]
 			]
+			+ SOverlay::Slot()
+            .HAlign(HAlign_Center)
+            .VAlign(VAlign_Bottom)
+            .Padding(0, 0, 0, 210.f)
+            [
+				SAssignNew(InteractiveButton, SInteractive)
+                .InPlayerOwner(InArgs._InOwnerPlayer->GetPlayerController())
+                .Visibility(EVisibility::Collapsed)
+            ]
 		];
 }
 
-void SPlayerHUD::SetCrosshairBrush(const FSlateBrush& NewCrosshairBrush)
+END_SLATE_FUNCTION_BUILD_OPTIMIZATION
+
+void SPlayerHUD::SetHealthPercent(float Percentage)
 {
-	CrosshairBrush = NewCrosshairBrush;
-	SetCrosshairSize(NewCrosshairBrush.ImageSize);
+	HealthBackgroundAnim = Percentage;
+	HealthBackgroundAnim.Activate();
+	HealthBar->SetPercent(Percentage);
 }
 
-void SPlayerHUD::SetMagazineBrush(const FSlateBrush& NewMagazineBrush)
+void SPlayerHUD::SetCrosshairBrush(const FSlateBrush& NewCrosshairBrush) const
 {
-	MagazineBrush = NewMagazineBrush;
+	Crosshair->SetImage(&NewCrosshairBrush);
 }
 
-void SPlayerHUD::SetHealthText(const FString& NewHealth)
-{
-	if (HealthText.IsValid())
-	{
-		HealthText->SetText(FText::FromString(NewHealth));
-	}
-}
-
-void SPlayerHUD::SetShieldText(const FString& NewShield)
-{
-	if (ShieldText.IsValid())
-	{
-		ShieldText->SetText(FText::FromString(NewShield));
-	}
-}
-
-void SPlayerHUD::SetAmmoText(const FString& NewAmmos)
-{
-	if (AmmoText.IsValid())
-	{
-		AmmoText->SetText(FText::FromString(NewAmmos));
-	}
-}
-
-void SPlayerHUD::SetMagText(const FString& NewMagazine)
+void SPlayerHUD::SetMagazineInformation(int32 InAmmo, int32 InMagazine, float AmmoPercentage) const
 {
 	if (MagText.IsValid())
 	{
-		MagText->SetText(FText::FromString(NewMagazine));
+		MagText->SetText(FText::AsNumber(InMagazine));
+	}
+
+	if (AmmoText.IsValid())
+	{
+		AmmoText->SetText(FText::AsNumber(InAmmo));
+	}
+
+	Magazine->SetPercent(AmmoPercentage);
+}
+
+void SPlayerHUD::SetCrossHairVisibility(EVisibility NewVisibility) const
+{
+	Crosshair->SetVisibility(NewVisibility);
+}
+
+void SPlayerHUD::ShowHitEnemyMark(bool bEnemyDeath)
+{
+	HitMark->SetVisibility(EVisibility::SelfHitTestInvisible);
+	HitMark->SetColorAndOpacity(bEnemyDeath ? FLinearColor::Red : FLinearColor::White);
+	HitMarkDisplayTime.Reset();
+	HitMarkDisplayTime.Activate();
+}
+
+void SPlayerHUD::HiddenHitMark()
+{
+	HitMark->SetVisibility(EVisibility::Collapsed);
+	HitMarkDisplayTime.Deactivate();
+}
+
+void SPlayerHUD::ShowHurtMark(float Direction)
+{
+	HurtDynamic->SetScalarParameterValue("Dir", Direction);
+	HurtAnim.PlayFromStart();
+}
+
+void SPlayerHUD::OnHurtMarkOpacityUpdate(float Value) const
+{
+	if (HurtMark.IsValid())
+	{
+		HurtMark->SetRenderOpacity(Value);
 	}
 }
 
-UMaterialInstanceDynamic* SPlayerHUD::GetMagazineMaterial()
+void SPlayerHUD::AddStateIcon(const FGameplayTag& StateTag, UTexture2D* Icon, const int32 StackCount, float Duration)
 {
-	return Cast<UMaterialInstanceDynamic>(MagazineBrush.GetResourceObject());
+	TSharedRef<SStateIcon> StateIcon = SNew(SStateIcon)
+		.RenderTransform(FTransform2D(FQuat2D(FVector2D(-1, 0)))) // 将图标翻转180度, 倒过来
+        .Duration(Duration)
+        .IconResource(Icon)
+        .StackCount(StackCount);
+
+	/*int32 StateIconNum = StatePanel->GetChildren()->Num();
+
+	int32 Row = StateIconNum / StateGridMaxColumn;
+	int32 Column = StateIconNum % StateGridMaxColumn;*/
+
+	StatePanel->AddSlot()
+	.Padding(2.f)
+	[
+		StateIcon
+	];
+
+	StateIcons.Add(StateTag, StateIcon);
 }
 
-UMaterialInstanceDynamic* SPlayerHUD::GetCrosshairMaterial()
+void SPlayerHUD::RefreshStateIcon(const FGameplayTag& StateTag, const int32 StackCount, float NewDuration)
 {
-	return Cast<UMaterialInstanceDynamic>(CrosshairBrush.GetResourceObject());
+	if (TSharedPtr<SStateIcon>* StateIconPtr = StateIcons.Find(StateTag))
+	{
+		TSharedPtr<SStateIcon>& StateIcon = *StateIconPtr;
+
+		if (StateIcon.IsValid())
+		{
+			StateIcon->RefreshState(StackCount, NewDuration);
+		}
+	}
 }
 
-void SPlayerHUD::SetCrosshairSize(FVector2D Size)
+void SPlayerHUD::RemoveStateIcon(const FGameplayTag& StateTag)
 {
-	CrossHair->SetWidthOverride(Size.X);
-	CrossHair->SetHeightOverride(Size.Y);
+	TSharedPtr<SStateIcon> StateIcon;
+	if (StateIcons.RemoveAndCopyValue(StateTag, StateIcon))
+	{
+		StatePanel->RemoveSlot(StateIcon.ToSharedRef());
+	}
 }
 
-void SPlayerHUD::SetCrossHairVisibility(EVisibility NewVisibility)
+void SPlayerHUD::ActivateInteractiveButton(float InteractiveTime, const FText& InteractiveText, FOnInteractiveCompleted Delegate) const
 {
-	CrossHair->SetVisibility(NewVisibility);
+	if (InteractiveButton->GetVisibility() != EVisibility::SelfHitTestInvisible)
+	{
+		InteractiveButton->SetInteractiveText(InteractiveText);
+		InteractiveButton->SetInteractiveTime(InteractiveTime);
+		InteractiveButton->SetOnCompleted(Delegate);
+		InteractiveButton->SetVisibility(EVisibility::SelfHitTestInvisible);
+		InteractiveButton->EnableInput();
+	}
 }
 
-END_SLATE_FUNCTION_BUILD_OPTIMIZATION
+void SPlayerHUD::DeactivateInteractiveButton() const
+{
+	if (InteractiveButton->GetVisibility() != EVisibility::Collapsed)
+	{
+		InteractiveButton->SetVisibility(EVisibility::Collapsed);
+		InteractiveButton->DisableInput();
+		InteractiveButton->ForceDeactivate();
+	}
+}
+
+void SPlayerHUD::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+{
+	if (HitMarkDisplayTime.IsActive())
+	{
+		HitMarkDisplayTime.InterpConstantTo(InDeltaTime);
+
+		if (HitMarkDisplayTime.IsCompleted())
+		{
+			HiddenHitMark();
+		}
+	}
+
+	if (HealthBackgroundAnim.IsActive())
+	{
+		HealthBackgroundAnim.InterpConstantTo(InDeltaTime);
+
+		HealthBackground->SetPercent(HealthBackgroundAnim.GetValue());
+		
+		if (HealthBackgroundAnim.IsCompleted())
+		{
+			HealthBackgroundAnim.Deactivate();
+		}
+	}
+
+	HurtAnim.TickTimeline(InDeltaTime);
+}
+
+void SPlayerHUD::AddReferencedObjects(FReferenceCollector& Collector)
+{
+	Collector.AddReferencedObject(HurtDynamic);
+}
+
+#undef LOCTEXT_NAMESPACE

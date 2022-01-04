@@ -27,7 +27,7 @@ public:
 	virtual void Activate() override;
 
 	UFUNCTION()
-	void OnCompleted(bool bSuccess) const;
+	void OnCompleted(bool bSuccess);
 
 private:
 

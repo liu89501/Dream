@@ -8,11 +8,15 @@ MyCustomizeTags::MyCustomizeTags()
 	Condition_Firing = FGameplayTag::RequestGameplayTag(TEXT("Condition.Firing"));
 	Condition_KilledEnemy = FGameplayTag::RequestGameplayTag(TEXT("Condition.KilledEnemy"));
 	Condition_HitEnemy = FGameplayTag::RequestGameplayTag(TEXT("Condition.HitEnemy"));
+	Condition_Crit = FGameplayTag::RequestGameplayTag(TEXT("Condition.Crit"));
 
 	GE_Buff_Weapon = FGameplayTag::RequestGameplayTag(TEXT("GE.Buff.Weapon"));
 	GE_Buff_Module = FGameplayTag::RequestGameplayTag(TEXT("GE.Buff.Module"));
 	GE_Buff_Talent = FGameplayTag::RequestGameplayTag(TEXT("GE.Buff.Talent"));
 	GE_Buff_All = FGameplayTag::RequestGameplayTag(TEXT("GE.Buff"));
 
-	HealthStealSetByCallerTag = FGameplayTag::RequestGameplayTag(TEXT("GE.SetByCaller.HealthSteal"));
+	SetByCaller_HealthSteal = FGameplayTag::RequestGameplayTag(TEXT("GE.SetByCaller.HealthSteal"));
+	
+	Exec_Temporary_PercentageDmgInc = FGameplayTag::RequestGameplayTag(TEXT("Exec.Temporary.PercentageDmgInc"));
+	Exec_Temporary_FixedDamage = FGameplayTag::RequestGameplayTag(TEXT("Exec.Temporary.FixedDamage"));
 }

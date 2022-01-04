@@ -9,6 +9,7 @@
 
 void UTalentGrid::InitialTalentGrid(const TArray<FTalentInfo>& Talents)
 {
+	//TArray<UWidget*> Children = GetAllChildren();
 	for (UTalentItem* TalentItem : TalentWidgets)
 	{
 		if (Talents.IsValidIndex(TalentItem->TalentIndex))
@@ -26,7 +27,7 @@ void UTalentGrid::RefreshTalents()
 
 	for (UTalentItem* TalentItem : TalentWidgets)
 	{
-		bool& bGroupTalentLearned = TalentGroup.FindOrAdd(TalentItem->TalentInfo.TalentGroupId);
+		bool& bGroupTalentLearned = TalentGroup.FindOrAdd(TalentItem->TalentGroup);
 		bGroupTalentLearned |= TalentItem->TalentInfo.bLearned;
 	}
 
@@ -37,7 +38,7 @@ void UTalentGrid::RefreshTalents()
 			continue;
 		}
 			
-		int32 TalentGroupId = TalentItem->TalentInfo.TalentGroupId;
+		int32 TalentGroupId = TalentItem->TalentGroup;
 
 		bool bLearnableTalent = true;
 		
@@ -53,16 +54,19 @@ void UTalentGrid::RefreshTalents()
 	}
 }
 
-void UTalentGrid::GetLearnedTalents(TArray<int32>& TalentIdArray, TArray<TSubclassOf<class UDreamGameplayAbility>>& TalentClasses) const
+void UTalentGrid::GetLearnedTalents(int64& LearnedTalents, TArray<TSubclassOf<class UDreamGameplayAbility>>& TalentClasses) const
 {
+	int64 Temp = 0;
 	for (UTalentItem* TalentItem : TalentWidgets)
 	{
 		if (TalentItem->TalentInfo.bLearned)
 		{
-			TalentIdArray.Add(TalentItem->TalentInfo.TalentId);
-			TalentClasses.Add(TalentItem->TalentInfo.TalentClass.TryLoadClass<UDreamGameplayAbility>());
+			Temp |= 1LL << TalentItem->TalentInfo.TalentIndex;
+			TalentClasses.Add(TalentItem->TalentInfo.TalentClass);
 		}
 	}
+
+	LearnedTalents = Temp;
 }
 
 void UTalentGrid::ResetAllTalents()

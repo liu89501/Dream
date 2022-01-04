@@ -15,7 +15,7 @@ void UPDSAsync_Login::Activate()
 	FPDIStatic::Get()->Login();
 }
 
-void UPDSAsync_Login::OnCompleted(bool bSuccess) const
+void UPDSAsync_Login::OnCompleted(bool bSuccess)
 {
 	FPDIStatic::Get()->RemoveOnLogin(Handle);
 	if (bSuccess)

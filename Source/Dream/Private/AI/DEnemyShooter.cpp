@@ -45,9 +45,16 @@ void ADEnemyShooter::OpenFire(const FVector& TargetLocation)
 		return;
 	}
 
+	FVector ActorLocation = GetActorLocation();
+
+	FVector Dir = TargetLocation - ActorLocation;
+	Dir.Normalize();
+
+	FVector TraceEnd = TargetLocation + Dir * 200.f;
+
 	FHitResult Hit;
-	bool bSuccess = UDGameplayStatics::LineTraceAndSendEvent(this, FireEventTag, GetActorLocation(), TargetLocation, ECC_Visibility, Hit);
-	NetMulticastOpenFire(bSuccess ? Hit.ImpactPoint : TargetLocation);
+	bool bSuccess = UDGameplayStatics::LineTraceAndSendEvent(this, FireEventTag, ActorLocation, TraceEnd, ECC_Visibility, Hit);
+	NetMulticastOpenFire(bSuccess ? Hit.ImpactPoint : TraceEnd);
 }
 
 void ADEnemyShooter::HealthChanged(const FOnAttributeChangeData& AttrData)

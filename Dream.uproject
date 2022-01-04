@@ -10,16 +10,20 @@
 			"LoadingPhase": "Default",
 			"AdditionalDependencies": [
 				"Engine",
-				"UMG",
-				"CoreUObject",
-				"GameplayAbilities",
-				"OnlineSubsystemUtils"
+				"Slate",
+				"SlateCore",
+				"CoreUObject"
 			]
 		},
 		{
 			"Name": "DreamEditor",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "DreamLoadingScreen",
+			"Type": "Runtime",
+			"LoadingPhase": "PreLoadingScreen"
 		}
 	],
 	"Plugins": [

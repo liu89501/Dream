@@ -4,12 +4,12 @@
 
 #include "CoreMinimal.h"
 
-#include "MiniMapDataInterface.h"
+#include "IconInterface.h"
 #include "GameFramework/Character.h"
 #include "DNPCCharacter.generated.h"
 
 UCLASS()
-class DREAM_API ADNPCCharacter : public AActor, public IMiniMapDataInterface
+class DREAM_API ADNPCCharacter : public AActor, public IIconInterface
 {
 	GENERATED_BODY()
 
@@ -18,7 +18,7 @@ public:
 	ADNPCCharacter();
 
 	UPROPERTY(VisibleAnywhere)
-	class UMiniMapDataComponent* MiniMapDataComp;
+	class UIconComponent* IconComponent;
 
 protected:
 	// Called when the game starts or when spawned
@@ -28,6 +28,6 @@ public:
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
 
-	virtual UMiniMapDataComponent* GetMiniMapDataComponent() const override;
+	virtual UIconComponent* GetIconComponent() const override;
 
 };

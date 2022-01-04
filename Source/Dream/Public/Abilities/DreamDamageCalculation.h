@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DreamGameplayType.h"
 #include "GameplayEffectExecutionCalculation.h"
 #include "DreamDamageCalculation.generated.h"
 
@@ -19,4 +20,9 @@ class DREAM_API UDreamDamageCalculation : public UGameplayEffectExecutionCalcula
 public:
 
     virtual void Execute_Implementation(const FGameplayEffectCustomExecutionParameters& ExecutionParams, FGameplayEffectCustomExecutionOutput& OutExecutionOutput) const override;
+
+
+protected:
+
+	bool GetAttributeCaptureFromDamageType(EDDamageType DamageType, FGameplayEffectAttributeCaptureDefinition& OutDef) const;
 };

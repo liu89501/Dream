@@ -13,6 +13,8 @@ class DREAM_API ADAIGeneratorBase : public AActor
 
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAllAIDestroyed, ADAIGeneratorBase*, Generator);
 	
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnAIDestroyed);
+	
 public:
 
 	ADAIGeneratorBase();
@@ -40,9 +42,12 @@ public:
 	UPROPERTY(EditAnywhere, Category=AIGenerator)
 	bool bAutoActive;
 
-	
 	UPROPERTY(BlueprintAssignable, Category=AIGenerator)
 	FOnAllAIDestroyed OnAllAIDestroyed;
+
+	/** 与 OnAllAIDestroyed 一样 只不过这个不带参数而已 */
+	UPROPERTY(BlueprintAssignable, Category=AIGenerator)
+	FOnAIDestroyed OnAIDestroyed;
 
 public:
 
@@ -57,7 +62,7 @@ protected:
 
 	virtual void ProcessAIGenerate();
 
-	FThreadSafeCounter ActiveAICounter;
+	uint16 ActiveAICounter;
 
 	int32 CurrentRevivedCount;
 	

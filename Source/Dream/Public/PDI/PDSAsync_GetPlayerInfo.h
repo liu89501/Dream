@@ -23,7 +23,7 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category=PDI)
     static UPDSAsync_GetPlayerInfo* PDI_GetPlayerInformation(UObject* WorldContextObject, EGetEquipmentCondition Condition);
 
-	void OnLoadCompleted(const FPlayerInfo& PlayerInfo, bool bSuccess) const;
+	void OnLoadCompleted(const FPlayerInfo& PlayerInfo, bool bSuccess);
 
 	virtual void Activate() override;
 

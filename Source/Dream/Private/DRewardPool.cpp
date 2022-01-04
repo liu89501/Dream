@@ -2,19 +2,11 @@
 
 
 #include "DRewardPool.h"
-#include "DreamType.h"
 #include "PlayerDataInterfaceType.h"
 #include "Kismet/KismetMathLibrary.h"
 
-UItemData* UDRewardPool::GenerateRewards(ADPlayerState* PlayerState)
+void UDRewardPool::GenerateRewards(TArray<UItemData*>& Rewards)
 {
-	if (PlayerState == nullptr)
-	{
-		return nullptr;
-	}
-
-	UItemDataContainer* DataContainer = NewObject<UItemDataContainer>();
-
 	for (const FRewardGroup Group : RewardGroup)
 	{
 		if (Group.Strategy == EProbabilityStrategy::OneOf)
@@ -29,15 +21,10 @@ UItemData* UDRewardPool::GenerateRewards(ADPlayerState* PlayerState)
 				Probability.Add(RewardItem.Probability);
 			}
 
-			int32 Index = FRandomProbability::RandomProbability(Probability, PROBABILITY_UINT);
+			int32 Index = FRandomProbability::RandomProbability(Probability);
 			if (Index > INDEX_NONE)
 			{
-				UItemData* NewItemData = NewObject<UItemData>(PlayerState,
-				                                              RewardsTemplate[Index]->GetClass(), NAME_None, RF_NoFlags,
-				                                              RewardsTemplate[Index]);
-				NewItemData->PlayerId = PlayerState->GetPlayerId();
-
-				DataContainer->AddItem(NewItemData);
+				Rewards.Add(HandleItemDetails(RewardsTemplate[Index]));
 			}
 		}
 		else
@@ -46,18 +33,25 @@ UItemData* UDRewardPool::GenerateRewards(ADPlayerState* PlayerState)
 			{
 				check(RewardItem.Reward);
 
-				if (UKismetMathLibrary::RandomBoolWithWeight(RewardItem.Probability / PROBABILITY_UINT))
+				if (UKismetMathLibrary::RandomBoolWithWeight(RewardItem.Probability))
 				{
-					UItemData* NewItemData = NewObject<UItemData>(PlayerState,
-					                                              RewardItem.Reward->GetClass(), NAME_None, RF_NoFlags,
-					                                              RewardItem.Reward);
-
-					NewItemData->PlayerId = PlayerState->GetPlayerId();
-					DataContainer->AddItem(NewItemData);
+					Rewards.Add(HandleItemDetails(RewardItem.Reward));
 				}
 			}
 		}
 	}
+}
 
-	return DataContainer;
+UItemData* UDRewardPool::HandleItemDetails(UItemData* SelectedTemplate) const
+{
+	if (SelectedTemplate->IsA<UItemDataEquipment_Random>())
+	{
+		UItemDataEquipment_Random* EquipmentRandom = Cast<UItemDataEquipment_Random>(SelectedTemplate);
+		return EquipmentRandom->CastToEquipment();
+	}
+
+	return NewObject<UItemData>(GetTransientPackage(),
+                         SelectedTemplate->GetClass(),
+                         NAME_None, RF_NoFlags,
+                         SelectedTemplate);
 }

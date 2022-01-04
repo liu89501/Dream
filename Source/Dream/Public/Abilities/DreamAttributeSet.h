@@ -67,26 +67,33 @@ public:
 	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, Damage)
 
 	/**
-	 * 生命偷取百分比
-	 */
-	UPROPERTY(BlueprintReadOnly, Category = "Damage")
-	FGameplayAttributeData HealthStealPercentage;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, HealthStealPercentage)
-	
-	/**
 	 * 生命偷取
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "Damage")
 	FGameplayAttributeData HealthSteal;
 	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, HealthSteal)
 
-	/**
-	 * 	百分比增加攻击力的量
-	 */
-	UPROPERTY(BlueprintReadOnly, Category = "Damage")
-	FGameplayAttributeData IncreaseAtkPowPercentage;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, IncreaseAtkPowPercentage)
 
+	/* --------------------------------- 武器类型增伤 ------------------------------- */
+	UPROPERTY(BlueprintReadOnly, Category = "Damage")
+	FGameplayAttributeData WeaponDamageAssaultRifle;
+	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, WeaponDamageAssaultRifle)
+	
+	UPROPERTY(BlueprintReadOnly, Category = "Damage")
+	FGameplayAttributeData WeaponDamageGrenadeLaunch;
+	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, WeaponDamageGrenadeLaunch)
+	
+	UPROPERTY(BlueprintReadOnly, Category = "Damage")
+	FGameplayAttributeData WeaponDamageShotgun;
+	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, WeaponDamageShotgun)
+	
+	UPROPERTY(BlueprintReadOnly, Category = "Damage")
+	FGameplayAttributeData WeaponDamageSniperRifle;
+	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, WeaponDamageSniperRifle)
+	
+	UPROPERTY(BlueprintReadOnly, Category = "Damage")
+	FGameplayAttributeData WeaponDamagePrecisionRifle;
+	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, WeaponDamagePrecisionRifle)
 
 protected:
 	/** Helper function to proportionally adjust the value of an attribute when it's associated max attribute changes. (i.e. When MaxHealth increases, Health increases by an amount that maintains the same percentage as before) */
@@ -131,9 +138,12 @@ struct DreamAttributeStatics
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(CriticalDamage);
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(Health);
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(MaxHealth);
-	D_DECLARE_ATTRIBUTE_CAPTUREDEF(IncreaseAtkPowPercentage);
 	D_DECLARE_ATTRIBUTE_CAPTUREDEF(HealthSteal);
-	D_DECLARE_ATTRIBUTE_CAPTUREDEF(HealthStealPercentage);
+	D_DECLARE_ATTRIBUTE_CAPTUREDEF(WeaponDamageAssaultRifle);
+	D_DECLARE_ATTRIBUTE_CAPTUREDEF(WeaponDamageGrenadeLaunch);
+	D_DECLARE_ATTRIBUTE_CAPTUREDEF(WeaponDamageShotgun);
+	D_DECLARE_ATTRIBUTE_CAPTUREDEF(WeaponDamageSniperRifle);
+	D_DECLARE_ATTRIBUTE_CAPTUREDEF(WeaponDamagePrecisionRifle);
 
 	DreamAttributeStatics()
 	{
@@ -154,11 +164,13 @@ struct DreamAttributeStatics
 		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, MaxHealth, Source, false);
 		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, Health, Source, false);
 		
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, IncreaseAtkPowPercentage, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, HealthSteal, Source, true);
 		
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, HealthSteal, Target, true);
-		
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, HealthStealPercentage, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, WeaponDamageAssaultRifle, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, WeaponDamageGrenadeLaunch, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, WeaponDamageShotgun, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, WeaponDamageSniperRifle, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, WeaponDamagePrecisionRifle, Source, true);
 	}
 };
 

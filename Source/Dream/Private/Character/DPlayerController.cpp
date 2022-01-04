@@ -2,62 +2,23 @@
 
 
 #include "Character/DPlayerController.h"
-#include "OnlineSessionInterface.h"
-#include "SocketSubsystem.h"
-#include "UdpSocketBuilder.h"
 #include "JsonUtilities.h"
-#include "Async.h"
 #include "DGameplayStatics.h"
 #include "DPlayerCameraManager.h"
+#include "DProjectSettings.h"
 #include "Engine.h"
 #include "UnrealNetwork.h"
 #include "DreamGameInstance.h"
 #include "DreamGameMode.h"
-#include "DRewardPool.h"
+#include "DreamWidgetStatics.h"
 #include "OnlineSubsystem.h"
-#include "OnlineSubsystemTypes.h"
-#include "OnlineSessionSettings.h"
 #include "PlayerDataInterfaceBase.h"
 #include "Character/DCharacterPlayer.h"
 #include "PlayerDataInterfaceStatic.h"
 #include "PlayerServerDataInterface.h"
+#include "UI/SGuide.h"
 
 #define LOCTEXT_NAMESPACE "Player.Controller"
-
-typedef TSharedRef<TArray<uint8>, ESPMode::ThreadSafe> RawData;
-
-bool FRewardMessage::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
-{
-    uint8 Sign = 0;
-    
-    if (Ar.IsSaving())
-    {
-        if (RewardPropsClass)
-        {
-            Sign |= 1; 
-        }
-
-        if (RewardNum > 1)
-        {
-            Sign |= 1 << 1;
-        }
-    }
-
-    Ar.SerializeBits(&Sign, 2);
-
-    if (Sign & 1)
-    {
-        Ar << RewardPropsClass;
-    }
-
-    if (Sign & 1 << 1)
-    {
-        Ar << RewardNum;
-    }
-
-    bOutSuccess = true;
-    return true;
-}
 
 ADPlayerController::ADPlayerController()
     : LevelOneAmmunition(800)
@@ -75,6 +36,30 @@ void ADPlayerController::PostInitializeComponents()
 void ADPlayerController::BeginPlay()
 {
     Super::BeginPlay();
+
+    if (IsLocalController())
+    {
+        FPlayerDataInterface* Interface = FPDIStatic::Get();
+        Handle_UpdateTask = Interface->AddOnUpdateTaskCond(FOnUpdatedTasks::FDelegate::CreateUObject(this, &ADPlayerController::OnUpdatedTasks));
+        Handle_ReceiveRewards = Interface->AddOnReceiveRewards(FOnReceiveRewards::FDelegate::CreateUObject(this, &ADPlayerController::OnReceiveRewardMessage));
+
+#if !WITH_EDITOR
+        if (GetNetMode() == NM_Client)
+        {
+#endif
+
+        
+        GetLocalPlayer()->ViewportClient->AddViewportWidgetContent(
+                SNew(SGuide)
+                .PlayerOwner(this)
+                .Elements_UObject(this, &ADPlayerController::GetGuideElements)
+            );
+
+#if !WITH_EDITOR
+        }
+#endif
+        
+    }
 }
 
 void ADPlayerController::NotifyLoadedWorld(FName WorldPackageName, bool bFinalDest)
@@ -84,40 +69,49 @@ void ADPlayerController::NotifyLoadedWorld(FName WorldPackageName, bool bFinalDe
     DREAM_NLOG(Verbose, TEXT("NotifyLoadedWorld"));
 }
 
-void ADPlayerController::Travel(const FString& Address)
-{
-    ClientTravel(Address, ETravelType::TRAVEL_Absolute);
-}
-
-void ADPlayerController::AgreeTeamUpApply(const FPlayerAccountInfo& PlayerInfo)
-{
-    
-}
-
 void ADPlayerController::ExitTeam()
 {
     UE_LOG(LogDream, Error, TEXT("%s"), *GetWorld()->GetMapName());
     ClientReturnToMainMenuWithTextReason(FText::FromString(TEXT("TEST")));
 }
 
-void ADPlayerController::ProcessRebornCharacter(const FTransform& SpawnTransform)
+void ADPlayerController::PopupRewards(const FItemListHandle& ItemList)
 {
-    FActorSpawnParameters Params;
-    Params.Owner = this;
-    ADreamGameMode* AuthGameMode = GetWorld()->GetAuthGameMode<ADreamGameMode>();
-    Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-    ACharacter* RiseCharacter = GetWorld()->SpawnActor<ACharacter>(AuthGameMode->DefaultPawnClass, SpawnTransform, Params);
-    Possess(RiseCharacter);
+    OnReceiveRewardMessage(ItemList);
 }
 
-void ADPlayerController::ReturnToMainMenuWithTextReason(const FText& ErrorMessage)
+void ADPlayerController::AddGuideActor(AActor* Actor)
 {
-    ClientReturnToMainMenuWithTextReason(ErrorMessage);
+    if (Actor && Actor->GetNativeInterfaceAddress(IIconInterface::UClassType::StaticClass()) != nullptr)
+    {
+        GuideActors.AddUnique(Actor);
+    }
+}
+
+void ADPlayerController::RemoveGuideActor(AActor* Actor)
+{
+    GuideActors.Remove(Actor);
+}
+
+void ADPlayerController::BroadcastGameModeClientDelegate(FGameplayTag DelegateTag)
+{
+    ServerBroadcastGMClientDelegate(DelegateTag);
+}
+
+void ADPlayerController::ServerBroadcastGMClientDelegate_Implementation(const FGameplayTag& DelegateTag)
+{
+    if (ADreamGameMode* DreamGameMode = Cast<ADreamGameMode>(GetWorld()->GetAuthGameMode()))
+    {
+        DreamGameMode->BroadcastClientRPCDelegate(DelegateTag);
+    }
 }
 
 void ADPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     Super::EndPlay(EndPlayReason);
+
+    FPDIStatic::Get()->RemoveOnUpdateTaskCond(Handle_UpdateTask);
+    FPDIStatic::Get()->RemoveOnReceiveRewards(Handle_ReceiveRewards);
 }
 
 #if WITH_EDITORONLY_DATA
@@ -189,157 +183,50 @@ void ADPlayerController::TestSocket() const
 
 #endif
 
-void ADPlayerController::RecvData(const TSharedPtr<FArrayReader, ESPMode::ThreadSafe>& ReaderPtr,
-                                  const FIPv4Endpoint& Endpoint)
+void ADPlayerController::ClientChangeConnectedServer_Implementation(uint32 Address, uint32 Port)
 {
-    AsyncTask(ENamedThreads::GameThread, [this, ReaderPtr]
+    FOnReconnectServer Delegate;
+
+    Delegate.BindLambda([this](bool bSuccessfully)
     {
-        uint8 MessageType = (*ReaderPtr)[0];
-        uint8* MessagePtr = ReaderPtr->GetData();
-        FUTF8ToTCHAR Data(reinterpret_cast<const ANSICHAR*>(++MessagePtr), ReaderPtr->Num() - 1);
-        HandleRawMessage(TEnumAsByte<EMessageType::Type>(MessageType), FString(Data.Length(), Data.Get()));
+        if (!bSuccessfully)
+        {
+            FString ErrorMsg = TEXT("改变后端服务器连接失败");
+            UE_LOG(LogDream, Error, TEXT("ChangeServer %s"), *ErrorMsg);
+            ClientReturnToMainMenuWithTextReason(FText::FromString(ErrorMsg));
+        }
     });
+    
+    FPDIStatic::Get()->ReconnectToSpecifiedServer(Address, Port, Delegate);
 }
 
-void ADPlayerController::HandleRawMessage(EMessageType::Type Type, const FString& Message)
+void ADPlayerController::OnUpdatedTasks(const TArray<FTaskInProgressInfo>& UpdatedTasks)
 {
-    //DREAM_NLOG(Verbose, TEXT("HandleRawMessage: %s, MessageType: %d"), *Message, Type);
-
-    switch (Type)
-    {
-    case EMessageType::Kill_Message:
-        {
-            FKillMessage KillMessage;
-            FJsonObjectConverter::JsonObjectStringToUStruct(Message, &KillMessage, 0, 0);
-            BP_OnReceiveKillMessage(KillMessage);
-            break;
-        }
-    case EMessageType::Talk_Message:
-        {
-            FTalkMessage TalkMessage;
-            FJsonObjectConverter::JsonObjectStringToUStruct(Message, &TalkMessage, 0, 0);
-            BP_OnReceiveTalkMessage(TalkMessage);
-            break;
-        }
-    case EMessageType::TeamApply_Message:
-        {
-            FPlayerAccountInfo PlayerInfo;
-            FJsonObjectConverter::JsonObjectStringToUStruct(Message, &PlayerInfo, 0, 0);
-            // Todo 组队逻辑 待处理
-            break;
-        }
-    default:
-        break;
-    }
+    BP_OnTrackingTaskUpdated(UpdatedTasks);
 }
 
-void ADPlayerController::SendMulticastMessage(TEnumAsByte<EMessageType::Type> Type, const FString& Message)
+void ADPlayerController::ClientWasKicked_Implementation(const FText& KickReason)
 {
-    for (TActorIterator<ADCharacterPlayer> PlayerPawns(GetWorld()); PlayerPawns; ++PlayerPawns)
-    {
-        APlayerState* PawnPlayerState = PlayerPawns->GetPlayerState();
-
-        if (!PawnPlayerState || *PlayerPawns == GetPawn())
-        {
-            continue;
-        }
-
-        FUniqueNetIdRepl UniqueId = PawnPlayerState->GetUniqueId();
-
-        if (UniqueId.IsValid())
-        {
-            SendMessageToPlayer(UniqueId, Type, Message);
-        }
-    }
+    UDreamWidgetStatics::PopupDialog(this, EDialogType::WARNING, KickReason, 2.f);
+    UDGameplayStatics::ReturnToHomeWorld(this);
 }
 
-void ADPlayerController::SendMessageToPlayer(const FUniqueNetIdRepl& UserNetId, TEnumAsByte<EMessageType::Type> Type, const FString& Message)
+void ADPlayerController::ServerSendMessage_Implementation(const FTalkMessage& Message)
 {
-    FTCHARToUTF8 Utf8Msg(*Message);
-    TArray<uint8> Data;
-    Data.Add(Type);
-    Data.Append(reinterpret_cast<const uint8*>(Utf8Msg.Get()), Utf8Msg.Length());
-
-    TSharedRef<FInternetAddr> Addr = ISocketSubsystem::Get(STEAM_SUBSYSTEM)->CreateInternetAddr();
-
-    bool bValid;
-    Addr->SetIp(*UserNetId->ToString(), bValid);
-
-    if (bValid)
+    if (!IsLocalController() && GetLocalRole() != ROLE_Authority)
     {
-        /*int32 SendBytes;
-        if (!ClientSocket->SendTo(Data.GetData(), Data.Num(), SendBytes, *Addr))
-        {
-            DREAM_NLOG(Error, TEXT("ClientSocket SendTo Error"));
-        }*/
-    }
-    else
-    {
-        DREAM_NLOG(Error, TEXT("SetIp Error"));
+        MulticastMessage(Message);
     }
 }
 
-void ADPlayerController::ServerMulticastMessage_Implementation(const FTalkMessage& Message)
-{
-    if (!IsLocalController() && GetNetMode() != NM_DedicatedServer)
-    {
-        NetMulticastMessage(Message);
-    }
-}
-
-void ADPlayerController::NetMulticastMessage_Implementation(const FTalkMessage& Message)
+void ADPlayerController::MulticastMessage_Implementation(const FTalkMessage& Message)
 {
     BP_OnReceiveTalkMessage(Message);
 }
 
-void ADPlayerController::SendTeamUpApply(APlayerState* TargetPlayerState)
-{
-    if (TargetPlayerState)
-    {
-        FUniqueNetIdRepl TargetUniqueId = TargetPlayerState->GetUniqueId();
-
-        FUniqueNetIdRepl MyUniqueId = PlayerState->GetUniqueId();
-
-        if (TargetUniqueId.IsValid() && MyUniqueId.IsValid())
-        {
-            FPlayerAccountInfo Info;
-            Info.AccountID = MyUniqueId->ToString();
-            Info.PlayerName = PlayerState->GetPlayerName();
-
-            FString JsonMessage;
-            FJsonObjectConverter::UStructToJsonObjectString(Info, JsonMessage, 0, 0, 0, nullptr, false);
-            SendMessageToPlayer(TargetUniqueId, EMessageType::TeamApply_Message, JsonMessage);
-        }
-    }
-}
-
-void ADPlayerController::SendKillMessage(const FKillMessage& Message)
-{
-    FString JsonMessage;
-    FJsonObjectConverter::UStructToJsonObjectString(Message, JsonMessage, 0, 0, 0, nullptr, false);
-    SendMulticastMessage(EMessageType::Kill_Message, JsonMessage);
-}
-
 void ADPlayerController::SendTalkMessage(const FTalkMessage& Message)
 {
-    //FString JsonMessage;
-    //FJsonObjectConverter::UStructToJsonObjectString(Message, JsonMessage, 0, 0, 0, nullptr, false);
-    //SendMulticastMessage(EMessageType::Talk_Message, JsonMessage);
-    ServerMulticastMessage(Message);
-}
-
-void ADPlayerController::ExitGame()
-{
-    FPlatformMisc::RequestExit(false);
-}
-
-void ADPlayerController::BeginGame()
-{
-    FPDIStatic::Get()->Login();
-}
-
-void ADPlayerController::HandleTeamApply()
-{
+    ServerSendMessage(Message);
 }
 
 int32& ADPlayerController::GetWeaponAmmunition(EAmmoType AmmoType)
@@ -370,65 +257,65 @@ int32 ADPlayerController::GetDefaultAmmunition(EAmmoType AmmoType) const
                : CDO->LevelThreeAmmunition;
 }
 
-void ADPlayerController::ClientHandleKilledRewardsGenerate_Implementation(UClass* EnemyClass)
+void ADPlayerController::OnReceiveRewardMessage(const FItemListHandle& ItemList)
 {
-    if (EnemyClass == nullptr)
+    for (UItemData* ItemData : ItemList.Items)
     {
-        return;
-    }
+        UClass* ItemClass = UDProjectSettings::GetProjectSettings()->GetItemClassFromGuid(ItemData->ItemGuid);
 
-    ADEnemyBase* Enemy = EnemyClass->GetDefaultObject<ADEnemyBase>();
-
-    UItemData* GenerateRewards = Enemy->RewardPool->GenerateRewards(GetPlayerState<ADPlayerState>());
-    if (GenerateRewards->IsValidData())
-    {
-        Handle_AddRewards = FPDIStatic::Get()->AddOnAddPlayerRewards(
-            FOnCompleted::FDelegate::CreateUObject(this, &ADPlayerController::OnRewardsAddCompleted, GenerateRewards));
-        FPDIStatic::Get()->AddPlayerRewards(FItemDataHandle(GenerateRewards));
-    }
-}
-
-void ADPlayerController::OnRewardsAddCompleted(bool bSuccess, UItemData* Rewards)
-{
-    FPDIStatic::Get()->RemoveOnAddPlayerRewards(Handle_AddRewards);
-    
-    if (bSuccess)
-    {
-        SendClientRewardMessage(Rewards);
-    }
-    else
-    {
-        DREAM_NLOG(Error, TEXT("Rewards Generate Errors"));
-    }
-}
-
-void ADPlayerController::SendClientRewardMessage(UItemData* Reward)
-{
-    TArray<FRewardMessage> Messages;
-    for (UItemData* ItemData : FItemDataRange(Reward))
-    {
-        FRewardMessage RewardMessage;
-        RewardMessage.RewardPropsClass = ItemData->GetItemClass();
-        RewardMessage.RewardNum = ItemData->GetItemAmount();
-				
-        Messages.Add(RewardMessage);
-    }
-			
-    ClientReceiveRewardMessage(Messages);
-}
-
-void ADPlayerController::ClientReceiveRewardMessage_Implementation(const TArray<FRewardMessage>& RewardMessages)
-{
-    for (const FRewardMessage& RewardMessage : RewardMessages)
-    {
-        if (RewardMessage.RewardPropsClass)
+        if (ItemClass == nullptr)
         {
-            if (IPropsInterface* PropsInterface = Cast<IPropsInterface>(RewardMessage.RewardPropsClass->GetDefaultObject()))
-            {
-                BP_ReceiveRewardMessage(PropsInterface->GetPropsInfo(), PropsInterface->GetRewardNotifyMode(), RewardMessage.RewardNum);
-            }
+            continue;
+        }
+
+        if (IPropsInterface* PropsInterface = Cast<IPropsInterface>(ItemClass->GetDefaultObject()))
+        {
+            BP_ReceiveRewardMessage(PropsInterface->GetPropsInfo(), PropsInterface->GetRewardNotifyMode(), ItemData->GetItemNum());
         }
     }
+}
+
+TArray<FGuideElement> ADPlayerController::GetGuideElements() const
+{
+    TArray<FGuideElement> Elements;
+
+    if (GuideActors.Num() > 0)
+    {
+        for (AActor* GuideActor : GuideActors)
+        {
+            if (!GuideActor || GuideActor->IsPendingKillPending())
+            {
+                continue;
+            }
+
+            IIconInterface* IconInterface = Cast<IIconInterface>(GuideActor);
+            if (IconInterface == nullptr)
+            {
+                continue;
+            }
+
+            UIconComponent* IconComponent = IconInterface->GetIconComponent();
+            if (!IconComponent->IsActive())
+            {
+                continue;
+            }
+
+            FGuideElement Element;
+            Element.Location = GuideActor->GetActorLocation();
+            Element.Brush = &IconComponent->Icon;
+
+            Elements.Add(Element);
+        }
+    }
+     
+    return Elements;
+}
+
+void ADPlayerController::ClientReturnToMainMenuWithTextReason_Implementation(const FText& ReturnReason)
+{
+    Super::ClientReturnToMainMenuWithTextReason_Implementation(ReturnReason);
+    
+    UDreamWidgetStatics::PopupDialog(this, EDialogType::ERROR, ReturnReason, 3.f);
 }
 
 bool ADPlayerController::AddWeaponAmmunition(EAmmoType AmmoType, int32 AmmunitionAmount)
@@ -478,5 +365,6 @@ void ADPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 }
+
 
 #undef LOCTEXT_NAMESPACE

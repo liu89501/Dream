@@ -25,7 +25,7 @@ public:
 
 	virtual void Activate() override;
 
-	void OnLoadCompleted(bool bSuccess) const;
+	void OnLoadCompleted(bool bSuccess);
 
 private:
 

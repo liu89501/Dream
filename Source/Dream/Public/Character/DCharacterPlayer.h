@@ -13,22 +13,45 @@
 #include "GameFramework/Character.h"
 #include "DCharacterPlayer.generated.h"
 
-
-#define SKIN_COMP_NAME TEXT("Skin_Component")
-
 class AShootWeapon;
+class ADCharacterPlayer;
+
+DECLARE_DYNAMIC_DELEGATE_OneParam(FDynamicOnInteractiveCompleted, ADCharacterPlayer*, PlayerCharacter);
 
 UENUM(BlueprintType)
 enum class EMovingDirection : uint8
 {
 	F,
-	FL,
-	FR,
-	L,
-	R,
-	BL,
-	BR,
-	B
+    FL,
+    FR,
+    L,
+    R,
+    BL,
+    BR,
+    B
+};
+
+UENUM()
+enum class EWeaponStatus : uint8
+{
+	Idle,
+    Firing,
+    Reloading,
+    Equipping
+};
+
+UCLASS(Blueprintable)
+class UCharacterMesh : public UDataAsset
+{
+	GENERATED_BODY()
+
+public:
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	USkeletalMesh* MasterMesh;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	TArray<USkeletalMesh*> SlaveMeshs;
 };
 
 UCLASS()
@@ -41,20 +64,18 @@ public:
 	ADCharacterPlayer();
 
 	/** 第三人称相机组件 */
-	UPROPERTY( VisibleAnywhere, BlueprintReadOnly)
+	UPROPERTY( VisibleAnywhere, BlueprintReadOnly )
 	class UCameraComponent* TPCamera;
 	/** 第三人称相机弹簧臂 */
-	UPROPERTY( VisibleAnywhere, BlueprintReadOnly)
+	UPROPERTY( VisibleAnywhere, BlueprintReadOnly )
 	class USpringArmComponent* TPCameraArm;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	UPROPERTY( VisibleAnywhere, BlueprintReadOnly )
 	class UAudioComponent* AudioComponent;
 
-	/**
-	 * 这个character是否用作预览(会关掉一些不必要的功能)
-	 */
-	UPROPERTY(EditAnywhere, Category = CharacterPlayer)
-	bool bIsPreviewCharacter;
+	UPROPERTY( VisibleAnywhere, BlueprintReadOnly )
+	class UMinimapScanComponent* ScanComponent;
+
 
 	/** 人物的Yaw角度限制 超过这个范围会旋转自身 */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CharacterPlayer)
@@ -91,36 +112,9 @@ public:
 	bool bAimed;
 	UPROPERTY(BlueprintReadWrite, Replicated, Category = "CharacterPlayer")
 	bool bSprinted;
-	
-	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|UI")
-	TSubclassOf<class UPlayerHUD> PlayerHUDClass;
-
-	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|UI")
-	TSubclassOf<class UDamageWidgetComponent> DamageWidgetClass;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Weapon")
-	FName WeaponSocketName;
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|Weapon")
-	FName WeaponHolsterSocketName;
 
 	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|Weapon")
-	float OutOfCombatTime;
-
-	/**
-	 * 雷达扫描半径， 用于显示小地图相关的东西
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|MiniMap")
-	float RadarScanRadius;
-	/**
-	 * 雷达扫描间隔
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|MiniMap")
-	float ScanInterval;
-	/**
-	 * 雷达扫描半径， 用于显示小地图相关的东西
-	 */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "CharacterPlayer|MiniMap")
-	TArray<TEnumAsByte<EObjectTypeQuery>> ScanObjectTypes;
+	float CombatToIdleTime;
 
 	/**
 	 * 默认属性值配置
@@ -132,12 +126,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "CharacterPlayer")
 	AShootWeapon* GetActiveWeapon() const;
-
-	/**
-	 * 一般用于在交互时需要调用一下这个，避免出现在瞄准状态下打开商店时导致无法取消瞄准状态
-	 */
-	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
-	void ForceModifyStateToIdle();
 
 	/**
 	 * 获取当前玩家正在使用的是几号位的武器
@@ -160,18 +148,11 @@ public:
 	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName="OnRepPlayerState", DisplayName="OnRepPlayerState"), Category = "CharacterPlayer")
 	void BP_OnRepPlayerState();
 
-	/*/*
-		武器变更事件
-	#1#
-	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName = "OnActiveWeaponChanged", DisplayName = "OnActiveWeaponChanged"), Category = "CharacterPlayer")
-	void BP_OnActiveWeaponChanged();*/
-
-	/* 客户端开始重生 */
-	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName = "OnStartResurrection", DisplayName = "OnStartResurrection"), Category = "CharacterPlayer")
-	void BP_OnStartResurrection(int32 ResurrectionTime);
-
 	UFUNCTION(BlueprintCallable, Category = "CharacterPlayer")
 	void SetPlayerHUDVisible(bool bVisible);
+	
+	UFUNCTION(BlueprintCallable, Category = "CharacterPlayer")
+	void RemovePlayerHUD();
 
 	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	EMovingDirection GetMovingDirection() const;
@@ -204,7 +185,7 @@ public:
 	void LearningTalents(const TArray<TSubclassOf<class UDreamGameplayAbility>>& TalentClasses);
 
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
-    void ToggleCrossHairVisible(bool bVisible);
+    void ToggleCrosshairVisible(bool bVisible);
 
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category=CharacterPlayer)
 	void SwitchWeapon(int32 NewWeaponIndex);
@@ -237,20 +218,32 @@ public:
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	float GetCtrlYawDeltaCount() const;
 
-	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
-	void SetCombatStatus(bool bNewCombatStatus);
-
-	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
-    UPlayerHUD* GetPlayerHUD() const;
 
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	void SetMouseInputScale(int32 Value);
 
-	UFUNCTION(BlueprintCallable, Meta = (DisplayName="UpdateCharacterMesh", ScriptName="UpdateCharacterMesh"), Category=CharacterPlayer)
-	void BP_SetCharacterMesh(UCharacterMesh* CharacterMesh);
-	
-	bool GetMiniMapTips(TArray<FMiniMapData>& Data);
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
+	void SetCharacterMesh(UCharacterMesh* CharacterMesh);
 
+	/** 交互UI */
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
+	void EnableInteractiveButton(float InteractiveTime, FText Desc, FDynamicOnInteractiveCompleted Event);
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
+	void DisableInteractiveButton();
+
+	// todo 待删除
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
+	void TestFunction(FGameplayTag Tag, UTexture2D* Icon);
+
+	/**
+	* 一般用于在交互时需要调用一下这个，避免出现在瞄准状态下打开商店时导致无法取消瞄准状态
+	*/
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
+	void StopAllActions();
+
+public:
+
+	
 	const struct FCharacterMontage* GetCurrentActionMontage() const;
 
 	/** Camera 相关 */
@@ -265,6 +258,11 @@ public:
 	 */
 	void TriggerAbilityFromTag(const FGameplayTag& Tag, AActor* Target);
 
+	FORCEINLINE UCharacterMesh* GetCharacterMesh() const
+	{
+		return CurrentCharacterMesh;
+	}
+
 protected:
 
 	/*UFUNCTION()
@@ -272,6 +270,17 @@ protected:
 
 	UFUNCTION()
 	void OnRep_ActiveWeapon();
+
+	/** 状态切换相关 */
+	void StateSwitchToCombatAndKeep();
+	void StateSwitchToRelaxAndCancelKeep();
+	void StateSwitchToRelaxAndCancelKeepImmediately();
+	void StateSwitchToCombat();
+	void StateSwitchToRelax();
+	void SetStateToRelax();
+	
+	UFUNCTION(server, reliable)
+    void ServerSetCombatState(bool bNewCombatState);
 
 	/** 开火 */
 	void StartFire();
@@ -312,14 +321,9 @@ protected:
 	UFUNCTION(Server, Reliable)
 	void ServerLearningTalent(const TArray<TSubclassOf<UDreamGameplayAbility>>& TalentClasses);
 
-	UFUNCTION(server, reliable)
-    void ServerSetCombatStatus(bool bNewCombatStatus);
-
 	/** 瞄准 */
 	void StartAim();
 	void StopAim();
-
-	void SwitchCombat();
 
 	/** 冲刺 */
 	void ToggleSprint();
@@ -377,11 +381,6 @@ protected:
 
 	void SetActiveWeapon(AShootWeapon* NewWeapon);
 
-	/** 状态切换相关 */
-	void ModStatusToRelax();
-	void AttemptSetStatusToRelax();
-	void ClearCombatStatusCounter();
-
 	virtual void Tick(float DeltaSeconds) override;
 
 	// Called to bind functionality to input
@@ -399,7 +398,10 @@ protected:
 
 	virtual void HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle) override;
 
-	UFUNCTION(Client, reliable)
+	UFUNCTION(Client, unreliable)
+    void ClientReceiveDamage(AActor* Causer);
+
+	UFUNCTION(Client, unreliable)
 	void ClientHitEnemy(const FDamageTargetInfo& DamageInfo);
 	virtual void HitEnemy(const FDamageTargetInfo& DamageInfo, ADCharacterBase* HitTarget) override;
 
@@ -409,8 +411,6 @@ protected:
 	/*void AttemptSetStatusToRelax();
 
 	void ModStatusToRelax();*/
-
-	void InitializeUI();
 
 	void AimedMoveSpeedChange(bool bNewAim);
 
@@ -428,29 +428,27 @@ protected:
 	UFUNCTION(Server, Reliable)
     void ServerSetCharacterLevel(int32 NewLevel);
 
-	void RadarScanTick();
-
 	UFUNCTION(Server, Reliable)
     void ServerInitializePlayer(const FPlayerInfo& PlayerInfo);
-
-	/* 客户端Pawn重生 一般处理UI相关逻辑 */
-	UFUNCTION(Client, Reliable)
-	void ClientResurrection(int32 ResurrectionTime);
 
 	UFUNCTION(Server, UnReliable)
 	void ServerUpdateMovingInput(const FVector2D& NewMovingInput);
 
-	// todo 这里可能会有问题 试想如果一个人在视野之外这个RPC在其他客户端能否接收到，这是个问题需要测试
 	UFUNCTION(Server, Reliable)
 	void ServerUpdateCharacterMesh(UCharacterMesh* CharacterMesh);
 
 	UFUNCTION()
 	void OnRep_CharacterMesh();
-	void SetCharacterMesh(UCharacterMesh* CharacterMesh);
 
+	void UpdateCharacterMesh();
+	
 	virtual void OnActiveGameplayEffectAdded(UAbilitySystemComponent* ASC, const FGameplayEffectSpec& Spec, FActiveGameplayEffectHandle Handle);
 	virtual void OnActiveGameplayEffectTimeChange(FActiveGameplayEffectHandle Handle, float NewStartTime, float NewDuration);
 	virtual void OnActiveGameplayEffectRemoved(const FActiveGameplayEffect& Effect);
+
+private:
+
+	struct FMinimapDataIterator GetMinimapDataIterator() const;
 
 protected:
 
@@ -459,6 +457,9 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = CharacterPlayer)
 	bool bCombatStatus;
+
+	bool bKeepCombatStatus;
+	uint16 KeepCount;
 
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterMesh, Category = CharacterPlayer)
 	UCharacterMesh* CurrentCharacterMesh;
@@ -470,14 +471,10 @@ protected:
 	FVector2D MovingInput;
 	
 	FVector2D PrevMovingInput;
-	
 
 private:
 
-	void DoAddMiniMapTips(TArray<FMiniMapData>& Data, const TArray<AActor*>& ScanActors);
-
-
-private:
+	class UDProjectSettings* CDOProjectSettings;
 
 	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
 	int32 BaseTurnRate;
@@ -489,20 +486,10 @@ private:
 	 */
 	TArray<FGameplayAbilitySpecHandle> CacheWeaponPerkHandles;
 	
-	/**
-	 *  无视小地图扫描半径的Actor 将一直显示在小地图上 需要手动删除
-	 */
-	UPROPERTY()
-	TArray<AActor*> InfiniteActors;
-	/**
-	 *  小地图扫描半径内的Actor
-	 */
-	UPROPERTY()
-	TArray<AActor*> ActorWithinRadius;
 
-	//TSharedPtr<class SPlayerHUD> PlayerHUD;
-	UPROPERTY()
-	class UPlayerHUD* PlayerHUD;
+	TSharedPtr<class SPlayerHUD> PlayerHUD;
+	/*UPROPERTY()
+	class UPlayerHUD* PlayerHUD;*/
 
 	/** 当前正在使用的武器 在 WeaponInventory 的索引 */
 	UPROPERTY(Replicated)
@@ -513,7 +500,7 @@ private:
 	TArray<AShootWeapon*> WeaponInventory;
 	/** 当前装备的模块 */
 	UPROPERTY()
-	TMap<EModuleCategory, UDModuleBase*> EquippedModules;
+	TArray<UDModuleBase*> EquippedModules;
 
 	UPROPERTY()
 	TArray<TSubclassOf<UDreamGameplayAbility>> LearnedTalents; 
@@ -526,9 +513,6 @@ private:
 	
 	//FTimerHandle Handle_CanTurn;
 
-	/** 雷达扫描handle */
-	FTimerHandle Handle_RadarScan;
-
 	/* 武器相关 */
 	FTimerHandle Handle_Shoot;
 	FTimerHandle Handle_Reload;
@@ -539,7 +523,7 @@ private:
 	FDelegateHandle Handle_PlayerInfo;
 
 	/* 记录进入战斗状态的次数 */
-	FThreadSafeCounter CombatStatusCounter;
+	//uint16 CombatStatusCounter;
 	
 	/* 记录开火按键是否按下 */
 	bool bFireButtonDown;
@@ -547,8 +531,5 @@ private:
 	/** 控制器 yaw 的累计值 */	
 	float CtrlYawDeltaCount;
 	float PrevCtrlYaw;
-
-	UPROPERTY()
-	UClass* SlaveMeshAnimBPClass;
 };
 

@@ -5,10 +5,7 @@
 
 DEFINE_LOG_CATEGORY(LogDream)
 
-const FName DreamActorTagName::Teammate = TEXT("Teammate");
-const FName DreamActorTagName::Enemy = TEXT("Enemy");
 const FName DreamActorTagName::Death = TEXT("Death");
-
 
 uint32 IPTools::IPV4StringToUint32(const FString& IpString)
 {

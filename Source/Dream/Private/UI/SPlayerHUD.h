@@ -3,67 +3,105 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "GameplayTagContainer.h"
+#include "SlateUtils.h"
+#include "SInteractive.h"
+#include "MinimapScanComponent.h"
+#include "Components/TimelineComponent.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/DeclarativeSyntaxSupport.h"
 
+class ADCharacterPlayer;
+class SProgressBar;
+
 /**
- *	游戏内UI  武器准心，血条等
+ *	武器准心, 血条, 小地图等
  */
-class SPlayerHUD : public SCompoundWidget
+class SPlayerHUD : public SCompoundWidget, FGCObject
 {
 public:
 	SLATE_BEGIN_ARGS(SPlayerHUD)
+		: _InOwnerPlayer(nullptr),
+		  _HitMarkDisplayTime(1.f),
+		  _StateGridMaxColumn(10)
 	{}
 
-	SLATE_ARGUMENT(FSlateBrush, CrosshairBrush);
+		SLATE_ARGUMENT(ADCharacterPlayer*, InOwnerPlayer);
+	
+		SLATE_ARGUMENT(float, HitMarkDisplayTime);
 
-	SLATE_ARGUMENT(FSlateBrush, MagazineBrush);
-
-	SLATE_ARGUMENT(const FSlateBrush*, HealthBrush);
-
-	SLATE_ARGUMENT(const FSlateBrush*, ShieldBrush);
-
-	SLATE_ARGUMENT(UFont*, FontBase);
+		SLATE_ARGUMENT(int32, StateGridMaxColumn);
+	
+		SLATE_ATTRIBUTE(FMinimapDataIterator, MinimapDataIterator);
 
 	SLATE_END_ARGS()
 
 	/** Constructs this widget with InArgs */
 	void Construct(const FArguments& InArgs);
 
-	void SetCrosshairBrush(const FSlateBrush& NewCrosshairBrush);
+	void SetHealthPercent(float Percentage);
 
-	void SetMagazineBrush(const FSlateBrush& NewMagazineBrush);
+	void SetCrosshairBrush(const FSlateBrush& NewCrosshairBrush) const;
 
-	FORCEINLINE void SetCrosshairBrushColor(FLinearColor NewColor)
-	{
-		CrosshairBrush.TintColor = NewColor;
-	}
+	void SetMagazineInformation(int32 InAmmo, int32 InMagazine, float AmmoPercentage) const;
 
-	void SetHealthText(const FString& NewHealth);
+	void SetCrossHairVisibility(EVisibility NewVisibility) const;
 
-	void SetShieldText(const FString& NewShield);
+	void ShowHitEnemyMark(bool bEnemyDeath);
 
-	void SetAmmoText(const FString& NewAmmos);
+	void ShowHurtMark(float Direction);
 
-	void SetMagText(const FString& NewMagazine);
+	void AddStateIcon(const FGameplayTag& Tag, UTexture2D* Icon, const int32 StackCount, float Duration);
 
-	void SetCrosshairSize(FVector2D Size);
+	void RefreshStateIcon(const FGameplayTag& Tag, const int32 StackCount, float NewDuration);
 
-	void SetCrossHairVisibility(EVisibility NewVisibility);
+	void RemoveStateIcon(const FGameplayTag& Tag);
 
-	UMaterialInstanceDynamic* GetMagazineMaterial();
-	UMaterialInstanceDynamic* GetCrosshairMaterial();
+	void ActivateInteractiveButton(float InteractiveTime, const FText& InteractiveText, FOnInteractiveCompleted Delegate) const;
+
+	void DeactivateInteractiveButton() const;
+
+public:
+
+	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
+	
+	virtual void AddReferencedObjects(FReferenceCollector& Collector) override;
 
 private:
 
-	TSharedPtr<class STextBlock> HealthText;
-	TSharedPtr<class STextBlock> ShieldText;
-	TSharedPtr<class STextBlock> AmmoText;
-	TSharedPtr<class STextBlock> MagText;
+	void HiddenHitMark();
 
-	TSharedPtr<class SBox> CrossHair;
+	void OnHurtMarkOpacityUpdate(float Value) const;
 
-	FSlateBrush CrosshairBrush;
+private:
 
-	FSlateBrush MagazineBrush;
+	TSharedPtr<STextBlock> AmmoText;
+	TSharedPtr<STextBlock> MagText;
+
+	TSharedPtr<SImage> Crosshair;
+	
+	TSharedPtr<SImage> HitMark;
+	FLinearAnimation HitMarkDisplayTime;
+
+	int32 StateGridMaxColumn;
+	TSharedPtr<class SWrapBox> StatePanel;
+
+	TSharedPtr<SImage> HurtMark;
+	FTimeline HurtAnim;
+	FSlateBrush HurtBrush;
+	UMaterialInstanceDynamic* HurtDynamic;
+
+	FLinearAnimation HealthBackgroundAnim;
+	TSharedPtr<SProgressBar> HealthBar;
+	TSharedPtr<SProgressBar> HealthBackground;
+	
+	TSharedPtr<SProgressBar> Magazine;
+
+	TWeakObjectPtr<ADCharacterPlayer> OwnerPlayer;
+
+	TSharedPtr<SInteractive> InteractiveButton;
+	
+	TMap<FGameplayTag, TSharedPtr<class SStateIcon>> StateIcons;
 };
+
+

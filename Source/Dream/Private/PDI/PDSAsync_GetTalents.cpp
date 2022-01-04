@@ -1,5 +1,8 @@
 ﻿
 #include "PDI/PDSAsync_GetTalents.h"
+
+
+#include "DProjectSettings.h"
 #include "PDI/PlayerDataInterface.h"
 #include "PDI/PlayerDataInterfaceStatic.h"
 
@@ -16,12 +19,12 @@ void UPDSAsync_GetTalents::Activate()
 	FPDIStatic::Get()->GetTalents(T_Category);
 }
 
-void UPDSAsync_GetTalents::OnCompleted(const TArray<FTalentInfo>& Talents, bool bSuccess) const
+void UPDSAsync_GetTalents::OnCompleted(int64 Talents, bool bSuccess)
 {
 	FPDIStatic::Get()->RemoveOnGetTalents(Handle);
 	if (bSuccess)
 	{
-		OnSuccess.Broadcast(Talents);
+		OnSuccess.Broadcast(UDProjectSettings::GetProjectSettings()->GetTalents(T_Category, Talents));
 	}
 	else
 	{

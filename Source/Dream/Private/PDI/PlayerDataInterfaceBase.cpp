@@ -69,10 +69,7 @@ FArchive& FPacketArchiveReader::operator<<(UObject*& Value)
 {
 	FString PathName;
 	*this << PathName;
-	if (!PathName.IsEmpty())
-	{
-		Value = LoadObject<UObject>(nullptr, *PathName);
-	}
+	Value = LoadObject<UObject>(nullptr, *PathName);
 	return *this;
 }
 
@@ -95,16 +92,15 @@ FPlayerDataInterfaceBase::FPlayerDataInterfaceBase()
 	  SocketReceiver(nullptr),
 	  Socket(nullptr)
 {
-	CALLBACK_BINDING_RAW(TService_ClientLogin::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveLoginMessage);
-	CALLBACK_BINDING_RAW(TService_RunDedicatedServer::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveGetServerMessage);
+	CALLBACK_BINDING_RAW(TService_ClientLogin::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveClientLoginMessage);
+	CALLBACK_BINDING_RAW(TService_ServerLogin::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveServerLoginMessage);
+	CALLBACK_BINDING_RAW(TService_SearchServer::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveSearchServerMessage);
 	CALLBACK_BINDING_RAW(TService_RegisterServer::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveRegisterServerMessage);
-	CALLBACK_BINDING_RAW(TService_NotifyServer::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveNotifyBSMessage);
 }
 
 FPlayerDataInterfaceBase::~FPlayerDataInterfaceBase()
 {
 	UE_LOG_ONLINE(Log, TEXT("FPlayerDataInterfaceBase Free..."));
-
 	ShutdownSocket();
 }
 
@@ -113,6 +109,9 @@ void FPlayerDataInterfaceBase::Initialize()
 	GConfig->GetInt(TEXT("PDISettings"), TEXT("ServerPort"), ServerPort, GEngineIni);
 	GConfig->GetString(TEXT("PDISettings"), TEXT("ServerHostName"), ServerHostName, GEngineIni);
 	GConfig->GetString(TEXT("OnlineSubsystem"), TEXT("DefaultPlatformService"), OSSName, GEngineIni);
+
+	SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
+	checkf(SocketSubsystem, TEXT("SocketSubsystem Invalid"));
 }
 
 void FPlayerDataInterfaceBase::RegisterServer(const FDedicatedServerInformation& Information)
@@ -120,9 +119,9 @@ void FPlayerDataInterfaceBase::RegisterServer(const FDedicatedServerInformation&
 	SocketSender->Send(PDIBuildParam<TService_RegisterServer>(Information));
 }
 
-void FPlayerDataInterfaceBase::RunNewDedicatedServer(const FRunServerParameter& Parameter)
+void FPlayerDataInterfaceBase::SearchDedicatedServer(const FSearchServerParam& Param)
 {
-	SocketSender->Send(PDIBuildParam<TService_RunDedicatedServer>(Parameter));
+	SocketSender->Send(PDIBuildParam<TService_SearchServer>(Param));
 }
 
 void FPlayerDataInterfaceBase::UpdateActivePlayers(const FUpdateServerPlayerParam& Param)
@@ -176,6 +175,21 @@ void FPlayerDataInterfaceBase::Logout()
 	ShutdownSocket();
 }
 
+int32 FPlayerDataInterfaceBase::GetClientPlayerID()
+{
+	return ClientPlayerId;
+}
+
+TSharedPtr<FInternetAddr> FPlayerDataInterfaceBase::GetBackendServerAddr()
+{
+	TSharedRef<FInternetAddr> Addr = SocketSubsystem->CreateInternetAddr();
+	if (Socket)
+	{
+		Socket->GetPeerAddress(*Addr);
+	}
+	return Addr;
+}
+
 FPlayerDataDelegate& FPlayerDataInterfaceBase::GetPlayerDataDelegate()
 {
 	return PlayerDataDelegate;
@@ -186,18 +200,71 @@ FOnServerConnectionLose& FPlayerDataInterfaceBase::OnServerConnectionLoseDelegat
 	return OnServerConnectionLose;
 }
 
-void FPlayerDataInterfaceBase::OnReceiveLoginMessage(FPacketArchiveReader& Data)
+void FPlayerDataInterfaceBase::ReconnectToSpecifiedServer(uint32 Address, uint32 Port, FOnReconnectServer Delegate)
+{
+	TSharedRef<FInternetAddr> Addr = SocketSubsystem->CreateInternetAddr();
+	Addr->SetIp(Address);
+	Addr->SetPort(Port);
+	
+	TSharedRef<FInternetAddr> CurrentAddr = SocketSubsystem->CreateInternetAddr();
+	Socket->GetPeerAddress(*CurrentAddr);
+	
+	if (CurrentAddr->CompareEndpoints(*Addr))
+	{
+		Delegate.ExecuteIfBound(true);
+		return;
+	}
+	
+	UE_LOG(LogOnline, Verbose, TEXT("Current Addr: %s, Changed Addr: %s"), *CurrentAddr->ToString(true), *Addr->ToString(true));
+	
+	ShutdownSocket();
+	
+	if (HandleConnect(Addr))
+	{
+		IOnlineIdentityPtr OnlineIdentity = Online::GetIdentityInterface();
+
+		FLoginParameter Param;
+		Param.PlatformName = OSSName;
+		Param.ThirdPartyUserTicket = OnlineIdentity->GetAuthToken(0);
+		
+		SocketSender->Send(PDIBuildParam<TService_ClientLogin>(Param));
+
+		FDelegateHandle Handle = AddOnLogin(FOnCompleted::FDelegate::CreateLambda(
+			[this, Delegate, Handle] (bool bSuccessfully)
+			{
+				FDelegateHandle Temp = Handle;
+				RemoveOnLogin(Temp);
+				Delegate.ExecuteIfBound(bSuccessfully);
+			}));
+	}
+	else
+	{
+		Delegate.ExecuteIfBound(false);
+	}
+}
+
+void FPlayerDataInterfaceBase::OnReceiveServerLoginMessage(FPacketArchiveReader& Data)
 {
 	bool bLoginSucess;
 	Data << bLoginSucess;
-
 	BroadcastOnLogin(bLoginSucess);
 }
 
-void FPlayerDataInterfaceBase::OnReceiveGetServerMessage(FPacketArchiveReader& Data)
+void FPlayerDataInterfaceBase::OnReceiveClientLoginMessage(FPacketArchiveReader& Data)
+{
+	bool bLoginSucess;
+	Data << bLoginSucess;
+	if (bLoginSucess)
+	{
+		Data << ClientPlayerId;
+	}
+	BroadcastOnLogin(bLoginSucess);
+}
+
+void FPlayerDataInterfaceBase::OnReceiveSearchServerMessage(FPacketArchiveReader& Data)
 {
 	bool bSucess;
-	FFindServerResult Result;
+	FSearchServerResult Result;
 
 	Data << bSucess;
 	if (bSucess)
@@ -205,7 +272,7 @@ void FPlayerDataInterfaceBase::OnReceiveGetServerMessage(FPacketArchiveReader& D
 		Data << Result;
 	}
 	
-	BroadcastOnGetServer(Result, bSucess);
+	BroadcastOnSearchServer(Result, bSucess);
 }
 
 void FPlayerDataInterfaceBase::OnReceiveRegisterServerMessage(FPacketArchiveReader& Data)
@@ -221,20 +288,6 @@ void FPlayerDataInterfaceBase::OnReceiveRegisterServerMessage(FPacketArchiveRead
 	}
 	
 	BroadcastOnRegisterServer(ServerId, bSucess);
-}
-
-void FPlayerDataInterfaceBase::OnReceiveNotifyBSMessage(FPacketArchiveReader& Data)
-{
-	bool bSucess;
-	FString ServerAddress;
-
-	Data << bSucess;
-
-	if (bSucess)
-	{
-		Data << ServerAddress;
-	}
-	BroadcastOnLaunchNotify(ServerAddress, bSucess);
 }
 
 void FPlayerDataInterfaceBase::OnSocketDisconnect()
@@ -267,25 +320,27 @@ void FPlayerDataInterfaceBase::BindReceiveFunction(int32 Mark, FOnReceiveMessage
 
 bool FPlayerDataInterfaceBase::ConnectToServer()
 {
-	ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
-
-	TSharedPtr<FInternetAddr> Addr;
-	
+	TSharedPtr<FInternetAddr> ConnectAddr;
 	FAddressInfoResult Result = SocketSubsystem->GetAddressInfo(*ServerHostName, nullptr, EAddressInfoFlags::Default, NAME_None);
 	if (Result.ReturnCode == ESocketErrors::SE_NO_ERROR && Result.Results.Num() > 0)
 	{
-		Addr = Result.Results[0].Address;
+		ConnectAddr = Result.Results[0].Address;
 	}
 
-	if (!Addr.IsValid())
+	if (!ConnectAddr.IsValid())
 	{
 		UE_LOG(LogOnline, Error, TEXT("查找域名对应IP地址失败: %s"), SocketSubsystem->GetSocketError(Result.ReturnCode));
 		return false;
 	}
 
-	Addr->SetPort(ServerPort);
-	UE_LOG(LogOnline, Verbose, TEXT("Address: %s"), *Addr->ToString(true));
+	ConnectAddr->SetPort(ServerPort);
+	UE_LOG(LogOnline, Verbose, TEXT("Address: %s"), *ConnectAddr->ToString(true));
 
+	return HandleConnect(ConnectAddr);
+}
+
+bool FPlayerDataInterfaceBase::HandleConnect(TSharedPtr<FInternetAddr> Addr)
+{
 	Socket = FTcpSocketBuilder(TEXT("PDISocket"))
             .WithReceiveBufferSize(2 * 1024 * 1024)
             .WithSendBufferSize(1024 * 1024)
@@ -295,7 +350,7 @@ bool FPlayerDataInterfaceBase::ConnectToServer()
 	if (!Socket->Connect(*Addr))
 	{
 		ESocketErrors LastErrorCode = SocketSubsystem->GetLastErrorCode();
-		UE_LOG(LogOnline, Error, TEXT("连接到服务端失败: %s"), SocketSubsystem->GetSocketError(LastErrorCode));
+		UE_LOG(LogOnline, Error, TEXT("连接到服务器失败: %s"), SocketSubsystem->GetSocketError(LastErrorCode));
 		return false;
 	}
 
@@ -305,7 +360,6 @@ bool FPlayerDataInterfaceBase::ConnectToServer()
 	SocketReceiver->Start();
 	
 	SocketSender = new FTCPSocketSender(Socket);
-
 	return true;
 }
 
@@ -320,7 +374,6 @@ void FPlayerDataInterfaceBase::ShutdownSocket()
 	if (Socket != nullptr)
 	{
 		Socket->Close();
-		ISocketSubsystem* SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
 		SocketSubsystem->DestroySocket(Socket);
 		Socket = nullptr;
 	}

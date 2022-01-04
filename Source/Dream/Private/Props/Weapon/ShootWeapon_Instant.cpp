@@ -3,6 +3,7 @@
 #include "Props/Weapon/ShootWeapon_Instant.h"
 
 #include "DGameplayStatics.h"
+#include "DProjectSettings.h"
 #include "DreamGameInstance.h"
 #include "NiagaraFunctionLibrary.h"
 #include "Kismet/GameplayStatics.h"
@@ -14,9 +15,7 @@ void AShootWeapon_Instant::BeginPlay()
 
 void AShootWeapon_Instant::HandleSpawnAmmo(const FHitResult& HitResult)
 {
-	bool bAuthority = GetLocalRole() == ROLE_Authority;
-
-	if (!bAuthority)
+	if (GetNetMode() != NM_DedicatedServer)
 	{
 		FVector MuzzleLocation;
 		FRotator MuzzleRotation;
@@ -26,17 +25,16 @@ void AShootWeapon_Instant::HandleSpawnAmmo(const FHitResult& HitResult)
 
 	if (HitResult.bBlockingHit)
 	{
-		if (bAuthority)
+		if (GetLocalRole() == ROLE_Authority)
 		{
 			ApplyPointDamage(HitResult);
 		}
 		else
 		{
-			UDreamGameInstance* GI = Cast<UDreamGameInstance>(GetGameInstance());
 			EPhysicalSurface PhysicalSurface = HitResult.PhysMaterial.IsValid() ? 
                 HitResult.PhysMaterial->SurfaceType.GetValue() : SurfaceType_Default;
 
-			const FSurfaceImpactEffect& SurfaceEffect = GI->GetSurfaceImpactEffect(PhysicalSurface);
+			const FSurfaceImpactEffect& SurfaceEffect = UDProjectSettings::GetProjectSettings()->GetSurfaceImpactEffect(PhysicalSurface);
 
 			FRotator OrientationRotator = HitResult.ImpactNormal.ToOrientationRotator();
 			OrientationRotator.Pitch -= 90.f;

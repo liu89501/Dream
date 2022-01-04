@@ -6,7 +6,7 @@
 #include "GameFramework/Actor.h"
 #include "DItemPreview.generated.h"
 
-UCLASS()
+UCLASS(Abstract)
 class DREAM_API ADItemPreview : public AActor
 {
 	GENERATED_BODY()
@@ -16,21 +16,11 @@ public:
 	ADItemPreview();
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-	class USceneComponent* PreviewActorRoot;
-
-public:
-	
-	UFUNCTION(BlueprintCallable, Category = ItemPreview)
-    USkeletalMeshComponent* AddPreviewSkeletalMeshFromComponent(USkeletalMeshComponent* CharacterMesh);
-
-	UFUNCTION(BlueprintCallable, Category = ItemPreview)
-	AActor* AddPreviewActor(AActor* Template);
+	class USceneComponent* Scene;
 	
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
-
-	void ProcessMeshComponents(UMeshComponent* PreviewBody, UMeshComponent* Mesh);
 	
 public:	
 	// Called every frame

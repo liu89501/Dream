@@ -1,34 +1,80 @@
 ﻿// Copyright 1998-2019 Epic Games, Inc. All Rights Reserved.
 
 #include "DreamGameMode.h"
-
-#include "DPlayerState.h"
+#include "DGameState.h"
+#include "DPlayerController.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
-#include "EngineUtils.h"
 #include "DreamType.h"
 #include "DreamGameSession.h"
-#include "Character/DPlayerController.h"
+#include "GameFramework/Character.h"
+#include "GameFramework/GameMode.h"
 #include "GameFramework/PlayerState.h"
 #include "PDI/PlayerDataInterface.h"
 #include "PDI/PlayerDataInterfaceStatic.h"
 
-#define IdleShutdownTime 300
 
 int32 ADreamGameMode::DEFAULT_MAX_PLAYERS = 4;
 
 ADreamGameMode::ADreamGameMode()
-	: Super()
+	: PlayerResurrectionTime(5.f)
+	, MaxPlayers(4)
+	, SettlementWaitTime(15.f)
 {
 	PlayerStateClass = APlayerState::StaticClass();
 	GameSessionClass = ADreamGameSession::StaticClass();
-	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bCanEverTick = false;
 	PrimaryActorTick.bStartWithTickEnabled = false;
-	PrimaryActorTick.TickInterval = 1.f;
+}
 
-	PlayerResurrectionTime = 5.f;
+void ADreamGameMode::ReSpawnCharacter(ACharacter* Character)
+{
+	FTimerHandle Handle;
+	FTimerDelegate Delegate = FTimerDelegate::CreateUObject(this, &ADreamGameMode::OnReSpawnCharacter, Character);
+	GetWorldTimerManager().SetTimer(Handle, Delegate, PlayerResurrectionTime, false);
+}
 
-	MaxPlayers = 4;
+FOnClientRPC& ADreamGameMode::GetClientRPCDelegate(const FGameplayTag& Tag)
+{
+	return ClientRPC.FindOrAdd(Tag);
+}
+
+void ADreamGameMode::BroadcastClientRPCDelegate(const FGameplayTag& Tag)
+{
+	if (FOnClientRPC* ClientRPCPtr = ClientRPC.Find(Tag))
+	{
+		ClientRPCPtr->Broadcast();
+	}
+}
+
+void ADreamGameMode::OnReSpawnCharacter(ACharacter* Character)
+{
+	FActorSpawnParameters Params;
+	Params.Owner = Character->Controller;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+	FTransform Transform;
+	if (!GetPlayerRestartTransform(Transform))
+	{
+		Transform = Character->GetActorTransform();
+	}
+	
+	ACharacter* NewCharacter = GetWorld()->SpawnActor<ACharacter>(DefaultPawnClass, Transform, Params);
+	
+	Character->Controller->Possess(NewCharacter);
+
+	Character->Destroy();
+}
+
+void ADreamGameMode::EndMatch()
+{
+	if (ADGameState* DGameState = GetGameState<ADGameState>())
+	{
+		DGameState->EndMatch();
+
+		FTimerHandle Handle;
+		GetWorld()->GetTimerManager().SetTimer(Handle, this, &ADreamGameMode::OnResetGame, SettlementWaitTime + 1);
+	}
 }
 
 AActor* ADreamGameMode::ChoosePlayerStart_Implementation(AController* Player)
@@ -42,14 +88,46 @@ FString ADreamGameMode::InitNewPlayer(APlayerController* NewPlayerController, co
 	
 	if (Error.IsEmpty())
 	{
-		if (ADPlayerState* PlayerState = NewPlayerController->GetPlayerState<ADPlayerState>())
+		if (NewPlayerController->PlayerState)
 		{
+			//UE_LOG(LogDream, Verbose, TEXT("InitNewPlayer Options: %s"), *Options);
+			
 			int32 PlayerId = UGameplayStatics::GetIntOption(Options, TEXT("PlayerId"), 0);
-			PlayerState->SetPlayerId(PlayerId);	
+			NewPlayerController->PlayerState->SetPlayerId(PlayerId);	
 		}
 	}
 
 	return Error;
+}
+
+bool ADreamGameMode::GetPlayerRestartTransform(FTransform& RestartTransform)
+{
+	return false;
+}
+
+void ADreamGameMode::OnResetGame() const
+{
+	for (TPlayerControllerIterator<APlayerController>::ServerAll It(GetWorld()); It; ++It)
+	{
+		GameSession->KickPlayer(*It, FText::FromString(TEXT("EndMatch")));
+	}
+	
+	GetWorld()->ServerTravel(TEXT("?Restart"), true);
+}
+
+void ADreamGameMode::UpdateActivePlayers() const
+{
+	FPDIStatic::Get()->UpdateActivePlayers(FUpdateServerPlayerParam(CurrentPlayers));
+}
+
+void ADreamGameMode::InitGameState()
+{
+	Super::InitGameState();
+	
+	if (ADGameState* DGameState = GetGameState<ADGameState>())
+	{
+		DGameState->SettlementWaitTime = SettlementWaitTime;
+	}
 }
 
 void ADreamGameMode::PostLogin(APlayerController* NewPlayer)
@@ -58,9 +136,22 @@ void ADreamGameMode::PostLogin(APlayerController* NewPlayer)
 
 	IfStandalone(return);
 	
-	IdleTimeCount = 0.f;
-	PlayerNumCounter.Increment();
-	FPDIStatic::Get()->UpdateActivePlayers(FUpdateServerPlayerParam(true));
+	CurrentPlayers++;
+	
+	UpdateActivePlayers();
+
+	if (ADPlayerController* DPlayer = Cast<ADPlayerController>(NewPlayer))
+	{
+		TSharedPtr<FInternetAddr> Addr = FPDIStatic::Get()->GetBackendServerAddr();
+
+		uint32 Address;
+		int32 Port;
+		Addr->GetIp(Address);
+		Addr->GetPort(Port);
+		
+		DPlayer->ClientChangeConnectedServer(Address, Port);
+	}
+	
 }
 
 void ADreamGameMode::Logout(AController* Exiting)
@@ -68,29 +159,10 @@ void ADreamGameMode::Logout(AController* Exiting)
 	Super::Logout(Exiting);
 
 	IfStandalone(return);
-
-	if (Exiting->IsA(APlayerController::StaticClass()))
-	{
-		PlayerNumCounter.Decrement();
-		
-		FPDIStatic::Get()->UpdateActivePlayers(FUpdateServerPlayerParam(false));
-	}
-}
-
-void ADreamGameMode::Tick(float DeltaSeconds)
-{
-	Super::Tick(DeltaSeconds);
-
-	if (PlayerNumCounter.GetValue() == 0)
-	{
-		if (IdleTimeCount > IdleShutdownTime)
-		{
-			// 长时间没有玩家连接到服务器时 服务器将关闭
-			FPlatformMisc::RequestExit(false);
-		}
-
-		IdleTimeCount += DeltaSeconds;
-	}
+	
+	CurrentPlayers--;
+	
+	UpdateActivePlayers();
 }
 
 void ADreamGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -101,16 +173,4 @@ void ADreamGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
 void ADreamGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
 {
 	Super::InitGame(MapName, Options, ErrorMessage);
-
-	if (GetNetMode() != NM_Standalone)
-	{
-		int32 AutoShutdown = 0;
-		FParse::Value(FCommandLine::Get(), TEXT("bAutoShutdown="), AutoShutdown);
-		bAutoShutdown = AutoShutdown > 0;
-
-		if (bAutoShutdown)
-		{
-			SetActorTickEnabled(true);
-		}
-	}
 }

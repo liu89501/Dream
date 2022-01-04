@@ -2,73 +2,103 @@
 
 
 #include "DCharacterPreview.h"
-
 #include "CharacterPreviewAnimInstance.h"
 #include "DCharacterPlayer.h"
 #include "DGameplayStatics.h"
+#include "DProjectSettings.h"
 #include "GameFramework/Character.h"
 
-void ADCharacterPreview::InitialPreviewCharacter(ADCharacterPlayer* Character)
+ADCharacterPreview::ADCharacterPreview()
 {
-	OwningCharacter = Character;
-	USkeletalMeshComponent* NewMeshComponent = AddPreviewSkeletalMeshFromComponent(Character->GetMesh());
+	EquippedWeapons.SetNumZeroed(2);
+}
 
-	UAnimInstance* AnimInstance = NewMeshComponent->GetAnimInstance();
-	if (AnimInstance->GetClass()->ImplementsInterface(UCharacterPreviewAnimInstance::StaticClass()))
+void ADCharacterPreview::InitPreviewCharacterFromPlayerInfo(int32 InUseWeaponSlot, const FPlayerInfo& PlayerInfo)
+{
+	UseWeaponSlot = InUseWeaponSlot;
+	UDProjectSettings* ProjectSettings = UDProjectSettings::GetProjectSettings();
+
+	PreviewCharacterMesh = NewObject<USkeletalMeshComponent>(this);
+	PreviewCharacterMesh->SetAnimInstanceClass(ProjectSettings->GetMasterAnimClass());
+	PreviewCharacterMesh->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+	PreviewCharacterMesh->AttachToComponent(Scene, FAttachmentTransformRules::KeepRelativeTransform);
+	
+	UpdateCharacterMesh(Cast<UCharacterMesh>(PlayerInfo.CharacterMesh.TryLoad()));
+
+	PreviewCharacterMesh->RegisterComponent();
+
+	for (const FPlayerWeapon& Weapon: PlayerInfo.Weapons)
 	{
-		if (AShootWeapon* ActiveWeapon = OwningCharacter->GetActiveWeapon())
+		if (Weapon.bEquipped && EquippedWeapons.IsValidIndex(Weapon.Index))
 		{
-			ICharacterPreviewAnimInstance::Execute_UpdateWeaponAnimID(AnimInstance, ActiveWeapon->AnimID);
+			UClass* Class = ProjectSettings->GetItemClassFromGuid(Weapon.ItemGuid);
+
+			AShootWeapon* ShootWeapon = GetWorld()->SpawnActor<AShootWeapon>(Class);
+			ShootWeapon->AttachToCharacter(Weapon.Index == UseWeaponSlot, PreviewCharacterMesh);
+			EquippedWeapons[Weapon.Index] = ShootWeapon;
 		}
 	}
+
+	UAnimInstance* AnimInstance = PreviewCharacterMesh->GetAnimInstance();
+	if (AnimInstance->GetClass()->ImplementsInterface(UCharacterPreviewAnimInstance::StaticClass()))
+	{
+		if (EquippedWeapons.IsValidIndex(UseWeaponSlot))
+		{
+			ICharacterPreviewAnimInstance::Execute_UpdateWeaponAnimID(AnimInstance, EquippedWeapons[UseWeaponSlot]->AnimID);
+		}
+	}
+	
+	PreviewCharacterMesh->PrestreamTextures(1, true);
 }
 
 void ADCharacterPreview::UpdatePreviewWeapon(TSubclassOf<AShootWeapon> WeaponClass, int32 NewIndex)
 {
-	bool bActiveWeapon = NewIndex == OwningCharacter->GetActiveWeaponIndex();
-	
-	USkeletalMeshComponent* CharacterMeshComponent = GetCharacterMeshComponent();
-	FName& SocketName = bActiveWeapon ? OwningCharacter->WeaponSocketName : OwningCharacter->WeaponHolsterSocketName;
-	DestroyComponentBySocketName(SocketName);
+	if (EquippedWeapons.IsValidIndex(NewIndex))
+	{
+		EquippedWeapons[NewIndex]->Destroy();
+	}
+
+	bool bActiveWeapon = NewIndex == UseWeaponSlot;
 	
 	AShootWeapon* ShootWeapon = GetWorld()->SpawnActor<AShootWeapon>(WeaponClass);
-	ShootWeapon->AttachToComponent(CharacterMeshComponent, FAttachmentTransformRules::KeepRelativeTransform, SocketName);
-	ShootWeapon->SetActorRelativeTransform(bActiveWeapon ? ShootWeapon->WeaponSocketOffset : ShootWeapon->WeaponHolsterSocketOffset);
+	ShootWeapon->AttachToCharacter(bActiveWeapon, PreviewCharacterMesh);
+
+	EquippedWeapons[NewIndex] = ShootWeapon;
 
 	if (bActiveWeapon)
 	{
-		UAnimInstance* AnimInstance = CharacterMeshComponent->GetAnimInstance();
+		UAnimInstance* AnimInstance = PreviewCharacterMesh->GetAnimInstance();
 		if (AnimInstance->GetClass()->ImplementsInterface(UCharacterPreviewAnimInstance::StaticClass()))
 		{
 			ICharacterPreviewAnimInstance::Execute_UpdateWeaponAnimID(AnimInstance, ShootWeapon->AnimID);
 		}
 	}
+
+	ShootWeapon->PrestreamTextures(1, true);
 }
 
 USkeletalMeshComponent* ADCharacterPreview::GetCharacterMeshComponent() const
 {
-	return Cast<USkeletalMeshComponent>(PreviewActorRoot->GetChildComponent(0));
+	return PreviewCharacterMesh;
 }
 
 void ADCharacterPreview::DestroyComponentBySocketName(const FName& SocketName)
 {
-	if (USceneComponent* Component = UDGameplayStatics::GetAttachComponentFromSocketName(GetCharacterMeshComponent(), SocketName))
+	USceneComponent* Component = UDGameplayStatics::GetAttachComponentFromSocketName(PreviewCharacterMesh, SocketName);
+	if (Component != nullptr)
 	{
-		Component->DestroyComponent(true);
+		Component->DestroyComponent();
 	}
 }
 
 void ADCharacterPreview::UpdateCharacterMesh(UCharacterMesh* CharacterMesh)
 {
-	USkeletalMeshComponent* MeshComponent = GetCharacterMeshComponent();
-	MeshComponent->SetSkeletalMesh(CharacterMesh->MasterMesh);
+	PreviewCharacterMesh->SetSkeletalMesh(CharacterMesh->MasterMesh);
 
-	static UClass* SlaveMeshAnimBPClass = LoadClass<UAnimInstance>(this, TEXT("/Game/Animation/AnimBP_CharacterCopy.AnimBP_CharacterCopy_C"));
-
-	const TArray<USceneComponent*> AttachComponents = MeshComponent->GetAttachChildren();
+	const TArray<USceneComponent*> AttachComponents = PreviewCharacterMesh->GetAttachChildren();
 	for (USceneComponent* Child : AttachComponents)
 	{
-		if (Child && Child->ComponentHasTag(SKIN_COMP_NAME))
+		if (Child->GetOwner() == this)
 		{
 			Child->DestroyComponent();
 		}
@@ -79,23 +109,24 @@ void ADCharacterPreview::UpdateCharacterMesh(UCharacterMesh* CharacterMesh)
 		USkeletalMeshComponent* SKComponent = NewObject<USkeletalMeshComponent>(this);
 		SKComponent->RegisterComponent();
 		SKComponent->SetSkeletalMesh(SKMesh);
-		SKComponent->SetAnimClass(SlaveMeshAnimBPClass);
+		SKComponent->SetAnimClass(UDProjectSettings::GetProjectSettings()->GetSlaveAnimClass());
 		SKComponent->SetAnimationMode(EAnimationMode::AnimationBlueprint);
-		SKComponent->AttachToComponent(MeshComponent, FAttachmentTransformRules::KeepRelativeTransform);
-		SKComponent->ComponentTags.Add(SKIN_COMP_NAME);
+		SKComponent->AttachToComponent(PreviewCharacterMesh, FAttachmentTransformRules::KeepRelativeTransform);
 	}
+
+	PreviewCharacterMesh->PrestreamTextures(1, true);
 }
 
 int32 ADCharacterPreview::GetActiveWeaponAnimID() const
 {
-	if (AShootWeapon* ActiveWeapon = OwningCharacter->GetActiveWeapon())
+	if (EquippedWeapons.IsValidIndex(UseWeaponSlot))
 	{
-		return ActiveWeapon->AnimID;
+		return EquippedWeapons[UseWeaponSlot]->AnimID;
 	}
 	return 0;
 }
 
 int32 ADCharacterPreview::GetActiveWeaponIndex() const
 {
-	return OwningCharacter->GetActiveWeaponIndex();
+	return UseWeaponSlot;
 }

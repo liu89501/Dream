@@ -11,7 +11,7 @@ UPDSAsync_GetPlayerInfo* UPDSAsync_GetPlayerInfo::PDI_GetPlayerInformation(UObje
 	return PDSGP;
 }
 
-void UPDSAsync_GetPlayerInfo::OnLoadCompleted(const FPlayerInfo& PlayerInfo, bool bSuccess) const
+void UPDSAsync_GetPlayerInfo::OnLoadCompleted(const FPlayerInfo& PlayerInfo, bool bSuccess)
 {
 	FPDIStatic::Get()->RemoveOnGetPlayerInfo(Handle);
 	if (bSuccess)

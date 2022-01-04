@@ -23,13 +23,13 @@ public:
 	virtual void Activate() override;
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category="PDI")
-    static UPDSAsync_LearnTalents* PDI_LearnTalents(UObject* WorldContextObject, const TArray<int32>& TalentIdArray);
+    static UPDSAsync_LearnTalents* PDI_LearnTalents(UObject* WorldContextObject, int64 TalentIds);
 
 	UFUNCTION()
-	void OnCompleted(bool bSuccess) const;
+	void OnCompleted(bool bSuccess);
 
 private:
 
-	TArray<int32> T_TalentIdArray;
+	int64 T_TalentIds;
 	FDelegateHandle Handle;
 };

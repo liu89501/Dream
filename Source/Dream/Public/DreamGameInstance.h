@@ -10,8 +10,7 @@
 #include "Engine/GameInstance.h"
 #include "DreamGameInstance.generated.h"
 
-
-class UTaskDataAsset;
+class SSubtitle;
 
 /**
  *
@@ -24,45 +23,21 @@ class DREAM_API UDreamGameInstance : public UGameInstance
 public:
 
 	UDreamGameInstance();
-
-	/**
-	 * 物品品级配置项
-	 */
-	UPROPERTY(EditAnywhere, Category = "Settings")
-	TMap<EPropsQuality, FQualityInfo> QualitySettings;
 	
-	/**
-	 * 加载游戏时显示的界面
-	 */
-	UPROPERTY(EditAnywhere, Category = "Settings")
-	TSubclassOf<class UUserWidget> LoadingScreenWidgetClass;
-
-	/**
-	 * 	关卡数据
-	 */
-	UPROPERTY(EditAnywhere, Category = "Settings")
-	ULevelListAsset* Levels;
-
-	UPROPERTY(EditAnywhere, Category = "Settings")
-	TMap<TEnumAsByte<EPhysicalSurface>, FSurfaceImpactEffect> SurfaceImpactEffects;
+public:
 	
-	const FSurfaceImpactEffect& GetSurfaceImpactEffect(EPhysicalSurface SurfaceType);
+	SSubtitle* GetSubtitleWidget() const;
 
 protected:
 
 	virtual void Init() override;
 
+	virtual void OnStart() override;
+
 	virtual void Shutdown() override;
-
-	UFUNCTION()
-	virtual void OnPreLoadMap(const FString& MapName);
-
-	UFUNCTION()
-    virtual void OnPostLoadMap(UWorld* LoadedWorld);
 
 private:
 
-	UPROPERTY()
-	class UUserWidget* LoadingScreenWidget;
+	TSharedPtr<SSubtitle> Subtitle;
 
 };

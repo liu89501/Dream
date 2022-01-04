@@ -3,26 +3,50 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DreamType.h"
+
+#include "DProjectSettings.h"
 #include "OnlineSessionSettings.h"
 #include "Interfaces/OnlineSessionInterface.h"
 #include "Net/OnlineBlueprintCallProxyBase.h"
 #include "MatchmakingCallProxy.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FSessionJoinNumberChange, int32, JoinNumber);
-
 class APlayerController;
 
-namespace EMatchmakingState
+USTRUCT(BlueprintType)
+struct FMatchmakingHandle
 {
-	enum Type
+	GENERATED_USTRUCT_BODY()
+
+public:
+
+	FMatchmakingHandle() = default;
+
+	FMatchmakingHandle(UWorld* InWorld) : World(InWorld)
 	{
-		WAITING_TEAM,	/* 等待队伍 */
-		CREATING_SERVER, /* 开始准备让后台服务器运行一个专用服务器 */
-		WAITING_SERVER, /* 等待连接到游戏服务器 */
-		ATTEMPT_CONNECT_SERVER
-	};
-}
+	}
+
+	/* 匹配期间可能会用到的所有任务句柄 */
+	FTimerHandle Handle_Ticker;
+	FTimerHandle Handle_Search;
+	
+	FDelegateHandle Handle_UpdateSessionComplete;
+	FDelegateHandle Handle_FindSessionsComplete;
+	FDelegateHandle Handle_JoinSessionComplete;
+	FDelegateHandle Handle_CustomUpdateComplete;
+	FDelegateHandle Handle_CreateSessionComplete;
+	
+	FDelegateHandle Handle_SearchServer;
+
+public:
+
+	void Clear();
+
+private:
+
+	UPROPERTY()
+	UWorld* World;
+
+};
 
 /**
  * 
@@ -53,41 +77,37 @@ public:
 	virtual void Activate() override;
 	// End of UOnlineBlueprintCallProxyBase interface
 
-	void ClearAllHandle();
-
 private:
 
-	void Tick();
+	void WaitingTick();
 
 	void FindLobby();
 
 	void CreateLobby();
 
-	// Internal callback when the join completes, calls out to the public success/failure callbacks
 	void OnSearchCompleted(bool bSuccessful);
 
 	void OnCreateSessionCompleted(FName SessionName, bool bSuccessful);
 
 	void OnJoinSessionCompleted(FName SessionName, EOnJoinSessionCompleteResult::Type CompleteResult);
 
-	void OnCreateServerComplete(const FString& ServerID, const FString& ErrorMessage);
+	void OnPDISearchServer(const struct FSearchServerResult& Result, bool bSuccessfully);
 	
-	void OnServerReadyComplete(const struct FFindServerResult& Result, const FString& ErrorMessage);
+	void OnServerReadyComplete(FName SessionName, const FOnlineSessionSettings& Settings);
 
 	void OnUpdateSessionComplete(FName SessionName, bool bWasSuccessful);
 
-	FLevelInformation T_LevelInformation;
-	int32 MaxPlayers;
+	void TravelToServer(const FString& ServerAddress) const;
 
-	FString CreatedServerID;
-
-	EMatchmakingState::Type State;
-	bool bCompleted;
+private:
 	
-	TWeakObjectPtr<UWorld> World;
+	FMatchmakingHandle Handle;
+
+	FLevelInformation T_LevelInformation;
 
 	// 玩家控制器
-	TWeakObjectPtr<APlayerController> PlayerControllerWeakPtr;
+	UPROPERTY()
+	APlayerController* PlayerController;
 
 	/* 在线子系统会话接口 */
 	IOnlineSessionPtr SessionInt;
@@ -97,20 +117,12 @@ private:
 	/* 会话查询配置 */
 	TSharedPtr<FOnlineSessionSearch> SearchSettings;
 
-	/* 匹配期间可能会用到的所有任务句柄 */
-	FTimerHandle Handle_RetryMatching;
-	FTimerHandle Handle_SessionTIck;
-	FDelegateHandle Handle_UpdateSessionComplete;
-	FDelegateHandle Handle_FindSessionsComplete;
-	FDelegateHandle Handle_JoinSessionComplete;
-	FDelegateHandle Handle_StartSessionComplete;
-	FDelegateHandle Handle_CreateSessionComplete;
-
-	/* 查询会话失败时的重试次数 */
-	uint8 FindRetryCount;
+	/* 最大查询会话时间 */
+	uint16 NumberOfSearch;
 
 	/* 连接到会话后等待开始游戏的时间(会话的玩家人数未满时) */
-	uint8 WaitStartTime;
+	uint8 WaitingStartTime;
 
 };
+
 

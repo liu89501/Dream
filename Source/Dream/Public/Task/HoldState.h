@@ -31,7 +31,7 @@ class DREAM_API UHoldState : public UBlueprintAsyncActionBase
 	UPROPERTY(BlueprintAssignable)
 	FAsyncTaskCompoleteDelegate OnUpdate;
 
-	public:
+public:
 
 	UFUNCTION(BlueprintCallable, meta = (
 		WorldContext = "WCO",
@@ -40,9 +40,11 @@ class DREAM_API UHoldState : public UBlueprintAsyncActionBase
 		ScriptName = "Hold State Ex"), Category="DreamStatics|DreamTask")
     static class UHoldState* CreateHoldState(UObject* WCO, float InHoldTime, const FHoldStateHandle& Handle);
 
+	virtual void Activate() override;
+
 	void OnTaskTick();
 
-	private:
+private:
 
 	float HoldTime;
 	float UpdateDelta;

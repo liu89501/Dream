@@ -1,3 +1,4 @@
+/*
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #pragma once
@@ -99,24 +100,9 @@ struct TStructOpsTypeTraits<FTaskInformationSaveGame> : TStructOpsTypeTraitsBase
 };
 
 
-USTRUCT(BlueprintType)
-struct FPlayerModuleList
-{
-	GENERATED_BODY()
-
-	UPROPERTY(BlueprintReadOnly)
-	TArray<FPlayerModule> Modules;
-
-	friend FArchive& operator<<(FArchive& Ar, FPlayerModuleList& A)
-	{
-		Ar << A.Modules;
-		return Ar;
-	}
-};
-
 /**
  * 
- */
+ #1#
 UCLASS()
 class UPlayerGameData : public USaveGame
 {
@@ -239,4 +225,5 @@ public:
 	UPROPERTY(EditAnywhere)
 	TArray<FTalentInfo> Talents;
 };
+*/
 

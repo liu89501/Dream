@@ -3,11 +3,11 @@
 #include "PDI/PlayerDataInterface.h"
 #include "PDI/PlayerDataInterfaceStatic.h"
 
-UPDSAsync_LearnTalents* UPDSAsync_LearnTalents::PDI_LearnTalents(UObject* WorldContextObject, const TArray<int32>& TalentIdArray)
+UPDSAsync_LearnTalents* UPDSAsync_LearnTalents::PDI_LearnTalents(UObject* WorldContextObject, int64 TalentIds)
 {
 	if (UPDSAsync_LearnTalents* PDSLT = NewObject<UPDSAsync_LearnTalents>(WorldContextObject))
 	{
-		PDSLT->T_TalentIdArray = TalentIdArray;
+		PDSLT->T_TalentIds = TalentIds;
 		return PDSLT;
 	}
 	return nullptr;
@@ -16,10 +16,10 @@ UPDSAsync_LearnTalents* UPDSAsync_LearnTalents::PDI_LearnTalents(UObject* WorldC
 void UPDSAsync_LearnTalents::Activate()
 {
 	Handle = FPDIStatic::Get()->AddOnLearnTalents(FOnCompleted::FDelegate::CreateUObject(this, &UPDSAsync_LearnTalents::OnCompleted));
-	FPDIStatic::Get()->LearningTalents(T_TalentIdArray);
+	FPDIStatic::Get()->LearningTalents(T_TalentIds);
 }
 
-void UPDSAsync_LearnTalents::OnCompleted(bool bSuccess) const
+void UPDSAsync_LearnTalents::OnCompleted(bool bSuccess)
 {
 	FPDIStatic::Get()->RemoveOnLearnTalents(Handle);
 	if (bSuccess)

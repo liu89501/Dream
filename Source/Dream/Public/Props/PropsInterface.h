@@ -8,7 +8,7 @@
 #include "PropsInterface.generated.h"
 
 // This class does not need to be modified.
-UINTERFACE(Blueprintable)
+UINTERFACE(meta=(CannotImplementInterfaceInBlueprint))
 class UPropsInterface : public UInterface
 {
 	GENERATED_BODY()
@@ -26,4 +26,6 @@ public:
 	virtual const FPropsInfo& GetPropsInfo() const = 0;
 
 	virtual ERewardNotifyMode GetRewardNotifyMode() const = 0;
+
+	virtual FTransform GetPreviewRelativeTransform() const;
 };

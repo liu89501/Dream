@@ -4,6 +4,7 @@
 
 #include "DEnemyShooter.h"
 #include "DMoney.h"
+#include "AssetRegistry/IAssetRegistry.h"
 #include "Misc/AutomationTest.h"
 #include "DreamType.h"
 #include "JsonObjectConverter.h"
@@ -11,6 +12,8 @@
 #include "PlayerDataInterfaceType.h"
 #include "PlayerGameData.h"
 #include "ShootWeapon.h"
+#include "SocketSubsystem.h"
+#include "AssetRegistry/AssetRegistryModule.h"
 #include "Kismet/GameplayStatics.h"
 #include "Kismet/KismetMathLibrary.h"
 
@@ -118,101 +121,84 @@ bool FDreamTests::RunTest(const FString& Parameters)
 		DREAM_NLOG(Log, TEXT("Name: %s, Result: %f"), *Pair.Key, (float)Pair.Value / TestCount);
 	}
 
-	DREAM_NLOG(Log, TEXT("----------- <><><><><><><> -------------"));
-
-	TMap<FString, int32> Result2;
-	for (int32 i = 0; i < TestCount; i++)
-	{
-		if (UKismetMathLibrary::RandomBoolWithWeight(0.01))
-		{
-			Result2.FindOrAdd(TEXT("百分之1"))++;
-		}
-
-		if (UKismetMathLibrary::RandomBoolWithWeight(0.2))
-		{
-			Result2.FindOrAdd(TEXT("百分之20"))++;
-		}
-		
-		if (UKismetMathLibrary::RandomBoolWithWeight(0.1))
-		{
-			Result2.FindOrAdd(TEXT("百分之10"))++;
-		}
-	}
-
-	for (TPair<FString, int32> Pair : Result2)
-	{
-		DREAM_NLOG(Log, TEXT("Name: %s, Result: %f"), *Pair.Key, (float)Pair.Value / TestCount);
-	}
-
 	DREAM_NLOG(Log, TEXT("----------- 随机工具测试 结束 -------------"));
 
 	DREAM_NLOG(Log, TEXT("----------- 其他测试 开始 -------------"));
 
-	/*UTaskData* LoadGameFromSlot = Cast<UTaskData>(UGameplayStatics::LoadGameFromSlot(TEXT("TestSaveGame"), 0));
-
-	if (LoadGameFromSlot)
+	for (TObjectIterator<UClass> It; It; ++It)
 	{
-		UDQuestCondition_KillTarget* KillTarget = Cast<UDQuestCondition_KillTarget>(LoadGameFromSlot->TaskList[0].CompleteCondition.Get());
-		DREAM_NLOG(Log, TEXT("Load CurrentKilled: %d"), KillTarget->CurrentKilled);
-		DREAM_NLOG(Log, TEXT("Load KillNum: %d"), KillTarget->KillNum);
-		DREAM_NLOG(Log, TEXT("Load TargetType: %s"), *KillTarget->TargetType->GetPathName());
-
-		KillTarget->CurrentKilled++;
-
-		UGameplayStatics::SaveGameToSlot(LoadGameFromSlot, TEXT("TestSaveGame"), 0);
+		UClass* Class = *It;
+		AActor* ActorCDO = Cast<AActor>(Class->GetDefaultObject());
+		if (ActorCDO && ActorCDO->GetIsReplicated())
+		{
+			DREAM_NLOG(Log, TEXT("Class: %s"), *Class->GetFullName());
+		}
 	}
-	else
+
+	/*FAssetRegistryModule& AssetRegistryModule = FModuleManager::GetModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
+	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
+
+	UClass* BaseClass = UDModuleBase::StaticClass();
+
+	TSet<FString> NativeChildClasses;
+	
+	for (TObjectIterator<UClass> It; It; ++It)
 	{
-		UTaskData* TaskDataTest = NewObject<UTaskData>();
-		FTaskInformationSaveGame Information;
-		Information.TaskId = 10;
-		Information.TaskMark = ETaskMark::Completed;
+		if (It->IsChildOf(BaseClass))
+		{
+			FString PathName = It->GetPathName();
 
-		Information.CompletedReward = UItemDataMoney::StaticClass()->GetDefaultObject<UItemDataMoney>();
+			NativeChildClasses.Add(PathName);
+		}
+	}
 
-		UDQuestCondition_KillTarget* KillTarget = NewObject<UDQuestCondition_KillTarget>();
-		KillTarget->KillNum = 10;
-		KillTarget->CurrentKilled = 1;
-		KillTarget->TargetType = ADEnemyShooter::StaticClass();
+	TArray<FAssetData> Assets;
+	
+	FARFilter Filter;
+	Filter.bRecursiveClasses = true;
+	Filter.bRecursivePaths = true;
+	Filter.PackagePaths.Add(TEXT("/Game/Main/Module"));
+	Filter.ClassNames.Add(UBlueprint::StaticClass()->GetFName());
 
-		Information.CompleteCondition = FQuestConditionHandle(KillTarget);
+	AssetRegistry.GetAssets(Filter, Assets);
 
-		TaskDataTest->TaskList.Add(Information);
+	for (const FAssetData& AssetData : Assets)
+	{
+		uint32 AssetClassFlags;
+		AssetData.GetTagValue<uint32>(FBlueprintTags::ClassFlags, AssetClassFlags);
 
-		UGameplayStatics::SaveGameToSlot(TaskDataTest, TEXT("TestSaveGame"), 0);
+		if (AssetClassFlags & EClassFlags::CLASS_Abstract)
+		{
+			continue;
+		}
 
-		DREAM_NLOG(Log, TEXT("Save TaskDataTest: %s"), *TaskDataTest->GetFullName());
+		FString NativeParentClassPath;
+		AssetData.GetTagValue(FBlueprintTags::NativeParentClassPath, NativeParentClassPath);
+
+		FString ImplementedInterfaces;
+		AssetData.GetTagValue(FBlueprintTags::ImplementedInterfaces, ImplementedInterfaces);
+		DREAM_NLOG(Log, TEXT("ImplementedInterfaces: %s"), *ImplementedInterfaces);
+
+		FString NativeClassPath = FPackageName::ExportTextPathToObjectPath(NativeParentClassPath);
+
+		if (NativeChildClasses.Contains(NativeClassPath))
+		{
+			FString ClassObjectPath;
+			AssetData.GetTagValue(FBlueprintTags::GeneratedClassPath, ClassObjectPath);
+
+			FString WeaponBlueprintClass = FPackageName::ExportTextPathToObjectPath(ClassObjectPath);
+
+			UClass* Class = LoadClass<UObject>(nullptr, *WeaponBlueprintClass);
+
+			if (IPropsInterface* PropsInterface = Cast<IPropsInterface>(Class->GetDefaultObject()))
+			{
+				DREAM_NLOG(Log, TEXT("Weapon Class: %s   Name: %s"), *WeaponBlueprintClass, *PropsInterface->GetPropsInfo().PropsName.ToString());
+			}
+		}
 	}*/
 
-	
-
-	FLoginParameter Parameter;
-	Parameter.PlatformName = TEXT("Steam");
-	Parameter.ThirdPartyUserTicket = TEXT("AA");
-
-	FMyTestSerialize Test;
-	Test.IntArr = 12.3f;
-	FSoftObjectPath Path(TEXT("/Game/Main/Weapon/PrecisionRifle/Jotunn"));
-
-	TSet<int32> S;
-	S.Add(1);
-	S.Add(2);
-	Test.SetTest = S;
-	Test.ArrSer.Add(Parameter);
-
-	TestSerialize(Parameter);
-	TestSerialize(Test);
-
-	/*TArray<uint8> AA(RawData, 645);
-	
-	FPacketArchiveReader Reader(AA);
-
-	FPlayerInfo Info;
-	Reader << Info;
-
-	DREAM_NLOG(Error, TEXT("MaxExperience %d"), Info.Properties.MaxExperience);*/
-	
 	DREAM_NLOG(Log, TEXT("----------- 其他测试 结束 -------------"));
+	
 
 	return true;
 }

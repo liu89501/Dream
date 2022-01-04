@@ -26,7 +26,7 @@ class UTalentGrid : public UGridPanel
 	void RefreshTalents();
 
 	UFUNCTION(BlueprintCallable, Category=TalentGrid)
-	void GetLearnedTalents(TArray<int32>& TalentIdArray, TArray<TSubclassOf<class UDreamGameplayAbility>>& TalentClasses) const;
+	void GetLearnedTalents(int64& LearnedTalents, TArray<TSubclassOf<class UDreamGameplayAbility>>& TalentClasses) const;
 
 	UFUNCTION(BlueprintCallable, Category=TalentGrid)
 	void ResetAllTalents();
@@ -34,8 +34,6 @@ class UTalentGrid : public UGridPanel
 public:
 
 	virtual void OnWidgetRebuilt() override;
-
-	
 
 	FTalentItemLearnedCompleted& GetLearnedCompleted()
 	{

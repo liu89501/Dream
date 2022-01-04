@@ -1,10 +1,20 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/DataTable.h"
 #include "DPropsType.generated.h"
 
-class UDreamGameplayAbility;
+UENUM(BlueprintType)
+enum class EModuleCategory : uint8
+{
+	C1,
+    C2,
+    C3,
+    C4,
+    Max
+};
 
+// ItemGuid  int32 (0xFFFF) = [FF -> ItemType] [FF -> 物品ID]
 UENUM(BlueprintType)
 namespace EItemType
 {
@@ -13,11 +23,18 @@ namespace EItemType
 		INVALID,
         Weapon UMETA(DisplayName="武器"),
         Module UMETA(DisplayName="模块"),
-        Sundries UMETA(DisplayName="杂物"),
-		Other UMETA(DisplayName="其他")
+        Material UMETA(DisplayName="材料"),
+        Consumable UMETA(DisplayName="消耗品"),
+		Experience UMETA(DisplayName="经验"),
+		Ability UMETA(DisplayName="能力"),
+		All,
     };
 }
 
+FORCEINLINE EItemType::Type GetItemType(int32 ItemGuid)
+{
+	return static_cast<EItemType::Type>(ItemGuid >> 16 & 0xFFFF);
+}
 
 UENUM(BlueprintType)
 enum class ERewardNotifyMode : uint8
@@ -55,34 +72,62 @@ struct FPropsInfo
 {
 	GENERATED_BODY()
 
+	FPropsInfo()
+		: PropsQuality(EPropsQuality::Normal),
+		PropsIcon(nullptr)
+	{};
+
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Props)
 	EPropsQuality PropsQuality;
 	
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Props)
-	UMaterialInstance* PropsIcon;
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Meta = ( AllowedClasses="Texture,MaterialInterface" ), Category = Props)
+	UObject* PropsIcon;
 	
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Props)
 	FText PropsName;
-
-	bool IsValid() const
-	{
-		return PropsIcon != nullptr && !PropsName.IsEmpty();
-	}
 };
 
-USTRUCT(BlueprintType)
-struct FPerkPool
+USTRUCT()
+struct FItemDefinition : public FTableRowBase
 {
 	GENERATED_BODY()
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	TArray<TSubclassOf<UDreamGameplayAbility>> Perks;
+	UPROPERTY(BlueprintReadWrite)
+	FString ItemClass;
+};
 
-	FPerkPool& operator+=(const FPerkPool& Rhs)
-	{
-		Perks.Append(Rhs.Perks);
-		return *this;
-	}
+USTRUCT(BlueprintType)
+struct FItemGuidHandle
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere)
+	int32 ItemGuid;
+};
+
+
+USTRUCT(BlueprintType)
+struct FAttributeRandomItem_Float
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere)
+	float Value;
+
+	UPROPERTY(EditAnywhere)
+	float Probability;
+};
+
+USTRUCT(BlueprintType)
+struct FAttributeRandomItem_Ability
+{
+	GENERATED_BODY()
+
+	UPROPERTY(EditAnywhere, Meta = (FilterItemType="Ability"))
+	FItemGuidHandle Guid;
+
+	UPROPERTY(EditAnywhere)
+	float Probability;
 };
 
 USTRUCT(BlueprintType)
@@ -103,7 +148,7 @@ struct FEquipmentAttributes
 	}
 
 	FEquipmentAttributes& operator+=(const FEquipmentAttributes& RHS);
-	FEquipmentAttributes& operator+=(const FEquipmentAttributes&& RHS);
+	FEquipmentAttributes& operator+=(FEquipmentAttributes&& RHS);
 	
 	FEquipmentAttributes& operator+=(const struct FBaseAttributes& RHS);
 
@@ -118,11 +163,13 @@ struct FEquipmentAttributes
 
 	FEquipmentAttributes& operator=(FEquipmentAttributes&& Other) noexcept;
 
+	FEquipmentAttributes& CombineSkipPerks(const FEquipmentAttributes& Other);
+
 	/**
 	* 攻击力
 	*/
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
-	int32 AttackPower;
+	float AttackPower;
 
 	/**
 	* 暴击伤害
@@ -170,65 +217,9 @@ struct FEquipmentAttributes
 	* 装备Perk属性
 	*/
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
-	TArray<TSubclassOf<UDreamGameplayAbility>> Perks;
+	TArray<int32> Perks;
 
 	friend FArchive& operator<<(FArchive& Ar, FEquipmentAttributes& Attr);
-};
-
-USTRUCT(BlueprintType)
-struct FEquipmentAttributesAssign
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
-	TArray<int32> AttackPower;
-
-	/**
-	* 生命值
-	*/
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
-	TArray<float> MaxHealth;
-	
-	/**
-	* 暴击伤害
-	*/
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
-	TArray<float> CriticalDamage;
-
-	/**
-	* 暴击率
-	*/
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
-	TArray<float> CriticalRate;
-
-	/**
-	* 吸血
-	*/
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
-	TArray<float> HealthSteal;
-
-	/**
-	* 防御
-	*/
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
-	TArray<float> Defense;
-
-	/**
-	* 伤害减免 (暂时未使用)
-	*/
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
-	TArray<float> DamageReduction;
-
-	/**
-	* 穿透
-	*/
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
-	TArray<float> Penetration;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
-	TArray<FPerkPool> Perks;
-
-	static FEquipmentAttributes AssignAttributes(const FEquipmentAttributesAssign& AttrAssign);
 };
 
 namespace FEmptyStruct
@@ -236,4 +227,5 @@ namespace FEmptyStruct
 	extern const FPropsInfo EmptyPropsInfo;
 	extern const FEquipmentAttributes EmptyAttributes;
 	extern const FSoftClassPath EmptySoftClassPath;
+	extern const FItemDefinition EmptyItemDefinition;
 }

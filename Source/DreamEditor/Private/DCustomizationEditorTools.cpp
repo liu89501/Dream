@@ -39,62 +39,7 @@ void FTargetDelegateCustomization::CustomizeChildren(TSharedRef<IPropertyHandle>
 {
 	ChildBuilder.AddProperty(TargetActorHandle.ToSharedRef());
 
-	UObject* TargetActor;
-	TargetActorHandle->GetValue(TargetActor);
-
-	FName TargetDelegateName;
-	TargetDelegateHandle->GetValue(TargetDelegateName);
-
-	bool bResetTargetDelegate = false;
-
-	if (TargetActor)
-	{
-		bool bValidFunction = TargetDelegateName.IsNone();
-			
-		OptionSources.Reset();
-		for (TFieldIterator<FMulticastDelegateProperty> It(TargetActor->GetClass()); It; ++It)
-		{
-			OptionSources.Add(MakeShareable(new FName(It->GetFName())));
-
-			if (!bValidFunction && It->GetFName() == TargetDelegateName)
-			{
-				bValidFunction = true;
-			}
-		}
-
-		bResetTargetDelegate = !bValidFunction;
-	}
-	else
-	{
-		bResetTargetDelegate = !TargetDelegateName.IsNone();
-	}
-
-	if (bResetTargetDelegate)
-	{
-		void* Data;
-		TargetDelegateHandle->GetValueData(Data);
-		*((FName*) Data) = NAME_None;
-	}
-
-	bool bResetTriggerFunction = false;
-	FName BindingFuncName;
-	TriggerFunctionHandle->GetValue(BindingFuncName);
-	
-	if (TargetDelegateName.IsNone() || bResetTargetDelegate)
-	{
-		bResetTriggerFunction = !BindingFuncName.IsNone();
-	}
-	else
-	{
-		bResetTriggerFunction = !IsValidBindFunction(Blueprint->SkeletonGeneratedClass, BindingFuncName);
-	}
-
-	if (bResetTriggerFunction)
-	{
-		void* Data;
-		TriggerFunctionHandle->GetValueData(Data);
-		*((FName*) Data) = NAME_None;
-	}
+	RefreshData();
 
 	ChildBuilder.AddCustomRow(LOCTEXT("DelegateName", "Delegate"))
 	.DiffersFromDefault(true)
@@ -180,6 +125,8 @@ void FTargetDelegateCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> S
 	TargetDelegateHandle = SPropertyHandle->GetChildHandle(GET_MEMBER_NAME_CHECKED(FTargetDelegate, DelegateName));
 	TriggerFunctionHandle = SPropertyHandle->GetChildHandle(GET_MEMBER_NAME_CHECKED(FTargetDelegate, TriggerFunctionName));
 
+	TargetActorHandle->SetOnPropertyValueChanged(FSimpleDelegate::CreateRaw(this, &FTargetDelegateCustomization::OnTargetActorChanged));
+
 	TArray<UObject*> OuterObjs;
 	SPropertyHandle->GetOuterObjects(OuterObjs);
 	if (OuterObjs.IsValidIndex(0))
@@ -193,6 +140,56 @@ void FTargetDelegateCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> S
 			}
 		}
 		Blueprint = TargetBP;
+	}
+}
+
+void FTargetDelegateCustomization::RefreshData()
+{
+	UObject* TargetActor;
+	FPropertyAccess::Result Result = TargetActorHandle->GetValue(TargetActor);
+
+	if (Result != FPropertyAccess::Success || TargetActor == nullptr)
+	{
+		return;
+	}
+
+	/* 初始化下拉列表 */
+	OptionSources.Reset();
+	for (TFieldIterator<FMulticastDelegateProperty> It(TargetActor->GetClass()); It; ++It)
+	{
+		OptionSources.Add(MakeShareable(new FName(It->GetFName())));
+	}
+	
+	FName TargetDelegateName;
+	FPropertyAccess::Result DelegateValueResult = TargetDelegateHandle->GetValue(TargetDelegateName);
+	if (DelegateValueResult == FPropertyAccess::Success && !TargetDelegateName.IsNone())
+	{
+		bool bResetTargetDelegate = false;
+
+		if (Result == FPropertyAccess::Success && TargetActor != nullptr)
+		{
+			TSharedPtr<FName>* FindRes = OptionSources.FindByPredicate([TargetDelegateName](TSharedPtr<FName> Option)
+			{
+				return *Option == TargetDelegateName;
+			});
+
+			if (!FindRes)
+			{
+				FMessageDialog::Open(EAppMsgType::Ok, FText::FromString(
+                        FString::Printf(TEXT("Delegate 绑定数据异常 %s"), *Blueprint->GetFullName())));
+			}
+		}
+	}
+
+	FName BindingFuncName;
+	FPropertyAccess::Result FuncResult = TriggerFunctionHandle->GetValue(BindingFuncName);
+	if (FuncResult == FPropertyAccess::Success && !BindingFuncName.IsNone())
+	{
+		if (!IsValidBindFunction(Blueprint->SkeletonGeneratedClass, BindingFuncName))
+		{
+			FMessageDialog::Open(EAppMsgType::Ok, FText::FromString(
+                    FString::Printf(TEXT("Function 绑定数据异常 %s"), *Blueprint->GetFullName())));
+		}
 	}
 }
 
@@ -428,6 +425,11 @@ bool FTargetDelegateCustomization::IsTriggerFunctionModify()
 	FName TriggerFunction;
 	TriggerFunctionHandle->GetValue(TriggerFunction);
 	return !TriggerFunction.IsNone();
+}
+
+void FTargetDelegateCustomization::OnTargetActorChanged()
+{
+	RefreshData();
 }
 
 void FWeaponMeshPreviewCustomizationMenu::LoadMenuContext()

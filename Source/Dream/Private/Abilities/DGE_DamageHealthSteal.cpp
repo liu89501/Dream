@@ -9,7 +9,7 @@
 UDGE_DamageHealthSteal::UDGE_DamageHealthSteal()
 {
     FSetByCallerFloat ModifierMagnitudeHealth;
-    ModifierMagnitudeHealth.DataTag = CustomizeTags().HealthStealSetByCallerTag;
+    ModifierMagnitudeHealth.DataTag = CustomizeTags().SetByCaller_HealthSteal;
     
     FGameplayModifierInfo ModifierHealth;
     ModifierHealth.Attribute = DreamAttrStatics().HealthStealProperty;

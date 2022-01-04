@@ -3,20 +3,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
-
 #include "DPropsType.h"
-#include "DreamType.h"
 #include "PropsInterface.h"
 #include "DModuleBase.generated.h"
-
-UENUM(BlueprintType)
-enum class EModuleCategory : uint8
-{
-	C1,
-    C2,
-    C3,
-    C4
-};
 
 /**
  * 
@@ -33,9 +22,6 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Module")
 	FEquipmentAttributes ModuleAttributes;
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Module")
-	FEquipmentAttributesAssign AttributesAssign;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Module")
 	EModuleCategory Category;

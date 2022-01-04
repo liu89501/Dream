@@ -1,35 +1,46 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
 #pragma once
+
 #include "CoreMinimal.h"
+#include "Style/DialogSlateWidgetStyle.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/DeclarativeSyntaxSupport.h"
 
-
 /**
-	错误提示界面
-*/
+ * 
+ */
 class SDialog : public SCompoundWidget
 {
 public:
 	SLATE_BEGIN_ARGS(SDialog)
 	{}
 
-		SLATE_ARGUMENT(FText, Content)
-
-		SLATE_ARGUMENT(UFont*, FontBase)
-		
 	SLATE_END_ARGS()
-
 
 	void Construct(const FArguments& InArgs);
 
-protected:
+	void UpdateDialog(EDialogType DialogType, const FText& InContent) const;
 
-	FReply OnClick();
+	void PlayFadeInAnim(float ViewportWidth);
+
+	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
+
+public:
+
+	static void InitInstance();
+	static void ResetInstance();
+
+	static TSharedPtr<SDialog> SINGLETON;
 
 private:
 
-	FTextBlockStyle ButtonTextBlockStyle;
-	FButtonStyle ButtonStyle;
+	TSharedPtr<STextBlock> Title;
+	TSharedPtr<STextBlock> Content;
 
-	FSlateBrush InnerBackground;
+	TSharedPtr<SImage> Icon;
+	TSharedPtr<FSlateBrush> LineBrush;
+
+	float FadeInValue = 0;
+	bool bPlayAnimation = false;
 };

@@ -27,7 +27,7 @@ public:
 
 	virtual void Activate() override;
 	
-	void OnCompleted(const TArray<FTalentInfo>& Talents, bool bSuccess) const;
+	void OnCompleted(int64 Talents, bool bSuccess);
 
 private:
 

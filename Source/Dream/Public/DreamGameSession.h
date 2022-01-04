@@ -18,4 +18,14 @@ public:
 
 	virtual void RegisterServer() override;
 
+	void OnLoginCallback(bool bSuccessfully);
+
+	void OnCreateSession(FName InSessionName, bool bWasSuccessful);
+
+private:
+
+	FDelegateHandle Handle_Login;
+	FDelegateHandle Handle_CreateSession;
+
 };
+

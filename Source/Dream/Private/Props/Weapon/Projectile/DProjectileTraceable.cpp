@@ -35,14 +35,12 @@ void ADProjectileTraceable::Tick(float DeltaSeconds)
     if (bIsBlocking)
     {
         AActor* HitActor = Hit.GetActor();
-        if (!HitActor->ActorHasTag(DreamActorTagName::Death))
+        ETeamAttitude::Type Attitude = FGenericTeamId::GetAttitude(GetWeapon()->GetOwner(), HitActor);
+        
+        if (Attitude == ETeamAttitude::Hostile && !HitActor->ActorHasTag(DreamActorTagName::Death))
         {
-            ETeamAttitude::Type Attitude = FGenericTeamId::GetAttitude(GetWeapon()->GetOwner(), HitActor);
-            if (Attitude == ETeamAttitude::Hostile)
-            {
-                SetActorTickEnabled(false);
-                Projectile->HomingTargetComponent = HitActor->GetRootComponent();
-            }
+            SetActorTickEnabled(false);
+            Projectile->HomingTargetComponent = HitActor->GetRootComponent();
         }
     }
 }

@@ -70,7 +70,6 @@ public:
 				
 				if (!SocketWrapper->Receive(Packet->GetData(), ReceiveDataLength))
 				{
-					UE_LOG(LogDream, Error, TEXT("FTCPSocketReceiver: 读取数据失败"));
 					break;
 				}
 
@@ -84,7 +83,6 @@ public:
 				uint8 Length[4];
 				if (!SocketWrapper->Receive(Length, 4))
 				{
-					UE_LOG(LogDream, Error, TEXT("FTCPSocketReceiver: 读取数据长度失败"));
 					break;
 				}
 
@@ -96,6 +94,7 @@ public:
 
 		if (!bStopping)
 		{
+			UE_LOG(LogDream, Warning, TEXT("FTCPSocketReceiver: 连接已断开"));
 			OnShutdown.ExecuteIfBound();
 		}
 

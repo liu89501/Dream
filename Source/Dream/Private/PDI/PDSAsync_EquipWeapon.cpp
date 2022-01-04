@@ -17,7 +17,7 @@ void UPDSAsync_EquipWeapon::Activate()
 	FPDIStatic::Get()->EquipWeapon(FEquipWeaponParam(T_WeaponId, T_EquipIndex));
 }
 
-void UPDSAsync_EquipWeapon::OnLoadCompleted(bool bSuccess) const
+void UPDSAsync_EquipWeapon::OnLoadCompleted(bool bSuccess)
 {
 	FPDIStatic::Get()->RemoveOnEquipWeapon(Handle);
 	if (bSuccess)

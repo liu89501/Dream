@@ -16,7 +16,8 @@ ADAIGeneratorBase::ADAIGeneratorBase()
 	CurrentRevivedCount = 0.f;
 
 	Billboard = CreateDefaultSubobject<UBillboardComponent>(TEXT("Icon"));
-	RootComponent = Billboard;
+	Billboard->SetupAttachment(RootComponent);
+	
 }
 
 void ADAIGeneratorBase::ActivateAIGenerator()
@@ -34,8 +35,10 @@ void ADAIGeneratorBase::AIDeathCount()
 	{
 		return;
 	}
+
+	ActiveAICounter--;
 	
-	if (ActiveAICounter.Decrement() == 0)
+	if (ActiveAICounter == 0)
 	{
 		if (CurrentRevivedCount < ReviveFrequency || ReviveFrequency == -1)
 		{
@@ -45,7 +48,15 @@ void ADAIGeneratorBase::AIDeathCount()
 		}
 		else
 		{
-			OnAllAIDestroyed.Broadcast(this);
+			if (OnAIDestroyed.IsBound())
+			{
+				OnAIDestroyed.Broadcast();
+			}
+
+			if (OnAllAIDestroyed.IsBound())
+			{
+				OnAllAIDestroyed.Broadcast(this);
+			}
 		}
 	}
 }

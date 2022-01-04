@@ -21,26 +21,6 @@ struct FTargetDelegate
 	FName TriggerFunctionName;
 };
 
-/*template<>
-struct TStructOpsTypeTraits< FTargetDelegate > : TStructOpsTypeTraitsBase2< FTargetDelegate >
-{
-	enum
-	{
-		WithSerializer = true,
-    };
-};*/
-
-USTRUCT(BlueprintType)
-struct FEventBroadcastDescription
-{
-	GENERATED_BODY()
-
-	UPROPERTY(EditInstanceOnly)
-	FTargetDelegate TargetDelegate;
-
-	UPROPERTY(EditInstanceOnly)
-	FName SelfTriggerFunctionName;
-};
 
 UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class DREAM_API UBroadcastReceiverComponent : public UActorComponent

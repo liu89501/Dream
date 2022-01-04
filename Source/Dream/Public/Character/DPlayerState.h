@@ -18,8 +18,30 @@ public:
 
 	ADPlayerState();
 
-protected:
+public:
+
+	void RecordDamage(uint32 Damage);
+
+	void IncreaseKills();
+
+	FORCEINLINE uint32 GetTotalDamage() const
+	{
+		return TotalDamage;
+	}
+	
+	FORCEINLINE uint16 GetKills() const
+	{
+		return Kills;
+	}
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+private:
+
+	UPROPERTY(Replicated)
+	uint32 TotalDamage;
+	
+	UPROPERTY(Replicated)
+	uint16 Kills;
 
 };

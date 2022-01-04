@@ -133,11 +133,6 @@ private:
 
 	FDelegateHandle HostileDeathHandle;
 
-	FDelegateHandle Handle_Rewards;
-
 	UFUNCTION()
     void OnTargetPerceptionUpdated0(AActor* Actor, FAIStimulus Stimulus);
-
-	void OnRewardsAddCompleted(bool bSuccess, TMap<class ADPlayerController*, class UItemData*> Rewards) const;
-	
 };

@@ -3,44 +3,46 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DreamType.h"
-#include "SharedPointer.h"
-#include "IPv4Endpoint.h"
-#include "PlayerDataInterface.h"
+#include "PlayerDataInterfaceType.h"
+#include "ShootWeapon.h"
 #include "GameFramework/PlayerController.h"
 #include "DPlayerController.generated.h"
 
-USTRUCT(BlueprintType)
-struct FRewardMessage
+UENUM(BlueprintType)
+namespace ETalkType
 {
-	GENERATED_BODY()
+	enum Type
+	{
+		Current,
+        World,
+        Team,
+        Private,
+        NONE
+    };
+}
+
+USTRUCT(BlueprintType)
+struct FTalkMessage
+{
+	GENERATED_USTRUCT_BODY()
 
 public:
 
-	FRewardMessage()
-		: RewardPropsClass(nullptr),
-		  RewardNum(1)
+	FTalkMessage() = default;
+
+	FTalkMessage(FString InPlayerName, FString InContent, TEnumAsByte<ETalkType::Type> InTalkType)
+        : PlayerName(InPlayerName), Content(InContent), TalkType(InTalkType)
 	{
 	}
 
-	virtual ~FRewardMessage() = default;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString PlayerName;
 
-	UPROPERTY(BlueprintReadOnly)
-	UClass* RewardPropsClass;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	FString Content;
 
-	UPROPERTY(BlueprintReadOnly)
-	int32 RewardNum;
-
-	virtual bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess);
-};
-
-template<>
-struct TStructOpsTypeTraits< FRewardMessage > : TStructOpsTypeTraitsBase2< FRewardMessage >
-{
-	enum
-	{
-		WithNetSerializer = true
-    };
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	TEnumAsByte<ETalkType::Type> TalkType;
 };
 
 /**
@@ -51,8 +53,6 @@ class DREAM_API ADPlayerController : public APlayerController
 {
 	GENERATED_BODY()
 
-	DECLARE_DELEGATE_TwoParams(FConfirmRebornCharacter, ADPlayerController* /* Controller */, const FTransform& /* SpawnTransform */)
-
 public:
 
 	int32 LevelOneAmmunition;
@@ -62,17 +62,6 @@ public:
 public:
 
 	ADPlayerController();
-
-	/* 对目标玩家发出组队申请 */
-	UFUNCTION(BlueprintCallable, Category = DController)
-	void SendTeamUpApply(class APlayerState* TargetPlayerState);
-
-	/*
-		发送击杀消息到所有连接到服务器的玩家
-		@param Message KillMessage
-	*/
-	UFUNCTION(BlueprintCallable, Category = DController)
-	void SendKillMessage(const FKillMessage& Message);
 
 	/*
 		发送聊天消息到所有连接到服务器的玩家
@@ -85,47 +74,32 @@ public:
 	void BP_ReceiveRewardMessage(const FPropsInfo& PropsInfo, ERewardNotifyMode NotifyMode, int32 RewardNum);
 
 	/*
-		接收服务器的 击杀消息
-		@param Message 击杀消息结构体
-	*/
-	UFUNCTION(BlueprintImplementableEvent, Category = DController, meta = (ScriptName = "OnReceiveKillMessage", DisplayName = "OnReceiveKillMessage"))
-	void BP_OnReceiveKillMessage(const FKillMessage& Message);
-	/*
 		接收服务器的 聊天消息
 		@param Message 聊天消息
 	*/
 	UFUNCTION(BlueprintImplementableEvent, Category = DController, meta = (ScriptName = "OnReceiveTalkMessage", DisplayName = "OnReceiveTalkMessage"))
 	void BP_OnReceiveTalkMessage(const FTalkMessage& Message);
 
-	/* 接收组队申请消息 */
-	UFUNCTION(BlueprintImplementableEvent, Category = DController, meta = (ScriptName = "OnReceiveTeamApplyMessage", DisplayName = "OnReceiveTeamApplyMessage"))
-	void BP_OnReceiveTeamApplyMessage(const FPlayerAccountInfo& PlayerInfo);
-
-	UFUNCTION(BlueprintCallable, Category = DController)
-	void ReturnToMainMenuWithTextReason(const FText& ErrorMessage);
-
-	UFUNCTION(BlueprintCallable, Category = DController)
-	void ExitGame();
-
-	UFUNCTION(BlueprintCallable, Category = DController)
-	void BeginGame();
-
-	UFUNCTION(BlueprintCallable, Category = DController)
-	void Travel(const FString& Address);
-
-	UFUNCTION(BlueprintCallable, Category = DController)
-	void AgreeTeamUpApply(const FPlayerAccountInfo& PlayerInfo);
+	/* 任务状态更新 */
+	UFUNCTION(BlueprintImplementableEvent, Category = DController, meta = (ScriptName = "OnTrackingTaskUpdated", DisplayName = "OnTrackingTaskUpdated"))
+	void BP_OnTrackingTaskUpdated(const TArray<FTaskInProgressInfo>& UpdatedTasks);
 
 	UFUNCTION(BlueprintCallable, Category = DController)
 	void ExitTeam();
 
-	UFUNCTION(BlueprintCallable, Category = DController, BlueprintAuthorityOnly)
-    void ProcessRebornCharacter(const FTransform& SpawnTransform);
+	UFUNCTION(BlueprintCallable, Category = DController)
+    void PopupRewards(const FItemListHandle& ItemList);
 
 	UFUNCTION(BlueprintCallable, Category = DController)
-	void SendClientRewardMessage(UItemData* Reward);
+	void AddGuideActor(AActor* Actor);
 
-#if WITH_EDITORONLY_DATA
+	UFUNCTION(BlueprintCallable, Category = DController)
+	void RemoveGuideActor(AActor* Actor);
+
+	UFUNCTION(BlueprintCallable, Category = DController)
+	void BroadcastGameModeClientDelegate(FGameplayTag DelegateTag);
+
+#if WITH_EDITOR
 
 	/* TEST ---------------------------------- */
 	UFUNCTION(Exec)
@@ -140,12 +114,15 @@ public:
 	UFUNCTION(Exec)
     void TestSocket() const;
 	/* TEST ---------------------------------- */
+	
 #endif
+
+	UFUNCTION(Client, Reliable)
+	void ClientChangeConnectedServer(uint32 Address, uint32 Port);
 
 public:
 
-	UFUNCTION(Client, Reliable)
-	void ClientReceiveRewardMessage(const TArray<FRewardMessage>& RewardMessages);
+	virtual void ClientReturnToMainMenuWithTextReason_Implementation(const FText& ReturnReason) override;
 
 	bool AddWeaponAmmunition(EAmmoType AmmoType, int32 AmmunitionAmount);
 
@@ -157,12 +134,7 @@ public:
 
 	int32 GetDefaultAmmunition(EAmmoType AmmoType) const;
 
-	UFUNCTION(Client, Reliable)
-	void ClientHandleKilledRewardsGenerate(UClass* EnemyClass);
-
 protected:
-
-	virtual void HandleTeamApply();
 
 	virtual void PostInitializeComponents() override;
 
@@ -172,31 +144,34 @@ protected:
 
 	virtual void NotifyLoadedWorld(FName WorldPackageName, bool bFinalDest) override;
 
-	/*
-		使用在线子系统 给当前服务器所有用户组播信息
-		@param Type 这个消息的类型
-		@param Message 要发送的消息
-	*/
-	void SendMulticastMessage(TEnumAsByte<EMessageType::Type> Type, const FString& Message);
-	void SendMessageToPlayer(const FUniqueNetIdRepl& UserNetId, TEnumAsByte<EMessageType::Type> Type, const FString& Message);
+	UFUNCTION(NetMulticast, UnReliable)
+	void MulticastMessage(const FTalkMessage& Message);
+	UFUNCTION(Server, UnReliable)
+	void ServerSendMessage(const FTalkMessage& Message);
 
-	UFUNCTION(NetMulticast, Reliable)
-	void NetMulticastMessage(const FTalkMessage& Message);
-	UFUNCTION(Server, Reliable)
-	void ServerMulticastMessage(const FTalkMessage& Message);
-
-	/*
-		处理接受到的服务器数据
-	*/
-	virtual void HandleRawMessage(EMessageType::Type Type, const FString& Message);
+	virtual void ClientWasKicked_Implementation(const FText& KickReason) override;
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
+	UFUNCTION(Server, Reliable)
+	void ServerBroadcastGMClientDelegate(const FGameplayTag& DelegateTag);
+
 private:
 
-	void OnRewardsAddCompleted(bool bSuccess, UItemData* Rewards);
+	void OnUpdatedTasks(const TArray<FTaskInProgressInfo>& UpdatedTasks);
 
-	void RecvData(const TSharedPtr<class FArrayReader, ESPMode::ThreadSafe>& RawData, const FIPv4Endpoint& Endpoint);
+	void OnReceiveRewardMessage(const FItemListHandle& ItemList);
 
-	FDelegateHandle Handle_AddRewards;
+	TArray<struct FGuideElement> GetGuideElements() const;
+	
+private:
+
+	FDelegateHandle Handle_UpdateTask;
+	FDelegateHandle Handle_ReceiveRewards;
+
+	// 引导点
+	UPROPERTY()
+	TArray<AActor*> GuideActors;
 };
+
+

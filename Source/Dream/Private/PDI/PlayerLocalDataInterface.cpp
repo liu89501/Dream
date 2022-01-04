@@ -1,3 +1,4 @@
+/*
 // ReSharper disable CppExpressionWithoutSideEffects
 #include "PDI/PlayerLocalDataInterface.h"
 #include "PDI/PlayerGameData.h"
@@ -662,3 +663,4 @@ void FPlayerLocalDataInterface::AddReferencedObjects(FReferenceCollector& Collec
 	Collector.AddReferencedObject(TaskData);
 	Collector.AddReferencedObject(StoreData);
 }
+*/

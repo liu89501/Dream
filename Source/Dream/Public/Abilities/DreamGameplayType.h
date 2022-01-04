@@ -5,6 +5,17 @@
 #include "GameplayEffectTypes.h"
 #include "DreamGameplayType.generated.h"
 
+UENUM(BlueprintType)
+enum class EDDamageType : uint8
+{
+    Weapon_AssaultRifle,
+    Weapon_GrenadeLaunch,
+    Weapon_Shotgun,
+    Weapon_SniperRifle,
+    Weapon_PrecisionRifle,
+    Other
+};
+
 USTRUCT()
 struct DREAM_API FDreamGameplayEffectContext : public FGameplayEffectContext
 {
@@ -15,6 +26,7 @@ public:
     FDreamGameplayEffectContext()
         : DistanceDamageFalloff(100)
         , bDamageCritical(false)
+        , DamageType(EDDamageType::Other)
     {
     }
 
@@ -27,29 +39,24 @@ public:
     
     virtual float GetWeakPointIncreaseDamagePercentage() const;
 
-    /*virtual void AddHitPoint(const FVector& HitPoint)
-    {
-        HitPoints.Add(HitPoint);
-    }
-
-    virtual void AddHitPoints(const TArray<FVector>& Points)
-    {
-        HitPoints.Append(Points);
-    }
-
-    virtual const TArray<FVector>& GetHitPoints() const
-    {
-        return HitPoints;
-    }*/
-
     void SetDamageCritical(bool bCritical)
     {
         bDamageCritical = bCritical;
     }
 
-    FORCEINLINE bool GetDamageCritical() const
+    bool GetDamageCritical() const
     {
         return bDamageCritical;
+    }
+
+    void SetDamageType(EDDamageType InDamageType)
+    {
+        DamageType = InDamageType;
+    }
+
+    EDDamageType GetDamageType() const
+    {
+        return DamageType;
     }
 
     virtual bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess) override;
@@ -68,6 +75,9 @@ private:
 
     UPROPERTY()
     bool bDamageCritical;
+
+    UPROPERTY()
+    EDDamageType DamageType;
     
     /*UPROPERTY()
     TArray<FVector> HitPoints;*/

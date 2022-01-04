@@ -118,6 +118,7 @@ void UDreamAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCallb
 	if (Data.EvaluatedData.Attribute == GetDamageAttribute())
 	{
 		const float LocalDamageDone = GetDamage();
+		
 		SetDamage(0.f);
 
 		if (LocalDamageDone > 0)

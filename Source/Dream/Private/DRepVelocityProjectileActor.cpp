@@ -17,7 +17,6 @@ ADRepVelocityProjectileActor::ADRepVelocityProjectileActor()
 void ADRepVelocityProjectileActor::BeginPlay()
 {
 	Super::BeginPlay();
-	
 }
 
 void ADRepVelocityProjectileActor::PostNetReceiveVelocity(const FVector& NewVelocity)

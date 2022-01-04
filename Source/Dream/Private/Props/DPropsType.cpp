@@ -1,33 +1,11 @@
 // ReSharper disable CppSomeObjectMembersMightNotBeInitialized
 #include "DPropsType.h"
 #include "DBaseAttributesAsset.h"
-#include "DreamGameplayAbility.h"
-#include "Kismet/KismetMathLibrary.h"
 
-#define RANDOM_ITEM(Item) if (AttrAssign.Item.Num() > 0) { Attributes.Item = AttrAssign.Item[UKismetMathLibrary::RandomInteger(AttrAssign.Item.Num())]; }
-
-const FPropsInfo FEmptyStruct::EmptyPropsInfo = FPropsInfo();
-const FEquipmentAttributes FEmptyStruct::EmptyAttributes = FEquipmentAttributes();
-const FSoftClassPath FEmptyStruct::EmptySoftClassPath = FSoftClassPath();
-
-FEquipmentAttributes FEquipmentAttributesAssign::AssignAttributes(const FEquipmentAttributesAssign& AttrAssign)
-{
-	FEquipmentAttributes Attributes;
-	RANDOM_ITEM(AttackPower);
-	RANDOM_ITEM(Defense);
-	RANDOM_ITEM(Penetration);
-	RANDOM_ITEM(CriticalDamage);
-	RANDOM_ITEM(CriticalRate);
-	RANDOM_ITEM(DamageReduction);
-	RANDOM_ITEM(HealthSteal);
-	RANDOM_ITEM(MaxHealth);
-
-	if (AttrAssign.Perks.Num() > 0)
-	{
-		Attributes.Perks = AttrAssign.Perks[UKismetMathLibrary::RandomInteger(AttrAssign.Perks.Num())].Perks;
-	}
-	return Attributes;
-}
+const FPropsInfo FEmptyStruct::EmptyPropsInfo;
+const FEquipmentAttributes FEmptyStruct::EmptyAttributes;
+const FSoftClassPath FEmptyStruct::EmptySoftClassPath;
+const FItemDefinition FEmptyStruct::EmptyItemDefinition;
 
 FEquipmentAttributes& FEquipmentAttributes::operator+=(const FEquipmentAttributes& RHS)
 {
@@ -43,7 +21,7 @@ FEquipmentAttributes& FEquipmentAttributes::operator+=(const FEquipmentAttribute
 	return *this;
 }
 
-FEquipmentAttributes& FEquipmentAttributes::operator+=(const FEquipmentAttributes&& RHS)
+FEquipmentAttributes& FEquipmentAttributes::operator+=(FEquipmentAttributes&& RHS)
 {
 	AttackPower += RHS.AttackPower;
 	Defense += RHS.Defense;
@@ -53,6 +31,7 @@ FEquipmentAttributes& FEquipmentAttributes::operator+=(const FEquipmentAttribute
 	DamageReduction += RHS.DamageReduction;
 	HealthSteal += RHS.HealthSteal;
 	MaxHealth += RHS.MaxHealth;
+	Perks += MoveTemp(RHS.Perks);
 	return *this;
 }
 
@@ -157,6 +136,19 @@ FEquipmentAttributes& FEquipmentAttributes::operator=(FEquipmentAttributes&& Oth
 	return *this;
 }
 
+FEquipmentAttributes& FEquipmentAttributes::CombineSkipPerks(const FEquipmentAttributes& Other)
+{
+	AttackPower += Other.AttackPower;
+	Defense += Other.Defense;
+	Penetration += Other.Penetration;
+	CriticalDamage += Other.CriticalDamage;
+	CriticalRate += Other.CriticalRate;
+	DamageReduction += Other.DamageReduction;
+	HealthSteal += Other.HealthSteal;
+	MaxHealth += Other.MaxHealth;
+	return *this;
+}
+
 FArchive& operator<<(FArchive& Ar, FEquipmentAttributes& Attr)
 {
 	Ar << Attr.AttackPower;
@@ -167,33 +159,6 @@ FArchive& operator<<(FArchive& Ar, FEquipmentAttributes& Attr)
 	Ar << Attr.Defense;
 	Ar << Attr.DamageReduction;
 	Ar << Attr.Penetration;
-
-	if (Ar.IsPersistent())
-	{
-		Ar << Attr.Perks;
-	}
-	else
-	{
-		int32 Length = Attr.Perks.Num();
-		Ar << Length;
-		Attr.Perks.AddZeroed(Length);
-
-		for (int32 N = 0; N < Length; N++)
-		{
-			UClass* Class = *Attr.Perks[N];
-			FString PerkPath = Class == nullptr ? TEXT("") : Class->GetPathName();
-
-			if (Ar.IsLoading())
-			{
-				Ar << PerkPath;
-				Attr.Perks[N] = LoadClass<UDreamGameplayAbility>(nullptr, *PerkPath);
-			}
-			else
-			{
-				Ar << PerkPath;
-			}
-		}
-	}
-
+	Ar << Attr.Perks;
 	return Ar;
 }

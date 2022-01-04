@@ -4,6 +4,7 @@
 #include "PlayerDataInterfaceBase.h"
 #include "PlayerGameData.h"
 
+/*
 class FPlayerLocalDataInterface : public FPlayerDataInterfaceBase, public FGCObject
 {
 	
@@ -58,4 +59,5 @@ private:
 	FThreadSafeCounter LoadCounter;
 	FThreadSafeBool bInitCompleted;
 };
+*/
 

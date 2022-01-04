@@ -36,5 +36,5 @@ void ADAIGeneratorMultiple::ProcessAIGenerate()
 		}
 	}
 
-	ActiveAICounter.Set(Index);
+	ActiveAICounter = Index;;
 }

@@ -1,14 +1,15 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "AbilitySystemInterface.h"
 #include "GameFramework/Character.h"
 #include "GenericTeamAgentInterface.h"
-#include "MiniMapDataInterface.h"
+#include "IconInterface.h"
 #include "WeaknessInterface.h"
 #include "GameplayEffectTypes.h"
-
+#include "AbilitySystemInterface.h"
+#include "DreamType.h"
 #include "DCharacterBase.generated.h"
+
 
 USTRUCT()
 struct FDamageTargetInfo
@@ -36,7 +37,7 @@ DECLARE_MULTICAST_DELEGATE_OneParam(FCharacterDeathSignature, class ADCharacterB
 
 UCLASS(Abstract)
 class DREAM_API ADCharacterBase : public ACharacter, public IGenericTeamAgentInterface,
-                                public IAbilitySystemInterface, public IMiniMapDataInterface,
+                                public IAbilitySystemInterface, public IIconInterface,
                                 public IWeaknessInterface
 {
     GENERATED_BODY()
@@ -49,7 +50,7 @@ public:
     class UAbilitySystemComponent* AbilitySystem;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-    class UMiniMapDataComponent* MiniMapData;
+    class UIconComponent* IconComponent;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = CharacterBase)
     FGenericTeamId TeamID;
@@ -59,6 +60,9 @@ public:
 
     UPROPERTY(EditAnywhere, Category = CharacterBase)
     TMap<FName, float> WeakPoint;
+
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = CharacterBase)
+    EPawnType PawnType;
 
 public:
 
@@ -71,6 +75,7 @@ public:
     UFUNCTION(BlueprintCallable, Category = CharacterBase)
     float GetHealthPercent() const;
 
+    UFUNCTION(BlueprintCallable, Category = CharacterBase)
     bool IsDeath() const;
 
     virtual void HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle);
@@ -109,7 +114,7 @@ protected:
     /** Assigns Team Agent to given TeamID */
     virtual void SetGenericTeamId(const FGenericTeamId& NewTeamID) override;
 
-    virtual UMiniMapDataComponent* GetMiniMapDataComponent() const override;
+    virtual UIconComponent* GetIconComponent() const override;
 
     virtual float GetWeaknessIncreaseDamagePercentage(const FName& BoneName) override;
 
@@ -117,7 +122,7 @@ protected:
     virtual FGenericTeamId GetGenericTeamId() const override;
 
     /** 击中敌方目标时触发 */
-    virtual void HitEnemy(const FDamageTargetInfo& DamageInfo, ADCharacterBase* HitTarget) {};
+    virtual void HitEnemy(const FDamageTargetInfo& DamageInfo, ADCharacterBase* HitTarget) {}
 
     /** 当血量为0时触发 */
     virtual void OnDeath(const AActor* Causer);

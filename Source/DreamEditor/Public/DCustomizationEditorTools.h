@@ -31,6 +31,10 @@ private:
 	bool IsTargetDelegateModify();
 	bool IsTriggerFunctionModify();
 
+	void RefreshData();
+
+	void OnTargetActorChanged();
+
 	//TSharedPtr<FName> BindingFuncName;
 	UBlueprint* Blueprint;
 

@@ -3,6 +3,8 @@
 
 #include "Components/BroadcastReceiverComponent.h"
 
+#include "DreamType.h"
+
 
 // Sets default values for this component's properties
 UBroadcastReceiverComponent::UBroadcastReceiverComponent()
@@ -20,18 +22,14 @@ void UBroadcastReceiverComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	if (GetNetMode() > NM_DedicatedServer)
-	{
-		// 非 服务器或单机 不执行下面的逻辑
-		return;
-	}
-
 	for (const FTargetDelegate& Description : Descriptions)
 	{
 		if (Description.Target == nullptr)
 		{
 			continue;
 		}
+
+		bool bBindCompleted = false;
 		
 		for (TFieldIterator<FMulticastDelegateProperty> It(Description.Target->GetClass()); It; ++It)
 		{
@@ -40,8 +38,15 @@ void UBroadcastReceiverComponent::BeginPlay()
 				FScriptDelegate Delegate;
 				Delegate.BindUFunction(GetOwner(), Description.TriggerFunctionName);
 				It->AddDelegate(MoveTemp(Delegate), Description.Target);
+				bBindCompleted = true;
 				break;
 			}
+		}
+
+		if (!bBindCompleted)
+		{
+			UE_LOG(LogDream, Error, TEXT("BroadcastReceiver 绑定委托失败: %s, %s"),
+				*GetOwner()->GetFullName(), *Description.DelegateName.ToString());
 		}
 	}
 }

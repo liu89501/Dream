@@ -19,6 +19,8 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=Talent)
 	int32 TalentIndex;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category=Talent)
+	int32 TalentGroup;
 	
 	UPROPERTY(BlueprintReadOnly, Category=Talent)
 	bool bLearnable;

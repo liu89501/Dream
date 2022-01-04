@@ -27,6 +27,7 @@ bool FDreamGameplayEffectContext::NetSerialize(FArchive& Ar, UPackageMap* Map, b
 
     Ar << DistanceDamageFalloff;
     Ar << bDamageCritical;
+    Ar << DamageType;
 
     bOutSuccess = true;
     return true;

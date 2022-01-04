@@ -24,6 +24,7 @@
 #include "PlayerDataInterfaceStatic.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/BlackboardComponent.h"
+#include "GameFramework/PlayerState.h"
 #include "Perception/AISense_Sight.h"
 #include "Perception/AISense_Team.h"
 
@@ -173,79 +174,53 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 	TArray<AActor*> HostileActors;
 	AIPerception->GetHostileActors(HostileActors);
 
-	if (!FPDIStatic::IsLocalInterface())
+	TArray<UItemData*> RewardItems;
+	TMap<ADPlayerController*, TArray<UItemData*>> AllPlayerRewards;
+
+	for (AActor* Hostile : HostileActors)
 	{
-		UItemDataContainer* DataContainer = NewObject<UItemDataContainer>();
-		TMap<ADPlayerController*, UItemData*> AllPlayerRewards;
-
-		for (AActor* Hostile : HostileActors)
-		{
-			ADPlayerController* PlayerController = nullptr;
+		ADPlayerController* PlayerController = nullptr;
 			
-			if (ADCharacterPlayer* HostileCharacter = Cast<ADCharacterPlayer>(Hostile))
-			{
-				PlayerController = HostileCharacter->GetPlayerController();
-			}
-
-			if (PlayerController == nullptr)
-			{
-				continue;
-			}
-
-			UItemData* Rewards = RewardPool->GenerateRewards(PlayerController->GetPlayerState<ADPlayerState>());
-			if (Rewards->IsValidData())
-			{
-				AllPlayerRewards.Add(PlayerController, Rewards);
-				DataContainer->AddItem(Rewards);
-			}
+		if (ADCharacterPlayer* HostileCharacter = Cast<ADCharacterPlayer>(Hostile))
+		{
+			PlayerController = HostileCharacter->GetPlayerController();
 		}
 
-		if (DataContainer->IsValidData())
+		if (PlayerController == nullptr)
 		{
-			Handle_Rewards = FPDIStatic::Get()->AddOnAddPlayerRewards(
-				FOnCompleted::FDelegate::CreateUObject(this, &ADEnemyBase::OnRewardsAddCompleted, AllPlayerRewards));
-			
-			FPDIStatic::Get()->AddPlayerRewards(FItemDataHandle(DataContainer));
+			continue;
 		}
+
+		APlayerState* HostilePlayerState = PlayerController->PlayerState;
+		if (HostilePlayerState == nullptr)
+		{
+			UE_LOG(LogDream, Error, TEXT("PlayerState Invalid"));
+			continue;
+		}
+
+		TArray<UItemData*> Items;
+		RewardPool->GenerateRewards(Items);
+		if (Items.Num() > 0)
+		{
+			AllPlayerRewards.Add(PlayerController, Items);
+			RewardItems.Append(Items);
+		}
+		
+		FPDIStatic::Get()->AddPlayerRewards(FItemListHandle(HostilePlayerState->GetPlayerId(), RewardItems));
 	}
-	else
+
+	if (const ADCharacterPlayer* Player = Cast<ADCharacterPlayer>(Causer))
 	{
-		for (AActor* Hostile : HostileActors)
+		if (ADPlayerController* Ctrl = Player->GetPlayerController())
 		{
-			if (ADCharacterPlayer* HostileCharacter = Cast<ADCharacterPlayer>(Hostile))
-			{
-				if (ADPlayerController* PlayerController = HostileCharacter->GetPlayerController())
-				{
-					PlayerController->ClientHandleKilledRewardsGenerate(GetClass());
-				}
-			}
+			int32 PlayerId = Ctrl->PlayerState->GetPlayerId();
+
+			FQuestAction_KilledTarget Action(PawnType);
+			FPDIStatic::Get()->UpdateTaskState(FQuestActionHandle(PlayerId, &Action));
 		}
 	}
 
 	SetLifeSpan(3.f);
-}
-
-void ADEnemyBase::OnRewardsAddCompleted(bool bSuccess, TMap<ADPlayerController*, UItemData*> Rewards) const
-{
-	FPDIStatic::Get()->RemoveOnAddPlayerRewards(Handle_Rewards);
-	
-	if (bSuccess)
-	{
-		for (TPair<ADPlayerController*, UItemData*> PlayerReward : Rewards)
-		{
-			TArray<FRewardMessage> RewardMessages;
-			for (UItemData* RewardItem : FItemDataRange(PlayerReward.Value))
-			{
-				FRewardMessage RewardMessage;
-				RewardMessage.RewardPropsClass = RewardItem->GetItemClass();
-				RewardMessage.RewardNum = RewardItem->GetItemAmount();
-				
-				RewardMessages.Add(RewardMessage);
-			}
-			
-			PlayerReward.Key->ClientReceiveRewardMessage(RewardMessages);
-		}
-	}
 }
 
 UAIPerceptionComponent* ADEnemyBase::GetPerceptionComponent()

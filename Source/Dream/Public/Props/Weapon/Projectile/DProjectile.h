@@ -58,6 +58,8 @@ protected:
 
 protected:
 
+    virtual void PostInitializeComponents() override;
+
     UFUNCTION()
     virtual void OnRep_Impact();
 

@@ -3,6 +3,7 @@
 #include "AbilitySystemGlobals.h"
 #include "DGameplayStatics.h"
 #include "DGE_WeaponBaseDamage.h"
+#include "DProjectSettings.h"
 #include "Engine.h"
 #include "DreamType.h"
 #include "Kismet/GameplayStatics.h"
@@ -178,6 +179,7 @@ AShootWeapon::AShootWeapon():
     }
 
     bReplicates = true;
+    bNetUseOwnerRelevancy = true;
 }
 
 void AShootWeapon::BeginPlay()
@@ -459,7 +461,7 @@ void AShootWeapon::SpawnAmmo(const FBulletHitInfoHandle& HitInfo)
         }
     }
 
-    if (GetLocalRole() != ROLE_Authority)
+    if (GetNetMode() != NM_DedicatedServer)
     {
         GetOwningShooter()->PlayMontage(CharacterAnim.ShootAnim, ShootAnim);
 
@@ -469,9 +471,8 @@ void AShootWeapon::SpawnAmmo(const FBulletHitInfoHandle& HitInfo)
 
         GetMuzzlePoint(MuzzleLoc, MuzzleRot);
 
-        UGameplayStatics::SpawnSoundAtLocation(this, WeaponMuzzleFX.Sound, MuzzleLoc);
-        UGameplayStatics::SpawnEmitterAtLocation(this, WeaponMuzzleFX.Particles, MuzzleLoc, MuzzleRot,
-                                               WeaponMuzzleFX.Size, true, EPSCPoolMethod::AutoRelease);
+        UGameplayStatics::SpawnSoundAtLocation(this, WeaponMuzzleFX.Sound, WeaponMesh->GetSocketLocation(MuzzleSocketName));
+        UGameplayStatics::SpawnEmitterAtLocation(this, WeaponMuzzleFX.Particles, MuzzleLoc, MuzzleRot, WeaponMuzzleFX.Size, true, EPSCPoolMethod::AutoRelease);
     }
 }
 
@@ -488,6 +489,11 @@ const FPropsInfo& AShootWeapon::GetPropsInfo() const
 ERewardNotifyMode AShootWeapon::GetRewardNotifyMode() const
 {
     return ERewardNotifyMode::Primary;
+}
+
+FTransform AShootWeapon::GetPreviewRelativeTransform() const
+{
+    return PreviewTransform;
 }
 
 void AShootWeapon::ApplyPointDamage(const FHitResult& HitInfo)
@@ -530,8 +536,8 @@ void AShootWeapon::DoApplyDamageEffect(const FHitResult& Hit, const FVector& Ori
             DamageFalloff = DamageFalloffCurve->GetFloatValue(FVector::Distance(Origin, Hit.ImpactPoint));
         }
         
-        FDreamGameplayEffectContext* EffectContext = UDGameplayStatics::MakeDreamEffectContext(OwningShooter, DamageFalloff, Hit, Origin);
-        //EffectContext->AddHitPoint(Hit.ImpactPoint);
+        FDreamGameplayEffectContext* EffectContext = UDGameplayStatics::MakeDreamEffectContext(OwningShooter, DamageFalloff, Hit);
+        EffectContext->SetDamageType(static_cast<EDDamageType>(WeaponType));
 
         FGameplayEffectSpec Spec(GetDefault<UDGE_WeaponBaseDamage>(), FGameplayEffectContextHandle(EffectContext));
         Spec.DynamicAssetTags = DynamicAssetTags;
@@ -539,29 +545,6 @@ void AShootWeapon::DoApplyDamageEffect(const FHitResult& Hit, const FVector& Ori
         TargetASI->GetAbilitySystemComponent()->ApplyGameplayEffectSpecToSelf(Spec);
     }
 }
-
-/*void AShootWeapon::DoApplyDamageEffectMulti(const TArray<FHitResult>& Hits)
-{
-	const FHitResult& FirstResult = Hits[0];
-
-	if (IAbilitySystemInterface* TargetASI = Cast<IAbilitySystemInterface>(FirstResult.GetActor()))
-	{
-		ADCharacterPlayer* OwningShooter = GetOwningShooter();
-
-		FDreamGameplayEffectContext* EffectContext = UDGameplayStatics::MakeDreamEffectContextHandle(
-            OwningShooter, DamageFalloffCurve, FirstResult, OwningShooter->GetActorLocation());
-
-		for (FHitResult Hit : Hits)
-		{
-			EffectContext->AddHitPoint(Hit.ImpactPoint);
-		}
-		
-		FGameplayEffectSpec Spec(GetDefault<UDGE_WeaponBaseDamage>(), FGameplayEffectContextHandle(EffectContext));
-		Spec.DynamicAssetTags = DynamicAssetTags;
-		Spec.DynamicGrantedTags = DynamicGrantedTags;
-		TargetASI->GetAbilitySystemComponent()->ApplyGameplayEffectSpecToSelf(Spec);
-	}
-}*/
 
 void AShootWeapon::SetWeaponEnable(bool bEnable)
 {
@@ -603,20 +586,6 @@ const FSlateBrush& AShootWeapon::GetDynamicCrosshairBrush()
     }
 
     return CrosshairBrush;
-}
-
-const FSlateBrush& AShootWeapon::GetDynamicMagazineBrush()
-{
-    if (!MagazineDynamic)
-    {
-        if (UMaterialInterface* Material = Cast<UMaterialInterface>(MagazineBrush.GetResourceObject()))
-        {
-            MagazineDynamic = UMaterialInstanceDynamic::Create(Material, this);
-            MagazineBrush.SetResourceObject(MagazineDynamic);
-        }
-    }
-
-    return MagazineBrush;
 }
 
 float AShootWeapon::GetRemainAmmoPercent() const
@@ -670,6 +639,16 @@ void AShootWeapon::DecrementTotalAmmo(int32 Amount) const
     {
         PC->DecrementAmmunition(AmmoType, Amount);
     }
+}
+
+void AShootWeapon::AttachToCharacter(bool bActiveSocket, USkeletalMeshComponent* Mesh)
+{
+    UDProjectSettings* ProjectSettings = UDProjectSettings::GetProjectSettings();
+
+    AttachToComponent(Mesh, FAttachmentTransformRules::KeepRelativeTransform,
+                      bActiveSocket ? ProjectSettings->GetWepActiveSockName() : ProjectSettings->GetWepHolsterSockName());
+    
+    SetActorRelativeTransform(bActiveSocket ? WeaponSocketOffset : WeaponHolsterSocketOffset);
 }
 
 void AShootWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

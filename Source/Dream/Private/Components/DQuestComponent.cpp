@@ -19,18 +19,6 @@ UDQuestComponent::UDQuestComponent()
 
 void UDQuestComponent::UpdateTaskState(const FQuestActionHandle& Handle)
 {
-	if (GetOwnerRole() == ROLE_Authority)
-	{
-		FPDIStatic::Get()->UpdateTaskState(Handle);
-		
-	}
-	else
-	{
-		for (TPair<int32, FTaskInformation>& Pair : InProgressTasks)
-		{
-			Pair.Value.CompleteCondition->UpdateCondition(Handle);
-		}
-	}
 }
 
 
@@ -38,9 +26,6 @@ void UDQuestComponent::UpdateTaskState(const FQuestActionHandle& Handle)
 void UDQuestComponent::BeginPlay()
 {
 	Super::BeginPlay();
-
-	// ...
-	
 }
 
 
