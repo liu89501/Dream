@@ -77,7 +77,10 @@ class DREAM_API UDreamWidgetStatics : public UBlueprintFunctionLibrary
 public:
 	
 	UFUNCTION(BlueprintCallable, meta=(WorldContext="WorldContextObject"), Category = "DreamWidget")
-    static UItemViewData* EquipmentToViewData(UObject* WorldContextObject, int32 ItemGuid, int64 EquipmentId, const FEquipmentAttributes& Attr);
+    static UWItemEquipment* MakeWEquipmentFromPW(UObject* WorldContextObject, const FPlayerWeapon& PW);
+	
+	UFUNCTION(BlueprintCallable, meta=(WorldContext="WorldContextObject"), Category = "DreamWidget")
+    static UWItemEquipment* MakeWEquipmentFromPM(UObject* WorldContextObject, const FPlayerModule& PM);
 
 	/**
 	* 	替换widget中的子项
@@ -102,9 +105,6 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category = "DreamWidget", meta=( WorldContext="WorldContextObject" ))
 	static void DismissDialog(UObject* WorldContextObject);
-	
-	UFUNCTION(BlueprintPure, Category = "DreamWidget")
-    static const FPropsInfo& GetPropsInfoByItemSoftClass(const FString& ItemClass);
     	
     UFUNCTION(BlueprintPure, Category = "DreamWidget")
     static const FPropsInfo& GetPropsInfoByItemGuid(int32 ItemGuid);
@@ -117,9 +117,6 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category = "DreamWidget")
 	static FWeaponExtraData GetWeaponExtraData(UClass* WeaponClass);
-
-	UFUNCTION(BlueprintCallable, Category = "DreamWidget")
-	static FItemListHandle WrapItem(UItemData* ItemData);
 
 	UFUNCTION(BlueprintCallable, meta=( WorldContext="WorldContextObject" ), Category = "DreamWidget")
 	static TArray<FPlayerStatistics> GetPlayerStatistics(UObject* WorldContextObject);
@@ -139,6 +136,16 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "DreamWidget|Settings")
 	static FText GetWeaponTypeName(EWeaponType WeaponType);
+
+
+	/** item Handle */
+
+	UFUNCTION(BlueprintPure, Category="DreamWidget|Item")
+    static const FPropsInfo& GetPropsInfo(const FItemHandle& ItemHandle);
+
+
+	UFUNCTION(BlueprintPure, Category="DreamWidget|Item")
+	static const FQualityInfo& GetQualityInfo(EPropsQuality Quality);
 	
 private:
 	
@@ -149,3 +156,4 @@ private:
 
 	static FTimerHandle DialogHandle;
 };
+

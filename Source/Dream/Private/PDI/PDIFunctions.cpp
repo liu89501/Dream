@@ -14,36 +14,26 @@ const FPlayerProperties& UPDIFunctions::GetCachedPlayerProperties()
 	return FPDIStatic::Get()->GetCachedProperties();
 }
 
-int32 UPDIFunctions::GetCacheItemCount(int32 ItemGuid)
+int32 UPDIFunctions::GetPlayerMaterialNum(int32 ItemGuid)
 {
-	return FPDIStatic::Get()->GetCacheItemCount(ItemGuid);
-}
-
-void UPDIFunctions::DecreaseCacheItemCount(int32 ItemGuid, int32 DecValue)
-{
-	FPDIStatic::Get()->IncreaseItemCount(ItemGuid, -DecValue);
-}
-
-void UPDIFunctions::IncreaseCacheItemCount(int32 ItemGuid, int32 IncValue)
-{
-	FPDIStatic::Get()->IncreaseItemCount(ItemGuid, IncValue);
-}
-
-void UPDIFunctions::UpdateCacheItemCount(const TArray<FAcquisitionCost>& Costs)
-{
-	FPlayerDataInterface* Interface = FPDIStatic::Get();
-	for (const FAcquisitionCost& Cost : Costs)
+	const FMaterialsHandle& MaterialsHandle = FPDIStatic::Get()->GetMaterialsHandle();
+	if (MaterialsHandle.IsValid())
 	{
-		Interface->IncreaseItemCount(Cost.ItemGuid, -Cost.CostAmount);
+		if (int32* Num = MaterialsHandle->Find(ItemGuid))
+		{
+			return *Num;
+		}
 	}
+
+	return 0;
 }
 
 void UPDIFunctions::SendUpdateTaskCondForEvent(APlayerController* PlayerCtrl, FName EventName)
 {
 	if (PlayerCtrl && PlayerCtrl->PlayerState)
 	{
-		FQuestAction_Event ActionEvent(EventName);
-		FPDIStatic::Get()->UpdateTaskState(FQuestActionHandle(PlayerCtrl->PlayerState->GetPlayerId(), &ActionEvent));
+		TSharedRef<FQuestAction_Event> ActionEvent = MakeShared<FQuestAction_Event>(EventName);
+		FPDIStatic::Get()->UpdateTaskState(FQuestActionHandle(PlayerCtrl->PlayerState->GetPlayerId(), ActionEvent));
 	}
 }
 
@@ -90,30 +80,32 @@ void UPDIFunctions::GetEquippedModule(const TArray<FPlayerModule>& Modules, TArr
 	}
 }
 
-void UPDIFunctions::TiledCondition(const FQuestConditionHandle& Condition, TArray<UDQuestCondition*>& Conditions)
-{
-	if (UDQuestCondition_Container* Container = Cast<UDQuestCondition_Container>(*Condition))
-	{
-		Conditions = Container->GetConditions();
-	}
-	else
-	{
-		Conditions.Add(*Condition);
-	}
-}
-
 bool UPDIFunctions::IsConditionCompleted(const FTaskInformation& Task)
 {
-	TArray<UDQuestCondition*> Conditions;
-	TiledCondition(Task.Condition, Conditions);
-
 	bool bCompleted = true;
-	for (UDQuestCondition* QuestCondition : Conditions)
+	for (UDQuestCondition* QuestCondition : Task.Condition.Conditions)
 	{
 		bCompleted &= QuestCondition->IsCompleted();
 	}
 
 	return bCompleted;
+}
+
+float UPDIFunctions::GetConditionPercentage(const FQuestConditionHandle& Handle)
+{
+	if (Handle.Conditions.Num() == 0)
+	{
+		return 0;
+	}
+	
+	float PercentAVG = 0.f;
+
+	for (UDQuestCondition* Condition : Handle.Conditions)
+	{
+		PercentAVG += Condition->GetQuestProgressPercent();
+	}
+
+	return PercentAVG / Handle.Conditions.Num();
 }
 
 TSubclassOf<AShootWeapon> UPDIFunctions::SoftClassPathToWeaponClass(const FSoftClassPath& SoftClassPath)
@@ -129,4 +121,17 @@ TSubclassOf<UDModuleBase> UPDIFunctions::SoftClassPathToModuleClass(const FSoftC
 UDQuestDescription* UPDIFunctions::SoftObjectToDQuestDescription(const FSoftObjectPath& ObjectPath)
 {
 	return Cast<UDQuestDescription>(ObjectPath.TryLoad());
+}
+
+void UPDIFunctions::MakeItemArray(const FItemListHandle& ItemListHandle, TArray<FItemHandle>& ItemArray)
+{
+	for (const TSharedPtr<FItem>& Item : ItemListHandle)
+	{
+		ItemArray.Add(Item);
+	}
+}
+
+FItemHandle UPDIFunctions::MakeSimpleItemHandle(FItemGuidHandle Guid, int32 Num)
+{
+	return FItemHandle(MakeShared<FItemSimple>(Guid.ItemGuid, Num));
 }

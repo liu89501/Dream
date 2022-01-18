@@ -7,6 +7,7 @@
 #include "UnrealNetwork.h"
 #include "Components/SphereComponent.h"
 #include "Kismet/KismetMathLibrary.h"
+#include "Sound/SoundCue.h"
 
 ADAbilityGen_TrackingExplosive::ADAbilityGen_TrackingExplosive()
 	: TargetActor(nullptr)
@@ -99,7 +100,7 @@ void ADAbilityGen_TrackingExplosive::OnImpact(const FHitResult& ImpactResult)
 		SetActorHiddenInGame(true);
 		
 		UDGameplayStatics::SphereTraceAndApplyEffect(GetInstigator(), GetActorLocation(),
-			ImpactRadius, ETraceTypeQuery::TraceTypeQuery1, ApplyEffect, true, false, true);
+			ImpactRadius, ECollisionChannel::ECC_Visibility, ApplyEffect, true, false, true);
 	}
 
 	bImpact = true;

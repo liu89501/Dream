@@ -71,13 +71,8 @@ void FItemSelectedCustomization::InitializeSelectedOption()
 	int32 Guid;
 	if (GuidHandle->GetValue(Guid) == FPropertyAccess::Success)
 	{
-		const FItemDefinition& Definition = UDProjectSettings::GetProjectSettings()->GetItemDefinition(Guid);
-
-		int32 Index;
-		if (Definition.ItemClass.FindLastChar(TEXT('.'), Index))
-		{
-			SelectedOption = MakeShared<FComboboxItem>(Definition.ItemClass.RightChop(Index + 1), Guid);
-		}
+		const FItemDef& Definition = UDProjectSettings::GetProjectSettings()->GetItemDefinition(Guid);
+		SelectedOption = MakeShared<FComboboxItem>(Definition.ItemBaseInfo.PropsName, Guid);
 	}
 }
 
@@ -85,17 +80,13 @@ void FItemSelectedCustomization::OnOpeningCombobox()
 {
 	TArray<FItemDetails> Items;
 
-	UDProjectSettings::GetProjectSettings()->GetAllItems(static_cast<EItemType::Type>(FilterType), Items);
+	GetAllItems(Items);
 
 	Options.Reset();
 
 	for (const FItemDetails& Item : Items)
 	{
-		int32 Index;
-		if (Item.ItemClass.FindLastChar(TEXT('.'), Index))
-		{
-			Options.Add(MakeShared<FComboboxItem>(Item.ItemClass.RightChop(Index + 1), Item.ItemGuid));
-		}
+		Options.Add(MakeShared<FComboboxItem>(Item.ItemName, Item.ItemGuid));
 	}
 }
 
@@ -115,14 +106,41 @@ void FItemSelectedCustomization::OnOptionSelectedChange(TSharedPtr<FComboboxItem
 
 FText FItemSelectedCustomization::GetComboboxSelectedText() const
 {
-	return !SelectedOption.IsValid() || SelectedOption->Text.IsEmpty()
+	return !SelectedOption.IsValid() || SelectedOption->ItemName.IsEmpty()
 		       ? LOCTEXT("SelecteAbility", "选择物品")
 		       : FormatItemText(SelectedOption);
 }
 
 FText FItemSelectedCustomization::FormatItemText(TSharedPtr<FComboboxItem> Item) const
 {
-	return FText::FromString(FString::Printf(TEXT("%s - %s"), *UEnum::GetDisplayValueAsText(GetItemType(Item->Guid)).ToString(), *Item->Text));
+	return FText::Format(FTextFormat::FromString(TEXT("{0} - {1}")), UEnum::GetDisplayValueAsText(GetItemType(Item->Guid)), Item->ItemName);
+}
+
+bool FItemSelectedCustomization::GetAllItems(TArray<FItemDetails>& Items) const
+{
+	if (UDataTable* ItemTable = UDProjectSettings::GetProjectSettings()->GetItemTable())
+	{
+		EItemType::Type ItemType = static_cast<EItemType::Type>(FilterType);
+
+		for (TTuple<FName, uint8*> Row : ItemTable->GetRowMap())
+		{
+			int32 ItemGuid = FCString::Atoi(*Row.Key.ToString());
+			EItemType::Type Type = GetItemType(ItemGuid);
+
+			if (Type == ItemType || ItemType == EItemType::All)
+			{
+				FItemDef* Def = reinterpret_cast<FItemDef*>(Row.Value);
+				FItemDetails Details;
+				Details.ItemName = Def->ItemBaseInfo.PropsName;
+				Details.ItemGuid = ItemGuid;
+				Items.Add(Details);
+			}
+		}
+
+		return true;
+	}
+
+	return false;
 }
 
 #undef LOCTEXT_NAMESPACE

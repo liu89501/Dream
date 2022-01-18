@@ -10,21 +10,9 @@
 enum class ETaskCondGUID : int32
 {
 	None,
-	CONTAINER,
 	KILL_TARGET,
 	EVENT
 };
-
-class AShootWeapon;
-
-namespace EServerState
-{
-	enum ServerState
-	{
-		PENDING,
-		IN_PROGRESS
-	};
-}
 
 
 UENUM(BlueprintType)
@@ -62,19 +50,29 @@ enum class ETaskMark : uint8
 /*
  * 获取玩家信息时 相关的装备是获取已装备在身上的还是其他的
  */
-UENUM(BlueprintType)
-enum class EGetEquipmentCondition : uint8
+namespace EQueryCondition
 {
-	All,
-	Equipped,
-	UnEquipped
-};
+	enum Condition
+	{
+		Weapon = 0x1,
+        Weapon_Equipped = 0x2,
+        Module = 0x4,
+        Module_Equipped = 0x8,
+        Materials = 0x10,
+        Skin = 0x20
+    };
+}
+
 
 struct FQuestActionBase
 {
 public:
 
 	FQuestActionBase() : ActionCondGUID(ETaskCondGUID::None)
+	{
+	}
+	
+	explicit FQuestActionBase(ETaskCondGUID InCondGUID) : ActionCondGUID(InCondGUID)
 	{
 	}
 
@@ -90,42 +88,12 @@ public:
 	ETaskCondGUID ActionCondGUID;
 };
 
-struct FQuestActionContainer : FQuestActionBase
-{
-public:
-
-	FQuestActionContainer()
-	{
-		ActionCondGUID = ETaskCondGUID::CONTAINER;
-	}
-
-	void AddAction(FQuestActionBase* Action)
-	{
-		Actions.Add(MakeShareable(Action));
-	}
-	
-	void AddActionPtr(TSharedPtr<FQuestActionBase> Action)
-	{
-		Actions.Add(Action);
-	}
-
-	void GetActions(TArray<TSharedPtr<FQuestActionBase>>& OutActions) const
-	{
-		OutActions = Actions;
-	}
-
-	virtual void SerializeData(FArchive& Ar) override;
-
-private:
-
-	TArray<TSharedPtr<FQuestActionBase>> Actions;
-};
-
 struct FQuestAction_KilledTarget : FQuestActionBase
 {
-	explicit FQuestAction_KilledTarget(EPawnType InTargetPawn) : TargetPawn(InTargetPawn)
+	explicit FQuestAction_KilledTarget(EPawnType InTargetPawn)
+		: FQuestActionBase(ETaskCondGUID::KILL_TARGET)
+		, TargetPawn(InTargetPawn)
 	{
-		ActionCondGUID = ETaskCondGUID::KILL_TARGET;
 	}
 
 	virtual void SerializeData(FArchive& Ar) override;
@@ -142,9 +110,10 @@ private:
 
 struct FQuestAction_Event : FQuestActionBase
 {
-	explicit FQuestAction_Event(const FName& InEventName) : EventName(InEventName)
+	explicit FQuestAction_Event(const FName& InEventName)
+		: FQuestActionBase(ETaskCondGUID::EVENT)
+		, EventName(InEventName)
 	{
-		ActionCondGUID = ETaskCondGUID::EVENT;
 	}
 
 	virtual void SerializeData(FArchive& Ar) override;
@@ -163,7 +132,7 @@ public:
 	{
 	}
 
-	FQuestActionHandle(int32 InPlayerId, FQuestActionBase* InData)
+	FQuestActionHandle(int32 InPlayerId, TSharedPtr<FQuestActionBase> InData)
 		: PlayerId(InPlayerId),
 		  ActionData(InData)
 	{
@@ -171,7 +140,7 @@ public:
 
 	FQuestActionBase* GetData() const
 	{
-		return ActionData;
+		return ActionData.Get();
 	}
 
 	friend FArchive& operator<<(FArchive& Ar, FQuestActionHandle& A)
@@ -185,7 +154,7 @@ private:
 
 	int32 PlayerId;
 
-	FQuestActionBase* ActionData;
+	TSharedPtr<FQuestActionBase> ActionData;
 };
 
 UCLASS(Blueprintable)
@@ -257,39 +226,6 @@ public:
 };
 
 UCLASS()
-class DREAM_API UDQuestCondition_Container : public UDQuestCondition
-{
-	GENERATED_BODY()
-
-public:
-
-	UDQuestCondition_Container()
-	{
-		ConditionGUID = ETaskCondGUID::CONTAINER;
-	}
-
-	TArray<UDQuestCondition*>& GetConditions()
-	{
-		return Conditions;
-	}
-
-	virtual float GetQuestProgressPercent() const override;
-
-	virtual void SerializeData(FArchive& Ar) override;
-	
-#if WITH_EDITOR
-
-	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
-
-#endif
-
-protected:
-
-	UPROPERTY(EditAnywhere, Instanced, Category=Condition)
-	TArray<UDQuestCondition*> Conditions;
-};
-
-UCLASS()
 class DREAM_API UDQuestCondition_KillTarget : public UDQuestCondition_Count
 {
 	GENERATED_BODY()
@@ -337,139 +273,206 @@ struct FQuestConditionHandle
 {
 	GENERATED_BODY()
 
-	FQuestConditionHandle() : QuestCondition(nullptr)
+	FQuestConditionHandle()
 	{
 	}
 
-	explicit FQuestConditionHandle(UDQuestCondition* InCondition) : QuestCondition(InCondition)
+	explicit FQuestConditionHandle(const TArray<UDQuestCondition*>& InConditions)
+		: Conditions(InConditions)
 	{
 	}
 
-	UDQuestCondition* operator->() const
-	{
-		return QuestCondition;
-	}
-
-	UDQuestCondition* operator*() const
-	{
-		return QuestCondition;
-	}
-
-	friend FArchive& operator<<(FArchive& Ar, FQuestConditionHandle& A)
-	{
-		if (Ar.IsLoading())
-		{
-			A.QuestCondition = UDQuestCondition::Decode(Ar);
-		}
-		else
-		{
-			A.QuestCondition->SerializeData(Ar);
-		}
-		return Ar;
-	}
+	friend FArchive& operator<<(FArchive& Ar, FQuestConditionHandle& Other);
 
 	UPROPERTY(BlueprintReadOnly)
-	UDQuestCondition* QuestCondition;
+	TArray<UDQuestCondition*> Conditions;
 };
 
+/** ================================================ 物品相关 ================================================ */
+/** ================================================ ↓↓↓↓↓↓ ================================================ */
 
-UCLASS(Blueprintable, Abstract, EditInlineNew)
-class DREAM_API UItemData : public UObject
+#define IM_None 0
+#define IM_Equipment 1
+#define IM_Simple 2
+
+struct FItem
 {
-	GENERATED_BODY()
 
 public:
 
-	/** 序列化时标识一下具体序列化的是什么数据 */
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category=ItemData)
-	int32 ItemGuid;
+	FItem(uint8 InStructMark)
+		: ItemGuid(0)
+		, StructMark(InStructMark)
+	{
+	}
 	
-	// 反序列化使用 UItemData::decode
-	virtual void SerializeItemData(FArchive& Ar);
+	FItem(int32 InItemGuid, uint8 InStructMark)
+		: ItemGuid(InItemGuid)
+		, StructMark(InStructMark)
+	{
+	}
+	
+	virtual ~FItem() = default;
 
-	static UItemData* Decode(FArchive& Ar);
+	virtual int32 GetItemNum() { return 0; }
 
-	virtual int32 GetItemNum() const { return 1; }
+	virtual void Serialize(FArchive& Ar);
 
-public:
+	int32 GetItemGuid() const
+	{
+		return ItemGuid;
+	}
 
-	UFUNCTION(BlueprintCallable, Category=ItemData)
-	UClass* GetItemClass() const;
+	uint8 GetStructMark()
+	{
+		return StructMark;
+	}
 
-	UFUNCTION(BlueprintCallable, Category=ItemData)
-	const FPropsInfo& GetPropsInfo() const;
+private:
 
-	UFUNCTION(BlueprintCallable, Category=ItemData)
-	TEnumAsByte<EItemType::Type> GetItemType() const;
+	int32 ItemGuid;
+
+	uint8 StructMark;
 };
 
-UCLASS()
-class DREAM_API UItemDataEquipment : public UItemData
+/**
+ * 装备物品
+ */
+struct FItemEquipment : FItem
 {
-	GENERATED_BODY()
 
 public:
 
-	virtual void SerializeItemData(FArchive& Ar) override;
+	FItemEquipment()
+		: FItem(IM_Equipment)
+	{
+	}
+	
+	FItemEquipment(int32 InItemGuid)
+		: FItem(InItemGuid, IM_Equipment)
+	{
+	}
 
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category=ItemData)
+	FItemEquipment(int32 InItemGuid, const FEquipmentAttributes& InAttributes)
+		: FItem(InItemGuid, IM_Equipment)
+		, Attributes(InAttributes)
+	{
+	}
+
+	virtual int32 GetItemNum() override
+	{
+		return 1;
+	}
+
+	virtual void Serialize(FArchive& Ar) override;
+
+public:
+	
 	FEquipmentAttributes Attributes;
 };
 
-
-UCLASS()
-class DREAM_API UItemDataEquipment_Random : public UItemData
+/**
+ * 简单物品，一般指那种没有属性的，比如：材料
+ */
+struct FItemSimple : FItem
 {
-	GENERATED_BODY()
 
 public:
 
-	UPROPERTY(EditAnywhere, Category=ItemData)
-	class UDEquipmentAttributesPool* AttrPool;
-
-public:
-
-	UItemDataEquipment* CastToEquipment();
-};
-
-
-UCLASS()
-class DREAM_API UItemDataNumericalValue : public UItemData
-{
-	GENERATED_BODY()
-
-public:
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category=ItemData)
-	int32 Value;
-
-	virtual int32 GetItemNum() const override
+	FItemSimple()
+		: FItem(IM_Simple)
+		, ItemNum(0)
 	{
-		return Value;
 	}
 
-	virtual void SerializeItemData(FArchive& Ar) override;
+	FItemSimple(int32 InItemGuid)
+        : FItem(InItemGuid, IM_Equipment)
+	{
+	}
+	
+	FItemSimple(int32 ItemGuid, int32 Num)
+		: FItem(ItemGuid, IM_Simple)
+		, ItemNum(Num)
+	{
+	}
+
+	virtual int32 GetItemNum() override
+	{
+		return ItemNum;
+	}
+
+	virtual void Serialize(FArchive& Ar) override;
+
+public:
+	
+	int32 ItemNum;
 };
+
+/**
+ * helper
+ */
+namespace FItemHelper
+{
+	TSharedPtr<FItem> Decode(FArchive& Ar);
+}
 
 
 USTRUCT(BlueprintType)
-struct FAcquisitionCost
+struct DREAM_API FItemHandle
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly)
-	int32 ItemGuid;
+public:
 
-	UPROPERTY(BlueprintReadOnly)
-	int32 CostAmount;
-
-	friend FArchive& operator<<(FArchive& Ar, FAcquisitionCost& R)
+	FItemHandle()
 	{
-		Ar << R.ItemGuid;
-		Ar << R.CostAmount;
+	}
+	
+	FItemHandle(TSharedPtr<FItem> InItem) : Item(InItem)
+	{
+	}
+
+	TSharedPtr<FItem> Get()
+	{
+		return Item;
+	}
+
+	FItem* operator->() const
+	{
+		return Item.Get();
+	}
+
+	bool IsValid() const
+	{
+		return Item.IsValid();
+	}
+
+	friend FArchive& operator<<(FArchive& Ar, FItemHandle& Other)
+	{
+		if (Ar.IsSaving())
+		{
+			if (Other.IsValid())
+			{
+				Other->Serialize(Ar);
+			}
+			else
+			{
+				int32 EmptyGuid = 0;
+				Ar << EmptyGuid;
+			}
+		}
+		else
+		{
+			Other.Item = FItemHelper::Decode(Ar);
+		}
 		return Ar;
 	}
+
+private:
+
+	TSharedPtr<FItem> Item;
 };
+
 
 USTRUCT(BlueprintType)
 struct DREAM_API FItemListHandle
@@ -479,26 +482,40 @@ struct DREAM_API FItemListHandle
 public:
 
 	FItemListHandle()
-		: PlayerId(0)
 	{
-		
 	}
 
-	FItemListHandle(int32 PlayerId, const TArray<UItemData*>& Items)
-		: PlayerId(PlayerId),
-		  Items(Items)
+	explicit FItemListHandle(const TArray<TSharedPtr<FItem>>& InItems) : Items(InItems)
 	{
 	}
+
+	bool IsNotEmpty() const
+	{
+		return Items.Num() > 0;
+	}
+
+	void AddItem(TSharedPtr<FItem> Item)
+	{
+		Items.Add(Item);
+	}
+
+	void AddItems(const TArray<TSharedPtr<FItem>>& NewItems)
+	{
+		Items.Append(NewItems);
+	}
+	
+	void SetItems(const TArray<TSharedPtr<FItem>>& NewItems)
+	{
+		Items = NewItems;
+	}
+
+	FORCEINLINE TArray<TSharedPtr<FItem>>::RangedForIteratorType begin()				{ return Items.begin(); }
+	FORCEINLINE TArray<TSharedPtr<FItem>>::RangedForConstIteratorType begin() const	{ return Items.begin(); }
+	FORCEINLINE TArray<TSharedPtr<FItem>>::RangedForIteratorType end  ()				{ return Items.end(); }
+	FORCEINLINE TArray<TSharedPtr<FItem>>::RangedForConstIteratorType end  () const	{ return Items.end(); }
 
 	friend FArchive& operator<<(FArchive& Ar, FItemListHandle& R)
 	{
-		bool bIsSaving = Ar.IsSaving();
-
-		if (bIsSaving)
-		{
-			Ar << R.PlayerId;
-		}
-
 		int32 Num = R.Items.Num();
 		Ar << Num;
 
@@ -506,66 +523,70 @@ public:
 		
 		for (int32 N = 0; N < Num; N++)
 		{
-			if (bIsSaving)
+			if (Ar.IsSaving())
 			{
-				R.Items[N]->SerializeItemData(Ar);
+				R.Items[N]->Serialize(Ar);
 			}
 			else
 			{
-				R.Items[N] = UItemData::Decode(Ar);
+				R.Items[N] = FItemHelper::Decode(Ar);
 			}
 		}
 		return Ar;
 	}
 
-public:
+private:
 
-	int32 PlayerId;
-
-	UPROPERTY(BlueprintReadOnly, Category=ItemData)
-	TArray<UItemData*> Items;
+	TArray<TSharedPtr<FItem>> Items;
 };
 
-USTRUCT(BlueprintType)
-struct FItemDataHandle
+struct FItemListParam
 {
-	GENERATED_BODY()
 
 public:
 
-	FItemDataHandle() : PlayerId(0), ItemData(nullptr)
+	FItemListParam()
+		: PlayerId(0)
 	{
 	}
 
-	FItemDataHandle(int32 InPlayerId, UItemData* InItemData)
-		: PlayerId(InPlayerId), ItemData(InItemData)
+	FItemListParam(int32 InPlayerId, const FItemListHandle& InListHandle)
+		: PlayerId(InPlayerId),
+		  ListHandle(InListHandle)
 	{
 	}
-
-	friend FArchive& operator<<(FArchive& Ar, FItemDataHandle& R)
+	
+	FItemListParam(int32 InPlayerId, FItemListHandle&& InListHandle)
+		: PlayerId(InPlayerId),
+		  ListHandle(MoveTemp(InListHandle))
 	{
-		if (Ar.IsLoading())
-		{
-			R.ItemData = UItemData::Decode(Ar);
-		}
-		else
-		{
-			// playerId 只在写到服务器时才需要
-			Ar << R.PlayerId;
-			
-			R.ItemData->SerializeItemData(Ar);
-		}
+	}
+	
+	FItemListParam(int32 InPlayerId, TSharedPtr<FItem> InItem)
+		: PlayerId(InPlayerId)
+	{
+		ListHandle.AddItem(InItem);
+	}
 
+	FORCEINLINE bool IsNotEmpty() const
+	{
+		return ListHandle.IsNotEmpty();
+	}
+
+	friend FArchive& operator<<(FArchive& Ar, FItemListParam& Other)
+	{
+		Ar << Other.PlayerId;
+		Ar << Other.ListHandle;
 		return Ar;
 	}
 
-	UItemData* Get() const;
+public:
 
 	int32 PlayerId;
-
-	UPROPERTY(BlueprintReadOnly)
-	UItemData* ItemData;
+	
+	FItemListHandle ListHandle;
 };
+
 
 USTRUCT(BlueprintType)
 struct FTaskInProgressInfo
@@ -586,6 +607,97 @@ struct FTaskInProgressInfo
 		return Ar;
 	}
 };
+
+/** ================================================ ↑↑↑↑↑↑ ================================================ */
+/** ================================================ 物品相关 ================================================ */
+
+
+
+/** ================================================ ********** ================================================ */
+/** ================================================ 物品蓝图相关 ================================================ */
+
+UCLASS(Blueprintable, Abstract, EditInlineNew)
+class DREAM_API UItemData : public UObject
+{
+	GENERATED_BODY()
+
+public:
+
+	/** ItemGuid */
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category=ItemData)
+	FItemGuidHandle GuidHandle;
+
+	virtual TSharedPtr<FItem> MakeItemStruct() { return nullptr; }
+
+};
+
+UCLASS()
+class DREAM_API UItemDataEquipment : public UItemData
+{
+	GENERATED_BODY()
+
+public:
+
+	virtual TSharedPtr<FItem> MakeItemStruct() override;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category=ItemData)
+	FEquipmentAttributes Attributes;
+};
+
+
+UCLASS()
+class DREAM_API UItemDataEquipment_Random : public UItemData
+{
+	GENERATED_BODY()
+
+public:
+
+	UPROPERTY(EditAnywhere, Category=ItemData)
+	class UDEquipmentAttributesPool* AttrPool;
+
+public:
+
+	virtual TSharedPtr<FItem> MakeItemStruct() override;
+};
+
+
+UCLASS()
+class DREAM_API UItemDataNumericalValue : public UItemData
+{
+	GENERATED_BODY()
+
+public:
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category=ItemData)
+	int32 Value;
+
+public:
+
+	virtual TSharedPtr<FItem> MakeItemStruct() override;
+};
+
+/** ================================================ 物品蓝图相关 ================================================ */
+/** ================================================ ********** ================================================ */
+
+USTRUCT(BlueprintType)
+struct FAcquisitionCost
+{
+	GENERATED_BODY()
+
+	UPROPERTY(BlueprintReadOnly)
+	int32 ItemGuid;
+
+	UPROPERTY(BlueprintReadOnly)
+	int32 CostAmount;
+
+	friend FArchive& operator<<(FArchive& Ar, FAcquisitionCost& R)
+	{
+		Ar << R.ItemGuid;
+		Ar << R.CostAmount;
+		return Ar;
+	}
+};
+
 
 USTRUCT(BlueprintType)
 struct FTaskInformation
@@ -613,17 +725,7 @@ struct FTaskInformation
 	UPROPERTY(BlueprintReadWrite)
 	bool bTracking;
 
-	friend FArchive& operator<<(FArchive& Ar, FTaskInformation& A)
-	{
-		Ar << A.TaskId;
-		Ar << A.TaskGroupId;
-		Ar << A.TaskDescription;
-		Ar << A.TaskMark;
-		Ar << A.bTracking;
-		Ar << A.Condition;
-		Ar << A.CompletedReward;
-		return Ar;
-	}
+	friend FArchive& operator<<(FArchive& Ar, FTaskInformation& A);
 };
 
 USTRUCT()
@@ -664,6 +766,33 @@ struct FSearchTaskParam
 	}
 };
 
+
+struct FDecomposeParam
+{
+	FDecomposeParam()
+		: ItemId(0)
+		, ItemGuid(0)
+	{
+	}
+
+	FDecomposeParam(int64 InItemId, int32 InItemGuid)
+		: ItemId(InItemId),
+		  ItemGuid(InItemGuid)
+	{
+	}
+
+	friend FArchive& operator<<(FArchive& Ar, FDecomposeParam& Other)
+	{
+		Ar << Other.ItemGuid;
+		Ar << Other.ItemId;
+		return Ar;
+	}
+
+	int64 ItemId;
+
+	int32 ItemGuid;
+};
+
 USTRUCT(BlueprintType)
 struct FSearchTaskResult
 {
@@ -680,9 +809,9 @@ struct FSearchTaskResult
 
 	friend FArchive& operator<<(FArchive& Ar, FSearchTaskResult& A)
 	{
-		Ar << A.Tasks;
 		Ar << A.TotalPage;
 		Ar << A.TotalNum;
+		Ar << A.Tasks;
 		return Ar;
 	}
 };
@@ -854,6 +983,26 @@ struct FPlayerMaterial
 	}
 };
 
+USTRUCT(BlueprintType)
+struct FMaterialsHandle
+{
+	GENERATED_BODY()
+
+public:
+
+	bool IsValid() const
+	{
+		return MaterialsGroup.IsValid();
+	}
+
+	TMap<int32, int32>* operator->() const
+	{
+		return MaterialsGroup.Get();
+	}
+
+	TSharedPtr<TMap<int32, int32>> MaterialsGroup;
+};
+
 /** 玩家拥有的各种数据 */
 USTRUCT(BlueprintType)
 struct FPlayerProperties
@@ -901,7 +1050,7 @@ struct FPlayerInfo
 	int64 LearnedTalents;
 
 	UPROPERTY(BlueprintReadOnly)
-	FPlayerProperties Properties;
+	int32 CharacterLevel;
 
 	UPROPERTY(BlueprintReadOnly)
 	TArray<FPlayerMaterial> Materials;
@@ -911,10 +1060,10 @@ struct FPlayerInfo
 
 	friend FArchive& operator<<(FArchive& Ar, FPlayerInfo& A)
 	{
-		Ar << A.Properties;
 		Ar << A.Weapons;
 		Ar << A.Modules;
 		Ar << A.LearnedTalents;
+		Ar << A.CharacterLevel;
 		Ar << A.Materials;
 		Ar << A.CharacterMesh;
 		return Ar;
@@ -1069,42 +1218,30 @@ struct FUpdateServerPlayerParam
 	}
 };
 
-USTRUCT(BlueprintType)
 struct FStoreItem
 {
-	GENERATED_BODY()
-
-	UPROPERTY(BlueprintReadOnly)
-	UItemData* ItemData;
+	TSharedPtr<FItem> Item;
 	
-	UPROPERTY(BlueprintReadOnly)
 	TArray<FAcquisitionCost> Costs;
 
 	/** Store Item ID */
-	UPROPERTY(BlueprintReadOnly)
 	int64 SIID;
 
 	friend FArchive& operator<<(FArchive& Ar, FStoreItem& R)
 	{
 		Ar << R.SIID;
 		Ar << R.Costs;
-		R.ItemData = UItemData::Decode(Ar);
+		R.Item = FItemHelper::Decode(Ar);
 		return Ar;
 	}
 };
 
-USTRUCT(BlueprintType)
 struct FStoreInformation
 {
-	GENERATED_BODY()
-
-	UPROPERTY(BlueprintReadOnly)
 	int32 TotalPage;
 
-	UPROPERTY(BlueprintReadOnly)
 	int32 TotalItems;
 	
-	UPROPERTY(BlueprintReadOnly)
 	TArray<FStoreItem> Items;
 
 	friend FArchive& operator<<(FArchive& Ar, FStoreInformation& R)
@@ -1253,6 +1390,16 @@ struct FModifyTrackingParam
 		Ar << A.bTracking;
 		return Ar;
 	}
+};
+
+struct FEmptyParam
+{
+	friend FArchive& operator<<(FArchive& Ar, FEmptyParam& A)
+	{
+		return Ar;
+	}
+
+	static FEmptyParam SINGLETON;
 };
 
 USTRUCT(BlueprintType)

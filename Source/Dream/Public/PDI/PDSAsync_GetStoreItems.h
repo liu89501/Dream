@@ -1,7 +1,8 @@
 ﻿#pragma once
 
 #include "CoreMinimal.h"
-#include "PlayerDataInterfaceType.h"
+
+#include "DreamWidgetType.h"
 #include "kismet/BlueprintAsyncActionBase.h"
 #include "PDSAsync_GetStoreItems.generated.h"
 
@@ -10,7 +11,7 @@ class UPDSAsync_GetStoreInformation : public UBlueprintAsyncActionBase
 {
 	GENERATED_BODY()
 
-	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAsyncTaskCompoleteDelegate, const FStoreInformation&, StoreInfo);
+	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAsyncTaskCompoleteDelegate, const FWStoreInformation&, StoreInfo);
 
 	UPROPERTY(BlueprintAssignable)
 	FAsyncTaskCompoleteDelegate	OnSuccess;

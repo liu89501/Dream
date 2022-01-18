@@ -14,6 +14,9 @@ GAMEPLAYATTRIBUTE_VALUE_GETTER(PropertyName) \
 GAMEPLAYATTRIBUTE_VALUE_SETTER(PropertyName) \
 GAMEPLAYATTRIBUTE_VALUE_INITTER(PropertyName)
 
+
+struct FEquipmentAttributes;
+
 /**
  * 
  */
@@ -30,6 +33,12 @@ public:
 	virtual bool PreGameplayEffectExecute(FGameplayEffectModCallbackData& Data) override;
 	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
+	void IncrementAttributes(const FEquipmentAttributes& Attributes);
+
+	void UpdateAttributesBase(const FEquipmentAttributes& Attributes);
+
+public:
 	
 	/** Current Health, when 0 we expect owner to die. Capped by MaxHealth */
 	UPROPERTY(BlueprintReadOnly, Category = "Health", ReplicatedUsing=OnRep_Health)

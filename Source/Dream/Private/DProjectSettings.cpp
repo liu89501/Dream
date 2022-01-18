@@ -1,19 +1,32 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "DProjectSettings.h"
-
+#include "ShootWeapon.h"
 #include "DamageWidgetComponent.h"
+#include "PlayerDataInterfaceType.h"
 #include "SurfaceImpactAsset.h"
+#include "Kismet/KismetMathLibrary.h"
 
 FSurfaceImpactEffect InvalidImpactEffect = FSurfaceImpactEffect();
 FQualityInfo InvalidQualityInfo = FQualityInfo();
+FItemTypeSettingsInfo InvalidItemTypeInfo = FItemTypeSettingsInfo(NAME_None);
+
+UDProjectSettings::UDProjectSettings()
+	: CombatToIdleTime(1.f)
+	, PickupAmmunitionAmount(FRangeRandomFloat(0.1f, 0.25f))
+{
+	
+}
 
 FText UDProjectSettings::GetWeaponTypeName(EWeaponType WeaponType) const
 {
-	if (const FText* NameText = WeaponTypeName.Find(WeaponType))
+	switch (WeaponType)
 	{
-		return *NameText;
+		case EWeaponType::AssaultRifle:		return WeaponTypeDisplayNames.AssaultRifle;
+		case EWeaponType::Shotgun:			return WeaponTypeDisplayNames.Shotgun;
+		case EWeaponType::GrenadeLaunch:	return WeaponTypeDisplayNames.GrenadeLaunch;
+		case EWeaponType::PrecisionRifle:	return WeaponTypeDisplayNames.PrecisionRifle;
+		case EWeaponType::SniperRifle:		return WeaponTypeDisplayNames.SniperRifle;
 	}
 
 	return FText::FromName(NAME_None);
@@ -21,9 +34,11 @@ FText UDProjectSettings::GetWeaponTypeName(EWeaponType WeaponType) const
 
 FText UDProjectSettings::GetWeaponFireMode(EFireMode FireMode) const
 {
-	if (const FText* NameText = FireModeNameSettings.Find(FireMode))
+	switch (FireMode)
 	{
-		return *NameText;
+		case EFireMode::Accumulation:	return FireModeDisplayNames.Accumulation;
+		case EFireMode::FullyAutomatic: return FireModeDisplayNames.FullyAutomatic;
+		case EFireMode::SemiAutomatic:	return FireModeDisplayNames.SemiAutomatic;
 	}
 
 	return FText::FromName(NAME_None);
@@ -31,26 +46,28 @@ FText UDProjectSettings::GetWeaponFireMode(EFireMode FireMode) const
 
 FText UDProjectSettings::GetItemTypeName(TEnumAsByte<EItemType::Type> ItemType) const
 {
-	if (const FText* NameText = ItemNameSettings.Find(ItemType))
-	{
-		return *NameText;
-	}
-
-	return FText::FromName(NAME_None);
+	return GetItemTypeInfo(ItemType).ItemTypeDisplayName;
 }
 
 const FQualityInfo& UDProjectSettings::GetQualityInfo(EPropsQuality Quality) const
 {
-	const FQualityInfo* QualityInfo = QualitySettings.Find(Quality);
-	return QualityInfo ? *QualityInfo : InvalidQualityInfo;
+	switch (Quality)
+	{
+		case EPropsQuality::Normal:		return ItemQualities.Normal;
+		case EPropsQuality::Advanced:	return ItemQualities.Advanced;
+	    case EPropsQuality::Rare:		return ItemQualities.Rare;
+	    case EPropsQuality::Epic:		return ItemQualities.Epic;
+	    case EPropsQuality::Legendary:	return ItemQualities.Legendary;
+	}
+	
+	return InvalidQualityInfo;
 }
 
 const FSurfaceImpactEffect& UDProjectSettings::GetSurfaceImpactEffect(EPhysicalSurface SurfaceType) const
 {
 	if (USurfaceImpactAsset* SurfaceImpact = GetSurfaceImpactAsset())
 	{
-		const FSurfaceImpactEffect* EffectPtr = SurfaceImpact->SurfaceImpactEffects.Find(SurfaceType);
-		return EffectPtr ? *EffectPtr : InvalidImpactEffect;
+		return SurfaceImpact->GetImpactEffect(SurfaceType);
 	}
 	
 	return InvalidImpactEffect;
@@ -58,10 +75,10 @@ const FSurfaceImpactEffect& UDProjectSettings::GetSurfaceImpactEffect(EPhysicalS
 
 ULevelListAsset* UDProjectSettings::GetLevelListAsset() const
 {
-	UObject* ResolveObject = MainInterfaceWorld.ResolveObject();
+	UObject* ResolveObject = LevelAsset.ResolveObject();
 	if (ResolveObject == nullptr)
 	{
-		ResolveObject = MainInterfaceWorld.TryLoad();
+		ResolveObject = LevelAsset.TryLoad();
 	}
 	
 	return Cast<ULevelListAsset>(ResolveObject);
@@ -82,6 +99,11 @@ const FSoftObjectPath& UDProjectSettings::GetMainUILevel() const
 	return MainInterfaceWorld;
 }
 
+FString UDProjectSettings::GetMainUILevelAsString() const
+{
+	return MainInterfaceWorld.GetLongPackageName();
+}
+
 USurfaceImpactAsset* UDProjectSettings::GetSurfaceImpactAsset() const
 {
 	UObject* Object = SurfaceImpactAsset.ResolveObject();
@@ -100,6 +122,52 @@ UClass* UDProjectSettings::GetDamageComponentClass() const
 		ComponentClass = DamageWidgetClass.TryLoadClass<UDamageWidgetComponent>();
 	}
 	return ComponentClass;
+}
+
+float UDProjectSettings::GetPickupAmmunitionAmount() const
+{
+	return UKismetMathLibrary::RandomFloatInRange(PickupAmmunitionAmount.Min, PickupAmmunitionAmount.Max);
+}
+
+float UDProjectSettings::GetIdleSwitchingTime() const
+{
+	return CombatToIdleTime;
+}
+
+const FItemTypeSettingsInfo& UDProjectSettings::GetItemTypeInfo(EItemType::Type ItemType) const
+{
+	switch (ItemType)
+	{
+		case EItemType::Weapon:		return ItemTypeSettings.Weapon;
+		case EItemType::Module:		return ItemTypeSettings.Module;
+		case EItemType::Experience:	return ItemTypeSettings.Experience;
+		case EItemType::Material:	return ItemTypeSettings.Material;
+		case EItemType::Consumable:	return ItemTypeSettings.Consumable;
+		case EItemType::Ability:	return ItemTypeSettings.Ability;
+		default:					return InvalidItemTypeInfo;
+	}
+}
+
+TSubclassOf<ADDropReward> UDProjectSettings::GetRewardDropClass(EItemType::Type ItemType)
+{
+	return GetItemTypeInfo(ItemType).DropClass;
+}
+
+TSubclassOf<ADDropMagazine> UDProjectSettings::GetMagazineDropClass(EAmmoType AmmoType)
+{
+	switch (AmmoType)
+	{
+		case EAmmoType::Level1: return MagazineDropSettings.AmmoL1;
+		case EAmmoType::Level2:	return MagazineDropSettings.AmmoL2;
+		case EAmmoType::Level3: return MagazineDropSettings.AmmoL3;
+	}
+	
+	return nullptr;
+}
+
+UDataTable* UDProjectSettings::GetItemTable() const
+{
+	return Cast<UDataTable>(ItemsTable.TryLoad());
 }
 
 UDProjectSettings* UDProjectSettings::GetProjectSettings()
@@ -127,48 +195,23 @@ UClass* UDProjectSettings::GetSlaveAnimClass() const
 	return AnimClass;
 }
 
-const FItemDefinition& UDProjectSettings::GetItemDefinition(int32 ItemGuid) const
+const FItemDef& UDProjectSettings::GetItemDefinition(int32 ItemGuid) const
 {
-	if (UDataTable* DataTable = Cast<UDataTable>(ItemsTable.TryLoad()))
+	if (UDataTable* DataTable = GetItemTable())
 	{
 		if (uint8* Unchecked = DataTable->FindRowUnchecked(FName(FString::FromInt(ItemGuid))))
 		{
-			return *reinterpret_cast<FItemDefinition*>(Unchecked);
+			return *reinterpret_cast<FItemDef*>(Unchecked);
 		}
 	}
 
-	return FEmptyStruct::EmptyItemDefinition;
+	return FEmptyStruct::EmptyItemDef;
 }
 
 UClass* UDProjectSettings::GetItemClassFromGuid(int32 ItemGuid) const
 {
-	const FItemDefinition& Definition = GetItemDefinition(ItemGuid);
-	return LoadClass<UObject>(GetTransientPackage(), *Definition.ItemClass);
-}
-
-bool UDProjectSettings::GetAllItems(EItemType::Type ItemType, TArray<FItemDetails>& Items) const
-{
-	if (UDataTable* DataTable = Cast<UDataTable>(ItemsTable.TryLoad()))
-	{
-		for (TTuple<FName, uint8*> Row : DataTable->GetRowMap())
-		{
-			int32 ItemGuid = FCString::Atoi(*Row.Key.ToString());
-			EItemType::Type Type = GetItemType(ItemGuid);
-
-			if (Type == ItemType || ItemType == EItemType::All)
-			{
-				FItemDefinition* Def = reinterpret_cast<FItemDefinition*>(Row.Value);
-				FItemDetails Details;
-				Details.ItemClass = Def->ItemClass;
-				Details.ItemGuid = ItemGuid;
-				Items.Add(Details);
-			}
-		}
-
-		return true;
-	}
-
-	return false;
+	const FItemDef& Definition = GetItemDefinition(ItemGuid);
+	return Definition.ItemClass.TryLoadClass<UObject>();
 }
 
 TArray<FTalentInfo> UDProjectSettings::GetTalents(ETalentCategory Category, int64 Talents) const

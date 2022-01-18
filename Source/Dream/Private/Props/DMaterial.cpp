@@ -2,13 +2,3 @@
 
 
 #include "Props/DMaterial.h"
-
-const FPropsInfo& UDMaterial::GetPropsInfo() const
-{
-	return PropsInformation;
-}
-
-ERewardNotifyMode UDMaterial::GetRewardNotifyMode() const
-{
-	return ERewardNotifyMode::Secondary;
-}

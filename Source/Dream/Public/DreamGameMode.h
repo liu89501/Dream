@@ -7,8 +7,6 @@
 #include "GameFramework/GameModeBase.h"
 #include "DreamGameMode.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnClientRPC);
-
 UCLASS(minimalapi)
 class ADreamGameMode : public AGameModeBase
 {
@@ -41,10 +39,6 @@ public:
 	}
 
 	void ReSpawnCharacter(ACharacter* Character);
-
-	FOnClientRPC& GetClientRPCDelegate(const FGameplayTag& Tag);
-	
-	void BroadcastClientRPCDelegate(const FGameplayTag& Tag);
 
 public:
 
@@ -100,8 +94,4 @@ private:
 	void UpdateActivePlayers() const;
 
 	uint16 CurrentPlayers;
-
-	// 没有所有者的 同步Actor 如果需要接收客户端的RPC可以在这里添加一个委托
-	UPROPERTY()
-	TMap<FGameplayTag, FOnClientRPC> ClientRPC;
 };

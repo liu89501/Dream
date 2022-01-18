@@ -4,7 +4,6 @@
 
 #include "CoreMinimal.h"
 #include "DItemPreview.h"
-#include "DreamType.h"
 #include "PlayerDataInterfaceType.h"
 #include "ShootWeapon.h"
 
@@ -37,7 +36,7 @@ public:
 	void DestroyComponentBySocketName(const FName& SocketName);
 
 	UFUNCTION(BlueprintCallable, Category=CharacterPreview)
-	void UpdateCharacterMesh(UCharacterMesh* CharacterMesh);
+	void UpdateCharacterMesh(class UCharacterMesh* CharacterMesh);
 
 	UFUNCTION(BlueprintCallable, Category=CharacterPreview)
 	int32 GetActiveWeaponAnimID() const;

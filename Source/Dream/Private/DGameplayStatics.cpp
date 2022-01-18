@@ -153,6 +153,28 @@ FText UDGameplayStatics::ToTimeText(int32 TotalSeconds)
 	return FText::FromString(FString::Printf(TEXT("%02d:%02d"), Minute, Seconds));
 }
 
+
+void UDGameplayStatics::CopyMeshComponents(UObject* WorldContextObject, UMeshComponent* Source, UMeshComponent* Target)
+{
+	const TArray<USceneComponent*>& Components = Target->GetAttachChildren();
+
+	if (Components.Num() > 0)
+	{
+		for (USceneComponent* Component : Components)
+		{
+			if (UMeshComponent* MeshComponent = Cast<UMeshComponent>(Component))
+			{
+				UMeshComponent* NewMesh = NewObject<UMeshComponent>(WorldContextObject, MeshComponent->GetClass(), NAME_None, RF_NoFlags, MeshComponent);
+				
+				NewMesh->RegisterComponent();
+				NewMesh->AttachToComponent(Source, FAttachmentTransformRules::KeepRelativeTransform, MeshComponent->GetAttachSocketName());
+
+				CopyMeshComponents(WorldContextObject, NewMesh, MeshComponent);
+			}
+		}
+	}
+}
+
 void UDGameplayStatics::StopMatchmaking(FMatchmakingHandle& Handle)
 {
 	IOnlineSessionPtr SessionInterface = Online::GetSessionInterface();
@@ -293,7 +315,7 @@ bool UDGameplayStatics::SphereTraceAndSendEvent(
 }
 
 void ApplyGameplayEffect(UAbilitySystemComponent* SourceASC, AActor* TargetActor,
-	UClass* GEClass, float GELevel, bool bSpawnDamageWidgetData, EDDamageType DamageType)
+	UClass* GEClass, float GELevel, bool bIncludeHitResult, EDDamageType DamageType)
 {
 	UAbilitySystemComponent* TargetComponent = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(TargetActor);
 
@@ -311,7 +333,7 @@ void ApplyGameplayEffect(UAbilitySystemComponent* SourceASC, AActor* TargetActor
 
 		DreamEffectContext->SetDamageType(DamageType);
 		
-		if (bSpawnDamageWidgetData)
+		if (bIncludeHitResult)
 		{
 			FHitResult SimpleHit;
 			SimpleHit.ImpactPoint = TargetActor->GetActorLocation();
@@ -326,10 +348,18 @@ void ApplyGameplayEffect(UAbilitySystemComponent* SourceASC, AActor* TargetActor
 	SourceASC->ApplyGameplayEffectToTarget(GE, TargetComponent, GELevel, EffectContextHandle);
 }
 
-bool UDGameplayStatics::SphereTraceAndApplyEffect(
-	AActor* Source, FVector Origin, float Radius,
-	ETraceTypeQuery TraceChannel, TSubclassOf<UGameplayEffect> ApplyEffect,
-	bool bIgnoredSelf, bool bTraceComplex, bool bSpawnDamageWidgetData, EDDamageType EffectDamageType)
+bool UDGameplayStatics::SphereTraceAndApplyEffect
+(
+	AActor* Source,
+	FVector Origin,
+	float Radius,
+	ECollisionChannel TraceChannel,
+	TSubclassOf<UGameplayEffect> ApplyEffect,
+	bool bIgnoredSelf,
+	bool bTraceComplex,
+	bool bIncludeHitResult,
+	EDDamageType EffectDamageType
+)
 {
 	UAbilitySystemComponent* SourceASC = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(Source);
 	if (SourceASC == nullptr)
@@ -338,18 +368,23 @@ bool UDGameplayStatics::SphereTraceAndApplyEffect(
 		return false;
 	}
 
-	TArray<AActor*> IgnoredActors;
+	UWorld* World = Source->GetWorld();
+
+	TArray<FHitResult> Hits;
+
+	FCollisionQueryParams QueryParams;
+	QueryParams.bReturnPhysicalMaterial = true;
+	QueryParams.bTraceComplex = bTraceComplex;
 
 	if (bIgnoredSelf)
 	{
-		IgnoredActors.Add(Source);
+		QueryParams.AddIgnoredActor(Source);
 	}
 
-	TArray<FHitResult> Hits;
-	bool bBlocking = UKismetSystemLibrary::SphereTraceMulti(Source, Origin, Origin + 10.f,
-        Radius, TraceChannel, bTraceComplex, IgnoredActors, EDrawDebugTrace::None, Hits, true);
+	bool bHit = World->SweepMultiByChannel(Hits, Origin, Origin, FQuat::Identity,
+		TraceChannel, FCollisionShape::MakeSphere(Radius), QueryParams);
 
-	if (!bBlocking)
+	if (!bHit)
 	{
 		DREAM_NLOG(Verbose, TEXT("SphereTraceAndApplyEffect SphereTraceMulti Miss"));
 		return false;
@@ -359,14 +394,14 @@ bool UDGameplayStatics::SphereTraceAndApplyEffect(
 	{
 		AActor* TargetActor = (*It).GetActor();
 
-		ApplyGameplayEffect(SourceASC, TargetActor, ApplyEffect, 1, bSpawnDamageWidgetData, EffectDamageType);
+		ApplyGameplayEffect(SourceASC, TargetActor, ApplyEffect, 1, bIncludeHitResult, EffectDamageType);
 	}
 
 	return true;
 }
 
 bool UDGameplayStatics::ApplyGameplayEffectToAllActors(UGameplayAbility* Ability, const FGameplayEventData& EventData,
-                                                       TSubclassOf<UGameplayEffect> EffectClass, bool bSpawnDamageWidgetData,
+                                                       TSubclassOf<UGameplayEffect> EffectClass, bool bForceIncludeHitResult,
                                                        EDDamageType EffectDamageType)
 {
 	if (Ability == nullptr)
@@ -406,7 +441,7 @@ bool UDGameplayStatics::ApplyGameplayEffectToAllActors(UGameplayAbility* Ability
 			continue;
 		}
 
-		ApplyGameplayEffect(SourceComponent, TargetActor, EffectClass, Ability->GetAbilityLevel(), bSpawnDamageWidgetData, EffectDamageType);
+		ApplyGameplayEffect(SourceComponent, TargetActor, EffectClass, Ability->GetAbilityLevel(), bForceIncludeHitResult, EffectDamageType);
 	}
 
 	return true;
@@ -594,7 +629,7 @@ FName UDGameplayStatics::GetWeaponSocketName(bool bMasterSocket)
 	return bMasterSocket ? ProjectSettings->GetWepActiveSockName() : ProjectSettings->GetWepHolsterSockName();
 }
 
-const FItemDefinition& UDGameplayStatics::GetItem(int32 ItemGuid)
+const FItemDef& UDGameplayStatics::GetItemDef(int32 ItemGuid)
 {
 	return UDProjectSettings::GetProjectSettings()->GetItemDefinition(ItemGuid);
 }
@@ -606,24 +641,6 @@ void UDGameplayStatics::ReturnToHomeWorld(UObject* WorldContextObject)
 		IDreamLoadingScreenModule::Get().StartInGameLoadingScreen();
 		const FSoftObjectPath& MainUILevel = UDProjectSettings::GetProjectSettings()->GetMainUILevel();
 		GEngine->SetClientTravel(World, *MainUILevel.GetLongPackageName(), ETravelType::TRAVEL_Absolute);
-	}
-}
-
-void UDGameplayStatics::BindClientRPCDelegate(UObject* WorldContextObject, FGameplayTag DelegateTag, FOnEmptyArgsDelegate Delegate)
-{
-	if (ADreamGameMode* DreamGameMode = GetGameMode<ADreamGameMode>(WorldContextObject))
-	{
-		FOnClientRPC& RPCDelegate = DreamGameMode->GetClientRPCDelegate(DelegateTag);
-		RPCDelegate.Add(Delegate);
-	}
-}
-
-void UDGameplayStatics::RemoveClientRPCDelegate(UObject* WorldContextObject, FGameplayTag DelegateTag, FOnEmptyArgsDelegate Delegate)
-{
-	if (ADreamGameMode* DreamGameMode = GetGameMode<ADreamGameMode>(WorldContextObject))
-	{
-		FOnClientRPC& RPCDelegate = DreamGameMode->GetClientRPCDelegate(DelegateTag);
-		RPCDelegate.Remove(Delegate);
 	}
 }
 
@@ -663,17 +680,4 @@ void UDGameplayStatics::OverrideSystemUserVariableSplineComponent(UNiagaraCompon
 void UDGameplayStatics::CloseGame()
 {
 	FPlatformMisc::RequestExit(false);
-}
-
-const FPropsInfo& UDGameplayStatics::GetPropsInfoByClass(UClass* ItemClass)
-{
-	if (ItemClass)
-	{
-		if (IPropsInterface* PropsInterface = Cast<IPropsInterface>(ItemClass->GetDefaultObject()))
-		{
-			return PropsInterface->GetPropsInfo();
-		}
-	}
-
-	return FEmptyStruct::EmptyPropsInfo;
 }

@@ -3,13 +3,12 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DPropsType.h"
 #include "UObject/Interface.h"
-#include "PropsInterface.generated.h"
+#include "PreviewInterface.generated.h"
 
 // This class does not need to be modified.
 UINTERFACE(meta=(CannotImplementInterfaceInBlueprint))
-class UPropsInterface : public UInterface
+class UPreviewInterface : public UInterface
 {
 	GENERATED_BODY()
 };
@@ -17,15 +16,11 @@ class UPropsInterface : public UInterface
 /**
  * 
  */
-class DREAM_API IPropsInterface
+class DREAM_API IPreviewInterface
 {
 	GENERATED_BODY()
 
 public:
-
-	virtual const FPropsInfo& GetPropsInfo() const = 0;
-
-	virtual ERewardNotifyMode GetRewardNotifyMode() const = 0;
 
 	virtual FTransform GetPreviewRelativeTransform() const;
 };

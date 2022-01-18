@@ -88,12 +88,15 @@ struct FPropsInfo
 };
 
 USTRUCT()
-struct FItemDefinition : public FTableRowBase
+struct FItemDef : public FTableRowBase
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadWrite)
-	FString ItemClass;
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FSoftClassPath ItemClass;
+
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
+	FPropsInfo ItemBaseInfo;
 };
 
 USTRUCT(BlueprintType)
@@ -101,10 +104,9 @@ struct FItemGuidHandle
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	int32 ItemGuid;
 };
-
 
 USTRUCT(BlueprintType)
 struct FAttributeRandomItem_Float
@@ -202,13 +204,13 @@ struct FEquipmentAttributes
 	float Defense;
 
 	/**
-	* 伤害减免 (暂时未使用)
+	* 伤害减免 [暂未使用]
 	*/
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
 	float DamageReduction;
 
 	/**
-	* 穿透
+	* 穿透 [暂未使用]
 	*/
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
 	float Penetration;
@@ -216,7 +218,7 @@ struct FEquipmentAttributes
 	/**
 	* 装备Perk属性
 	*/
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Attribute)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Attribute)
 	TArray<int32> Perks;
 
 	friend FArchive& operator<<(FArchive& Ar, FEquipmentAttributes& Attr);
@@ -227,5 +229,5 @@ namespace FEmptyStruct
 	extern const FPropsInfo EmptyPropsInfo;
 	extern const FEquipmentAttributes EmptyAttributes;
 	extern const FSoftClassPath EmptySoftClassPath;
-	extern const FItemDefinition EmptyItemDefinition;
+	extern const FItemDef EmptyItemDef;
 }

@@ -10,7 +10,7 @@
 /**
  * 
  */
-UCLASS()
+UCLASS(Abstract)
 class DREAM_API UDamageWidgetComponent : public UScalableWidgetComponent
 {
 	GENERATED_BODY()

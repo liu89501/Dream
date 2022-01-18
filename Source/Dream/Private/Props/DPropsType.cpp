@@ -5,7 +5,7 @@
 const FPropsInfo FEmptyStruct::EmptyPropsInfo;
 const FEquipmentAttributes FEmptyStruct::EmptyAttributes;
 const FSoftClassPath FEmptyStruct::EmptySoftClassPath;
-const FItemDefinition FEmptyStruct::EmptyItemDefinition;
+const FItemDef FEmptyStruct::EmptyItemDef;
 
 FEquipmentAttributes& FEquipmentAttributes::operator+=(const FEquipmentAttributes& RHS)
 {

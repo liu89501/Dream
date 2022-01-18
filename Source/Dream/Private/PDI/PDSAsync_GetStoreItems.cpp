@@ -2,6 +2,7 @@
 #include "PDI/PDSAsync_GetStoreItems.h"
 
 #include "DGameplayStatics.h"
+#include "DreamWidgetType.h"
 #include "PDI/PlayerDataInterface.h"
 #include "PDI/PlayerDataInterfaceStatic.h"
 
@@ -22,12 +23,25 @@ void UPDSAsync_GetStoreInformation::Activate()
 void UPDSAsync_GetStoreInformation::OnLoadCompleted(const FStoreInformation& StoreInfo, bool bSuccess)
 {
 	FPDIStatic::Get()->RemoveOnGetStoreItems(Handle);
+
+	FWStoreInformation StoreInformation;
+	
 	if (bSuccess)
 	{
-		OnSuccess.Broadcast(StoreInfo);
+		StoreInformation.TotalPage = StoreInfo.TotalPage;
+		StoreInformation.TotalItems = StoreInfo.TotalItems;
+		
+		for (const FStoreItem& Item : StoreInfo.Items)
+		{
+			UWStoreItem* UwStoreItem = NewObject<UWStoreItem>(this);
+			UwStoreItem->Initialize(Item);
+			StoreInformation.Items.Add(UwStoreItem);
+		}
+		
+		OnSuccess.Broadcast(StoreInformation);
 	}
 	else
 	{
-		OnFailure.Broadcast(StoreInfo);
+		OnFailure.Broadcast(StoreInformation);
 	}
 }

@@ -6,7 +6,6 @@
 #include "DEquipmentPerkPool.h"
 #include "DGameplayStatics.h"
 #include "DreamGameInstance.h"
-#include "DreamWidgetStatics.h"
 
 #define LOCTEXT_NAMESPACE "PlayerDataType"
 
@@ -27,22 +26,6 @@
 		
 	}
 }*/
-
-void FQuestActionContainer::SerializeData(FArchive& Ar)
-{
-	FQuestActionBase::SerializeData(Ar);
-	
-	if (Ar.IsSaving())
-	{
-		int32 ActionNum = Actions.Num();
-		Ar << ActionNum;
-
-		for (TSharedPtr<FQuestActionBase> Action : Actions)
-		{
-			Action->SerializeData(Ar);
-		}
-	}
-}
 
 void FQuestAction_KilledTarget::SerializeData(FArchive& Ar)
 {
@@ -109,9 +92,6 @@ UDQuestCondition* UDQuestCondition::Decode(FArchive& Ar)
 	case ETaskCondGUID::EVENT:
 		Condition = NewObject<UDQuestCondition_Event>();
 		break;
-	case ETaskCondGUID::CONTAINER:
-		Condition = NewObject<UDQuestCondition_Container>();
-		break;
 	default:
 		Condition = nullptr;
 	}
@@ -137,73 +117,6 @@ void UDQuestCondition_Count::SerializeData(FArchive& Ar)
 	Ar << CurrentValue;
 	Ar << TargetValue;
 }
-
-float UDQuestCondition_Container::GetQuestProgressPercent() const
-{
-	int32 Num = Conditions.Num();
-	if (Num == 0)
-	{
-		return 0.f;
-	}
-
-	float PercentAvg = 0.f;
-	for (UDQuestCondition* Condition : Conditions)
-	{
-		check(Condition);
-		PercentAvg += Condition->GetQuestProgressPercent();
-	}
-
-	return PercentAvg / Num;
-}
-
-void UDQuestCondition_Container::SerializeData(FArchive& Ar)
-{
-	Super::SerializeData(Ar);
-
-	int32 ConditionNum = Conditions.Num();
-	Ar << ConditionNum;
-	
-	if (Ar.IsLoading())
-	{
-		Conditions.SetNumZeroed(ConditionNum);
-		for (int32 N = 0; N < ConditionNum; N++)
-		{
-			Conditions[N] = UDQuestCondition::Decode(Ar);
-		}
-	}
-	else
-	{
-		for (int32 N = 0; N < ConditionNum; N++)
-		{
-			Conditions[N]->SerializeData(Ar);
-		}
-	}
-}
-
-#if WITH_EDITOR
-
-void UDQuestCondition_Container::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
-{
-	Super::PostEditChangeProperty(PropertyChangedEvent);
-
-	if (PropertyChangedEvent.Property == nullptr)
-	{
-		return;
-	}
-
-	if (PropertyChangedEvent.Property->GetFName() == GET_MEMBER_NAME_CHECKED(UDQuestCondition_Container, Conditions))
-	{
-		for (TArray<UDQuestCondition*>::TIterator Iterator = Conditions.CreateIterator(); Iterator; ++Iterator)
-		{
-			UDQuestCondition* Current = *Iterator;
-			if (Current && Current->IsA<UDQuestCondition_Container>())
-			{
-				Iterator.RemoveCurrent();
-			}
-		}
-	}
-}
-#endif
 
 FText UDQuestCondition_KillTarget::NativeGetConditionDesc() const
 {
@@ -236,34 +149,43 @@ void UDQuestCondition_Event::SerializeData(FArchive& Ar)
 	Ar << EventName;
 }
 
-void UItemDataEquipment::SerializeItemData(FArchive& Ar)
+FArchive& operator<<(FArchive& Ar, FQuestConditionHandle& Other)
 {
-	Super::SerializeItemData(Ar);
-
-	Ar << Attributes;
-}
-
-UItemDataEquipment* UItemDataEquipment_Random::CastToEquipment()
-{
-	if (AttrPool)
+	int32 ConditionNum = Other.Conditions.Num();
+	Ar << ConditionNum;
+	
+	if (Ar.IsLoading())
 	{
-		UItemDataEquipment* Equipment = NewObject<UItemDataEquipment>();
-		AttrPool->GenerateAttributes(Equipment->Attributes);
-
-		return Equipment;
+		Other.Conditions.SetNumZeroed(ConditionNum);
+		for (int32 N = 0; N < ConditionNum; N++)
+		{
+			Other.Conditions[N] = UDQuestCondition::Decode(Ar);
+		}
+	}
+	else
+	{
+		for (int32 N = 0; N < ConditionNum; N++)
+		{
+			Other.Conditions[N]->SerializeData(Ar);
+		}
 	}
 	
-	return nullptr;
+	return Ar;
 }
 
-void UItemDataNumericalValue::SerializeItemData(FArchive& Ar)
+FArchive& operator<<(FArchive& Ar, FTaskInformation& A)
 {
-	Super::SerializeItemData(Ar);
-
-	Ar << Value;
+	Ar << A.TaskId;
+	Ar << A.TaskGroupId;
+	Ar << A.TaskDescription;
+	Ar << A.TaskMark;
+	Ar << A.bTracking;
+	Ar << A.Condition;
+	Ar << A.CompletedReward;
+	return Ar;
 }
 
-void UItemData::SerializeItemData(FArchive& Ar)
+void FItem::Serialize(FArchive& Ar)
 {
 	if (Ar.IsSaving())
 	{
@@ -271,63 +193,73 @@ void UItemData::SerializeItemData(FArchive& Ar)
 	}
 }
 
-UItemData* UItemData::Decode(FArchive& Ar)
+void FItemEquipment::Serialize(FArchive& Ar)
 {
-	check(Ar.IsLoading());
+	FItem::Serialize(Ar);
 
-	int32 Guid;
-	Ar << Guid;
+	Ar << Attributes;
+}
 
-	int32 ItemType = ::GetItemType(Guid);
+void FItemSimple::Serialize(FArchive& Ar)
+{
+	FItem::Serialize(Ar);
 
-	UItemData* ItemData;
-	
+	Ar << ItemNum;
+}
+
+TSharedPtr<FItem> FItemHelper::Decode(FArchive& Ar)
+{
+	int32 ItemGuid = 0;
+	Ar << ItemGuid;
+
+	TSharedPtr<FItem> Item;
+
+	EItemType::Type ItemType = GetItemType(ItemGuid);
+
 	switch (ItemType)
 	{
-		case EItemType::Weapon:
-		case EItemType::Module:
-			ItemData = NewObject<UItemDataEquipment>();
-			break;
-		case EItemType::Experience:
-		case EItemType::Material:
-			ItemData = NewObject<UItemDataNumericalValue>();
-			break;
-		default:
-			ItemData = nullptr;
+	case EItemType::Weapon:
+    case EItemType::Module:
+		
+        Item = MakeShared<FItemEquipment>(ItemGuid);
+		break;
+		
+	default:
+		Item = MakeShared<FItemSimple>(ItemGuid);
 	}
 
-	if (ItemData != nullptr)
+	Item->Serialize(Ar);
+
+	return Item;
+}
+
+TSharedPtr<FItem> UItemDataEquipment::MakeItemStruct()
+{
+	return MakeShared<FItemEquipment>(GuidHandle.ItemGuid, Attributes);
+}
+
+TSharedPtr<FItem> UItemDataEquipment_Random::MakeItemStruct()
+{
+	if (AttrPool)
 	{
-		ItemData->ItemGuid = Guid;
-		ItemData->SerializeItemData(Ar);
+		FEquipmentAttributes Attributes;
+		AttrPool->GenerateAttributes(Attributes);
+		return MakeShared<FItemEquipment>(GuidHandle.ItemGuid, Attributes);
 	}
-
-	return ItemData;
+	
+	return nullptr;
 }
 
-UClass* UItemData::GetItemClass() const
+TSharedPtr<FItem> UItemDataNumericalValue::MakeItemStruct()
 {
-	return UDreamWidgetStatics::GetItemClassByGuid(ItemGuid);
-}
-
-const FPropsInfo& UItemData::GetPropsInfo() const
-{
-	return UDreamWidgetStatics::GetPropsInfoByItemGuid(ItemGuid);
-}
-
-TEnumAsByte<EItemType::Type> UItemData::GetItemType() const
-{
-	return ::GetItemType(ItemGuid);
-}
-
-UItemData* FItemDataHandle::Get() const
-{
-	return ItemData;
+	return MakeShared<FItemSimple>(GuidHandle.ItemGuid, Value);
 }
 
 FString FSearchServerResult::GetConnectURL(int32 PlayerID) const
 {
 	return FString::Printf(TEXT("%s?PlayerId=%d"), *ServerAddress, PlayerID);
 }
+
+FEmptyParam FEmptyParam::SINGLETON = FEmptyParam();
 
 #undef LOCTEXT_NAMESPACE

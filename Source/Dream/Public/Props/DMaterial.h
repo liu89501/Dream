@@ -3,23 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "PropsInterface.h"
 #include "DMaterial.generated.h"
 
 /**
  * 
  */
 UCLASS(Blueprintable)
-class DREAM_API UDMaterial : public UObject, public IPropsInterface
+class DREAM_API UDMaterial : public UObject
 {
 	GENERATED_BODY()
 
-public:
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly)
-	FPropsInfo PropsInformation;
-
-	virtual const FPropsInfo& GetPropsInfo() const override;
-	
-	virtual ERewardNotifyMode GetRewardNotifyMode() const override;
 };

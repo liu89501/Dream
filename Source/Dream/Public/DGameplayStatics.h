@@ -5,7 +5,6 @@
 #include "CoreMinimal.h"
 
 #include "DreamGameplayType.h"
-#include "DreamType.h"
 #include "GameplayEffectTypes.h"
 #include "GameplayAbilityTypes.h"
 #include "HoldState.h"
@@ -95,11 +94,11 @@ public:
 		AActor* Source,
 		FVector Origin,
 		float Radius,
-		ETraceTypeQuery TraceChannel,
+		ECollisionChannel TraceChannel,
 		TSubclassOf<UGameplayEffect> ApplyEffect,
 		bool bIgnoredSelf = true,
 		bool bTraceComplex = false,
-		bool bSpawnDamageWidgetData = false,
+		bool bForceIncludeHitResult = false,
 		EDDamageType EffectDamageType = EDDamageType::Other);
 	
 
@@ -108,7 +107,7 @@ public:
         class UGameplayAbility* Ability,
         const FGameplayEventData& EventData,
         TSubclassOf<class UGameplayEffect> EffectClass,
-        bool bSpawnDamageWidgetData,
+        bool bForceIncludeHitResult,
         EDDamageType EffectDamageType);
 
 
@@ -151,7 +150,7 @@ public:
 	static void CalculateOrientation(const FVector& Velocity, const FRotator& BaseRotation, float& Angle, int32& Orientation);
 
 	
-	static void SpawnWeaponTrailParticles(UObject* WorldContextObject, const FWeaponTrailVFX& TrailVfx,
+	static void SpawnWeaponTrailParticles(UObject* WorldContextObject, const struct FWeaponTrailVFX& TrailVfx,
 	                                      const FVector& StartLocation, const FVector& EndLocation);
 	
 
@@ -171,23 +170,18 @@ public:
 	UFUNCTION(BlueprintCallable, Meta = (WorldContext="WorldContextObject"), Category = "DreamStatics|Misc")
     static void ReturnToHomeWorld(UObject* WorldContextObject);
 
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Meta = (WorldContext="WorldContextObject"), Category = "DreamStatics|Misc")
-	static void BindClientRPCDelegate(UObject* WorldContextObject, FGameplayTag DelegateTag, FOnEmptyArgsDelegate Delegate);
-	
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Meta = (WorldContext="WorldContextObject"), Category = "DreamStatics|Misc")
-	static void RemoveClientRPCDelegate(UObject* WorldContextObject, FGameplayTag DelegateTag, FOnEmptyArgsDelegate Delegate);
-
 	/* DATE 转换为 文本 */
 	UFUNCTION(BlueprintPure, Category = "DreamStatics|Misc")
     static FText ToTimeText(int32 TotalSeconds);
 
-	UFUNCTION(BlueprintPure, Category = "DreamStatics|Misc")
-    static const FPropsInfo& GetPropsInfoByClass(UClass* ItemClass);
+	/* 将Target的所有子组件复制到Source中 */
+	UFUNCTION(BlueprintCallable, Meta = (WorldContext="WorldContextObject"), Category = "DreamStatics|Misc")
+    static void CopyMeshComponents(UObject* WorldContextObject, UMeshComponent* Source, UMeshComponent* Target);
 	
 	UFUNCTION(BlueprintPure, Category = "DreamStatics|Settings")
     static FName GetWeaponSocketName(bool bMasterSocket);
 	
 	UFUNCTION(BlueprintPure, Category = "DreamStatics|Settings")
-	static const FItemDefinition& GetItem(int32 ItemGuid);
+	static const FItemDef& GetItemDef(int32 ItemGuid);
 	
 };

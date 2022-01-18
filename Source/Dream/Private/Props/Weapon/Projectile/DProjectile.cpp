@@ -2,6 +2,7 @@
 
 #include "DProjectile.h"
 #include "DCharacterPlayer.h"
+#include "DPlayerController.h"
 #include "DProjectileComponent.h"
 #include "DProjectSettings.h"
 #include "DreamGameInstance.h"

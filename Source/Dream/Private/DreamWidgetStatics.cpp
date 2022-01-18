@@ -1,7 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "DreamWidgetStatics.h"
-#include "DExperience.h"
 #include "DGameplayStatics.h"
 #include "DModuleBase.h"
 #include "DPlayerController.h"
@@ -31,14 +30,19 @@ struct FPlayerStatisticsSort
 
 FTimerHandle UDreamWidgetStatics::DialogHandle;
 
-UItemViewData* UDreamWidgetStatics::EquipmentToViewData(UObject* WorldContextObject, int32 ItemGuid, int64 EquipmentId, const FEquipmentAttributes& Attr)
+UWItemEquipment* UDreamWidgetStatics::MakeWEquipmentFromPW(UObject* WorldContextObject, const FPlayerWeapon& PW)
 {
-	UItemViewData* ViewData = NewObject<UItemViewData>(WorldContextObject);
-	UItemDataEquipment* ItemDataWeapon = NewObject<UItemDataEquipment>(WorldContextObject);
-	ItemDataWeapon->Attributes = Attr;
-	ItemDataWeapon->ItemGuid = ItemGuid;
-	ViewData->ItemId = EquipmentId;
-	ViewData->ItemData = ItemDataWeapon;
+	UWItemEquipment* ViewData = NewObject<UWItemEquipment>(WorldContextObject);
+	ViewData->EquipmentId = PW.WeaponId;
+	ViewData->SetItemEquipment(MakeShared<FItemEquipment>(PW.ItemGuid, PW.Attributes));
+	return ViewData;
+}
+
+UWItemEquipment* UDreamWidgetStatics::MakeWEquipmentFromPM(UObject* WorldContextObject, const FPlayerModule& PM)
+{
+	UWItemEquipment* ViewData = NewObject<UWItemEquipment>(WorldContextObject);
+	ViewData->EquipmentId = PM.ModuleId;
+	ViewData->SetItemEquipment(MakeShared<FItemEquipment>(PM.ItemGuid, PM.Attributes));
 	return ViewData;
 }
 
@@ -160,26 +164,10 @@ void UDreamWidgetStatics::DismissDialog(UObject* WorldContextObject)
 	}
 }
 
-const FPropsInfo& UDreamWidgetStatics::GetPropsInfoByItemSoftClass(const FString& ItemClass)
-{
-	UClass* Class = LoadClass<UObject>(nullptr, *ItemClass);
-	return UDGameplayStatics::GetPropsInfoByClass(Class);
-}
-
 const FPropsInfo& UDreamWidgetStatics::GetPropsInfoByItemGuid(int32 ItemGuid)
 {
-	switch (GetItemType(ItemGuid))
-	{
-	case EItemType::Experience:
-		{
-			return UDGameplayStatics::GetPropsInfoByClass(UDExperience::StaticClass());
-		}
-	default:
-		{
-			UClass* Class = UDProjectSettings::GetProjectSettings()->GetItemClassFromGuid(ItemGuid);
-			return UDGameplayStatics::GetPropsInfoByClass(Class);
-		}
-	}
+	const FItemDef& ItemDef = UDProjectSettings::GetProjectSettings()->GetItemDefinition(ItemGuid);
+	return ItemDef.ItemBaseInfo;
 }
 
 UClass* UDreamWidgetStatics::GetItemClassByGuid(int32 ItemGuid)
@@ -214,13 +202,6 @@ FWeaponExtraData UDreamWidgetStatics::GetWeaponExtraData(UClass* WeaponClass)
 	}
 	
 	return Data;
-}
-
-FItemListHandle UDreamWidgetStatics::WrapItem(UItemData* ItemData)
-{
-	FItemListHandle Handle;
-	Handle.Items.Add(ItemData);
-	return Handle;
 }
 
 TArray<FPlayerStatistics> UDreamWidgetStatics::GetPlayerStatistics(UObject* WorldContextObject)
@@ -291,6 +272,21 @@ void UDreamWidgetStatics::HiddenSubtitle(UObject* WorldContextObject)
 FText UDreamWidgetStatics::GetWeaponTypeName(EWeaponType WeaponType)
 {
 	return UDProjectSettings::GetProjectSettings()->GetWeaponTypeName(WeaponType);
+}
+
+const FPropsInfo& UDreamWidgetStatics::GetPropsInfo(const FItemHandle& ItemHandle)
+{
+	if (ItemHandle.IsValid())
+	{
+		return GetPropsInfoByItemGuid(ItemHandle->GetItemGuid());
+	}
+
+	return FEmptyStruct::EmptyPropsInfo;
+}
+
+const FQualityInfo& UDreamWidgetStatics::GetQualityInfo(EPropsQuality Quality)
+{
+	return UDProjectSettings::GetProjectSettings()->GetQualityInfo(Quality);
 }
 
 template <class Class>

@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "PropsInterface.h"
+#include "DPropsType.h"
 #include "GameFramework/Actor.h"
 #include "GearBase.generated.h"
 
@@ -18,7 +18,7 @@ enum class EGearType : uint8
 };
 
 UCLASS()
-class DREAM_API AGearBase : public AActor, public IPropsInterface
+class DREAM_API AGearBase : public AActor
 {
 	GENERATED_BODY()
 	
@@ -36,8 +36,6 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gear|Settings")
 	EGearType Type;
 
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gear|Settings")
-	FPropsInfo PropsInfo;
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Gear|Settings")
 	FEquipmentAttributes Attributes;
 
@@ -58,16 +56,6 @@ public:
 	float Penetration;
 
 public:
-
-	virtual const FPropsInfo& GetPropsInfo() const override
-	{
-		return PropsInfo;
-	}
-
-	virtual ERewardNotifyMode GetRewardNotifyMode() const override
-	{
-		return ERewardNotifyMode::Primary;
-	}
 
 	virtual void Equipped(UPrimitiveComponent* TargetComponent);
 

@@ -15,8 +15,12 @@ DECLARE_MULTICAST_DELEGATE_TwoParams(FOnRegisterServer, const FString& /*ServerI
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnGetStoreItems, const FStoreInformation&, bool);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnGetTalents, int64, bool);
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnGetTasks, const FSearchTaskResult&, bool);
+
+
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnUpdatedTasks, const TArray<FTaskInProgressInfo>&);
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnReceiveRewards, const FItemListHandle&);
+
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnMaterialsChange, const TArray<FPlayerMaterial>&);
 
 DECLARE_MULTICAST_DELEGATE_TwoParams(FOnSearchServer, const FSearchServerResult&, bool);
 //DECLARE_MULTICAST_DELEGATE_OneParam(FOnServerReady, const FString& /*ServerAddr*/);
@@ -150,7 +154,7 @@ public:
 	virtual void Initialize() = 0;
 
 	// Server
-	virtual void AddPlayerRewards(const FItemListHandle& Rewards) = 0;
+	virtual void AddPlayerRewards(const FItemListParam& Rewards) = 0;
 
 	// Local
 	virtual void EquipWeapon(const FEquipWeaponParam& Param) = 0;
@@ -158,22 +162,24 @@ public:
 	// Local
 	virtual void EquipModule(const FEquipModuleParam& Param) = 0;
 
+	virtual void DecomposeItem(const FDecomposeParam& Param) = 0;
+
 	// Local
-	virtual void LearningTalents(int64 LearnedTalents) = 0;
+	virtual void LearningTalents(const int64& LearnedTalents) = 0;
 
 	virtual void GetStoreItems(const FSearchStoreItemsParam& Param) = 0;
 
 	// Local
-	virtual void PayItem(int64 ItemId) = 0;
+	virtual void PayItem(const int64& ItemId) = 0;
 
-	virtual void GetPlayerInfo(EGetEquipmentCondition Condition) = 0;
+	virtual void GetPlayerInfo(const int32& Condition) = 0;
 	
-	virtual void GetTalents(ETalentCategory TalentCategory) = 0;
+	virtual void GetTalents(const ETalentCategory& TalentCategory) = 0;
 
 	virtual void GetTasks(const FSearchTaskParam& Param) = 0;
 
 	// Local
-	virtual void DeliverTask(int64 TaskId) = 0;
+	virtual void DeliverTask(const int64& TaskId) = 0;
 	virtual void AcceptTask(const FAcceptTaskParam& Param) = 0;
 	virtual void ModifyTrackingState(const FModifyTrackingParam& Param) = 0;
 	virtual void UpdateTaskState(const FQuestActionHandle& Handle) = 0;
@@ -189,17 +195,15 @@ public:
 	// Local
 	virtual void Login() = 0;
 	virtual void Logout() = 0;
-
+	
 	// Local Only
 	virtual int32 GetClientPlayerID() = 0;
 
 	virtual TSharedPtr<FInternetAddr> GetBackendServerAddr() = 0;
 
 	virtual const FPlayerProperties& GetCachedProperties() const = 0;
-	
-	virtual int32 GetCacheItemCount(int32 ItemGuid) = 0;
-	
-	virtual void IncreaseItemCount(int32 ItemGuid, int32 Delta) = 0;
+
+	virtual const FMaterialsHandle& GetMaterialsHandle() const = 0;
 
 	virtual FPlayerDataDelegate& GetPlayerDataDelegate() = 0;
 
@@ -229,4 +233,6 @@ public:
 	DEFINE_PDI_DELEGATE_OneParam(FOnReceiveRewards, OnReceiveRewards, const FItemListHandle&);
 
 	DEFINE_PDI_DELEGATE_TwoParams(FOnSearchServer, OnSearchServer, const FSearchServerResult&, bool);
+
+	DEFINE_PDI_DELEGATE_OneParam(FOnCompleted, OnDecomposeItem, bool);
 };

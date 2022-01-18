@@ -13,15 +13,21 @@ class UPDSAsync_GetPlayerInfo : public UBlueprintAsyncActionBase
 	DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FAsyncTaskCompoleteDelegate, const FPlayerInfo&, PlayerInfo);
 
 	UPROPERTY(BlueprintAssignable)
-	FAsyncTaskCompoleteDelegate	OnSuccess;
+	FAsyncTaskCompoleteDelegate OnSuccess;
 
 	UPROPERTY(BlueprintAssignable)
-	FAsyncTaskCompoleteDelegate	OnFailure;
+	FAsyncTaskCompoleteDelegate OnFailure;
 
 public:
 
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category=PDI)
-    static UPDSAsync_GetPlayerInfo* PDI_GetPlayerInformation(UObject* WorldContextObject, EGetEquipmentCondition Condition);
+	static UPDSAsync_GetPlayerInfo* PDI_GetPlayerInformation(UObject* WorldContextObject,
+																bool bWeapon,
+																bool bWeaponEquipped,
+																bool bModule,
+																bool bModuleEquipped,
+																bool bMaterials,
+																bool bSkin);
 
 	void OnLoadCompleted(const FPlayerInfo& PlayerInfo, bool bSuccess);
 
@@ -29,6 +35,6 @@ public:
 
 private:
 
-	EGetEquipmentCondition T_Condition;
+	int32 T_Condition;
 	FDelegateHandle Handle;
 };

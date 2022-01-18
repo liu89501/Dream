@@ -58,15 +58,16 @@ struct FBaseAttributes
 	UPROPERTY(EditAnywhere, Category = Attribute)
 	float Defense;
 
-	FBaseAttributes& operator*(const float& Scale)
+	FBaseAttributes operator*(const float& Scale)
 	{
-		MaxHealth = MaxHealth * (Scale + 1);
-		AttackPower = AttackPower * (Scale + 1);
-		CriticalDamage = CriticalDamage * (Scale + 1);
-		CriticalRate = CriticalRate * (Scale + 1);
-		HealthSteal = HealthSteal * (Scale + 1);
-		Defense = Defense * (Scale + 1);
-		return *this;
+		FBaseAttributes Temp;
+		Temp.MaxHealth *= Scale + 1;
+		Temp.AttackPower *= Scale + 1;
+		Temp.CriticalDamage *= Scale + 1;
+		Temp.CriticalRate *= Scale + 1;
+		Temp.HealthSteal *= Scale + 1;
+		Temp.Defense *= Scale + 1;
+		return Temp;
 	}
 };
 

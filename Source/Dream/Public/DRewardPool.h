@@ -7,6 +7,7 @@
 #include "DRewardPool.generated.h"
 
 class UItemData;
+struct FItemListHandle;
 
 UENUM()
 enum class EProbabilityStrategy : uint8
@@ -25,6 +26,12 @@ struct FRewardItem
 
 	UPROPERTY(EditAnywhere, Instanced, Category=Reward)
 	UItemData* Reward;
+
+	/**
+	 * 这个奖励是否需要掉落在场景中由玩家拾取
+	 */
+	UPROPERTY(EditAnywhere, Category=Reward)
+	bool bDrop;
 };
 
 USTRUCT(BlueprintType)
@@ -52,9 +59,5 @@ public:
 	UPROPERTY(EditAnywhere)
 	TArray<FRewardGroup> RewardGroup;
 
-	void GenerateRewards(TArray<UItemData*>& Rewards);
-
-private:
-
-	UItemData* HandleItemDetails(UItemData* SelectedItem) const;
+	void GenerateRewards(FItemListHandle& DropRewards, FItemListHandle& DirectRewards);
 };

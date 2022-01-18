@@ -52,16 +52,16 @@ public:
 			TSharedPtr<TArray<uint8>, ESPMode::ThreadSafe> Data;
 			SendQueue.Dequeue(Data);
 			
-#if !UE_BUILD_SHIPPING
+#if WITH_EDITOR
 
-			FString BytesStr;
+			/*FString BytesStr;
 
 			for (uint8 Byte : *Data)
 			{
 				BytesStr.Appendf(TEXT("%d, "), Byte);
 			}
 
-			UE_LOG(LogDream, Verbose, TEXT("Packet: %s"), *BytesStr);
+			UE_LOG(LogDream, Verbose, TEXT("Send Packet: %s"), *BytesStr);*/
 			
 #endif
 

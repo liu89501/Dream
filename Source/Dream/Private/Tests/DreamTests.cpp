@@ -1,9 +1,6 @@
 ﻿
 #include "CoreMinimal.h"
-
-
 #include "DEnemyShooter.h"
-#include "DMoney.h"
 #include "AssetRegistry/IAssetRegistry.h"
 #include "Misc/AutomationTest.h"
 #include "DreamType.h"
@@ -19,55 +16,8 @@
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FDreamTests, "Dream.Default", EAutomationTestFlags::EditorContext | EAutomationTestFlags::SmokeFilter)
 
-template<typename Type>
-void TestSerialize(Type Parameter)
-{
-	TArray<uint8> Data;
-	FPacketArchiveWriter Writer(Data);
-	int32 Mark = 20;
-	Writer << Mark;
-	Writer << Parameter;
-	TArray<uint8> Packet;
-	int32 DataLength = Data.Num();
-	Packet.Append((uint8*)&DataLength, sizeof(int32));
-	Packet.Append(Data);
-	
-	FString Bytes;
-	for (uint8 b : Packet)
-	{
-		Bytes.AppendInt(b);
-		Bytes.Append(TEXT(","));
-	}
-
-	UE_LOG(LogDream, Log, TEXT("Bytes: %s"), *Bytes);
-}
-
 bool FDreamTests::RunTest(const FString& Parameters) 
 {
-
-	DREAM_NLOG(Log, TEXT("----------- Json相关测试 开始 -------------"));
-
-	TSharedPtr<FJsonObject> Object1 = TSharedPtr<FJsonObject>(new FJsonObject);
-	TSharedPtr<FJsonObject> Object2 = TSharedPtr<FJsonObject>(new FJsonObject);
-	TSharedRef< TJsonReader<TCHAR> > Reader1 = FJsonStringReader::Create(TEXT("{")
-        TEXT("\"itemId\": 10,")
-        TEXT("\"type\": \"Weapon\",")
-        TEXT("\"itemClass\": \"/Game/Main/Weapon/PrecisionRifle/Jotunn.Jotunn_C\",")
-        TEXT("\"itemPrice\": 5000")
-    TEXT("}"));
-	TSharedRef< TJsonReader<TCHAR> > Reader2 = FJsonStringReader::Create(TEXT("{")
-        TEXT("\"itemId\": 10,")
-        TEXT("\"type\": 1,")
-        TEXT("\"itemClass\": \"/Game/Main/Weapon/PrecisionRifle/Jotunn.Jotunn_C\",")
-        TEXT("\"itemPrice\": 5000")
-    TEXT("}"));
-
-	FJsonSerializer::Deserialize(Reader1, Object1);
-	FJsonSerializer::Deserialize(Reader2, Object2);
-
-	DREAM_NLOG(Log, TEXT("----------- Json相关测试 开始 -------------"));
-	
-	
 	DREAM_NLOG(Log, TEXT("----------- 去重迭代器测试 开始 -------------"));
 	TArray<int32> TestArr;
 	TestArr.Add(1);
@@ -84,6 +34,7 @@ bool FDreamTests::RunTest(const FString& Parameters)
 	{
 		DREAM_NLOG(Log, TEXT("Result: %d"), *AD);
 	}
+	
 	DREAM_NLOG(Log, TEXT("----------- 去重迭代器测试 结束 -------------"));
 	
 	
@@ -98,7 +49,7 @@ bool FDreamTests::RunTest(const FString& Parameters)
 
 	TMap<FString, int32> Result;
 
-	int32 TestCount = 1000;
+	int32 TestCount = 100;
 
 	for (int32 i = 0; i < TestCount; i++)
 	{
@@ -125,7 +76,7 @@ bool FDreamTests::RunTest(const FString& Parameters)
 
 	DREAM_NLOG(Log, TEXT("----------- 其他测试 开始 -------------"));
 
-	for (TObjectIterator<UClass> It; It; ++It)
+	/*for (TObjectIterator<UClass> It; It; ++It)
 	{
 		UClass* Class = *It;
 		AActor* ActorCDO = Cast<AActor>(Class->GetDefaultObject());
@@ -133,7 +84,7 @@ bool FDreamTests::RunTest(const FString& Parameters)
 		{
 			DREAM_NLOG(Log, TEXT("Class: %s"), *Class->GetFullName());
 		}
-	}
+	}*/
 
 	/*FAssetRegistryModule& AssetRegistryModule = FModuleManager::GetModuleChecked<FAssetRegistryModule>(TEXT("AssetRegistry"));
 	IAssetRegistry& AssetRegistry = AssetRegistryModule.Get();
@@ -196,6 +147,52 @@ bool FDreamTests::RunTest(const FString& Parameters)
 			}
 		}
 	}*/
+
+	/*UDataTable* DataTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/Main/Asset/DT_Items"));
+
+	if (DataTable != nullptr)
+	{
+		const TMap<FName, uint8*> RowMap = DataTable->GetRowMap();
+
+		for (const TTuple<FName, uint8*>& Row : RowMap)
+		{
+			if (FItemDefinition* Def = reinterpret_cast<FItemDefinition*>(Row.Value))
+			{
+				if (UClass* Class = LoadClass<UObject>(nullptr, *Def->ItemClass))
+				{
+					if (Class->ImplementsInterface(IPropsInterface::UClassType::StaticClass()))
+					{
+						if (IPropsInterface* PropsInterface = Cast<IPropsInterface>(Class->GetDefaultObject()))
+						{
+							const FPropsInfo& PropsInfo = PropsInterface->GetPropsInfo();
+
+							UE_LOG(LogDream, Log, TEXT("%s,%d"), *Row.Key.ToString(), PropsInfo.PropsQuality);
+						}
+					}
+				}
+			}
+		}
+	}*/
+
+	FAmmunitionDropProbability DropProbability;
+
+	int32 L1 = 0, L2 = 0, L3 = 0, None = 0;
+	
+	for (int32 Idx = 0; Idx < 100; Idx++)
+	{
+		EAmmoType AmmoType;
+		if (DropProbability.RandomDrawing(AmmoType))
+		{
+			int32& Res = AmmoType == EAmmoType::Level1 ? L1 : AmmoType == EAmmoType::Level2 ? L2 : L3;
+			Res++;
+		}
+		else
+		{
+			None++;
+		}
+	}
+
+	DREAM_NLOG(Log, TEXT("L1: %f, L2: %f, L3: %f, None: %f"), L1 / 100.f, L2 / 100.f, L3 / 100.f, None / 100.f);
 
 	DREAM_NLOG(Log, TEXT("----------- 其他测试 结束 -------------"));
 	

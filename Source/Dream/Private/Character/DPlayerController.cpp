@@ -2,6 +2,10 @@
 
 
 #include "Character/DPlayerController.h"
+
+
+#include "CallReceiver.h"
+#include "DDropReward.h"
 #include "JsonUtilities.h"
 #include "DGameplayStatics.h"
 #include "DPlayerCameraManager.h"
@@ -11,19 +15,19 @@
 #include "DreamGameInstance.h"
 #include "DreamGameMode.h"
 #include "DreamWidgetStatics.h"
+#include "DRewardPool.h"
 #include "OnlineSubsystem.h"
 #include "PlayerDataInterfaceBase.h"
 #include "Character/DCharacterPlayer.h"
 #include "PlayerDataInterfaceStatic.h"
-#include "PlayerServerDataInterface.h"
 #include "UI/SGuide.h"
 
 #define LOCTEXT_NAMESPACE "Player.Controller"
 
 ADPlayerController::ADPlayerController()
-    : LevelOneAmmunition(800)
-      , LevelTwoAmmunition(1000)
-      , LevelThreeAmmunition(60)
+    : Ammunition_L1(1.f)
+    , Ammunition_L2(1.f)
+    , Ammunition_L3(1.f)
 {
     PlayerCameraManagerClass = ADPlayerCameraManager::StaticClass();
 }
@@ -93,16 +97,57 @@ void ADPlayerController::RemoveGuideActor(AActor* Actor)
     GuideActors.Remove(Actor);
 }
 
-void ADPlayerController::BroadcastGameModeClientDelegate(FGameplayTag DelegateTag)
+void ADPlayerController::CallServerActor(FGameplayTag CallTag, AActor* TargetActor)
 {
-    ServerBroadcastGMClientDelegate(DelegateTag);
+    if (TargetActor)
+    {
+        ServerCallServerActor(CallTag, TargetActor);
+    }
 }
 
-void ADPlayerController::ServerBroadcastGMClientDelegate_Implementation(const FGameplayTag& DelegateTag)
+void ADPlayerController::SpawnRewardsAtLocation(UDRewardPool* RewardPool, const FVector& Location)
 {
-    if (ADreamGameMode* DreamGameMode = Cast<ADreamGameMode>(GetWorld()->GetAuthGameMode()))
+    if (GetLocalRole() != ROLE_Authority)
     {
-        DreamGameMode->BroadcastClientRPCDelegate(DelegateTag);
+        return;
+    }
+    
+    if (RewardPool)
+    {
+        FItemListHandle DropRewards;
+        FItemListHandle DirectRewards;
+        RewardPool->GenerateRewards(DropRewards, DirectRewards);
+
+        if (DropRewards.IsNotEmpty())
+        {
+            SpawnDropRewards(DropRewards, Location);
+        }
+
+        if (DirectRewards.IsNotEmpty())
+        {
+            if (PlayerState)
+            {
+                FPDIStatic::Get()->AddPlayerRewards(FItemListParam(PlayerState->GetPlayerId(), DirectRewards));
+            }
+        }
+    }
+}
+
+void ADPlayerController::ServerCallServerActor_Implementation(const FGameplayTag& Tag, AActor* TargetActor)
+{
+    if (TargetActor == nullptr)
+    {
+        UE_LOG(LogDream, Warning, TEXT("TargetActor Invalid"));
+        return;
+    }
+    
+    if (ICallReceiver* CallReceiver = Cast<ICallReceiver>(TargetActor))
+    {
+        CallReceiver->ReceiveCall(Tag);
+    }
+    else if (TargetActor->GetClass()->ImplementsInterface(ICallReceiver::UClassType::StaticClass()))
+    {
+        ICallReceiver::Execute_ReceiveCall(TargetActor, Tag);
     }
 }
 
@@ -177,8 +222,8 @@ void ADPlayerController::TestFindSession()
 
 void ADPlayerController::TestSocket() const
 {
-    FPlayerDataInterfaceBase* InterfaceBase = static_cast<FPlayerDataInterfaceBase*>(FPDIStatic::Get());
-    InterfaceBase->GetSender()->Send(PDIBuildParam<TService_PlayerInfo>(EGetEquipmentCondition::Equipped));
+    //FPlayerDataInterfaceBase* InterfaceBase = static_cast<FPlayerDataInterfaceBase*>(FPDIStatic::Get());
+    //InterfaceBase->GetSender()->Send(PDIBuildParam<TService_PlayerInfo>(EGetEquipmentCondition::Equipped));
 }
 
 #endif
@@ -221,7 +266,7 @@ void ADPlayerController::ServerSendMessage_Implementation(const FTalkMessage& Me
 
 void ADPlayerController::MulticastMessage_Implementation(const FTalkMessage& Message)
 {
-    BP_OnReceiveTalkMessage(Message);
+    OnReceiveTalk(Message);
 }
 
 void ADPlayerController::SendTalkMessage(const FTalkMessage& Message)
@@ -229,49 +274,29 @@ void ADPlayerController::SendTalkMessage(const FTalkMessage& Message)
     ServerSendMessage(Message);
 }
 
-int32& ADPlayerController::GetWeaponAmmunition(EAmmoType AmmoType)
-{
-    return AmmoType == EAmmoType::Level1
-               ? LevelOneAmmunition
-               : AmmoType == EAmmoType::Level2
-               ? LevelTwoAmmunition
-               : LevelThreeAmmunition;
-}
-
-int32 ADPlayerController::GetWeaponAmmunition(EAmmoType AmmoType) const
-{
-    return AmmoType == EAmmoType::Level1
-               ? LevelOneAmmunition
-               : AmmoType == EAmmoType::Level2
-               ? LevelTwoAmmunition
-               : LevelThreeAmmunition;
-}
-
-int32 ADPlayerController::GetDefaultAmmunition(EAmmoType AmmoType) const
-{
-    const ADPlayerController* CDO = GetDefault<ADPlayerController>();
-    return AmmoType == EAmmoType::Level1
-               ? CDO->LevelOneAmmunition
-               : AmmoType == EAmmoType::Level2
-               ? CDO->LevelTwoAmmunition
-               : CDO->LevelThreeAmmunition;
-}
-
 void ADPlayerController::OnReceiveRewardMessage(const FItemListHandle& ItemList)
 {
-    for (UItemData* ItemData : ItemList.Items)
+    for (const TSharedPtr<FItem>& ItemData : ItemList)
     {
-        UClass* ItemClass = UDProjectSettings::GetProjectSettings()->GetItemClassFromGuid(ItemData->ItemGuid);
+        int32 ItemGuid = ItemData->GetItemGuid();
+        const FItemDef& ItemDef = UDProjectSettings::GetProjectSettings()->GetItemDefinition(ItemGuid);
 
-        if (ItemClass == nullptr)
+        EItemType::Type ItemType = GetItemType(ItemGuid);
+
+        ERewardNotifyMode NotifyMode = ERewardNotifyMode::Primary;
+
+        switch (ItemType)
         {
-            continue;
+        case EItemType::Material:
+        case EItemType::Experience:
+
+            NotifyMode = ERewardNotifyMode::Secondary;
+            break;
+
+        default:;
         }
 
-        if (IPropsInterface* PropsInterface = Cast<IPropsInterface>(ItemClass->GetDefaultObject()))
-        {
-            BP_ReceiveRewardMessage(PropsInterface->GetPropsInfo(), PropsInterface->GetRewardNotifyMode(), ItemData->GetItemNum());
-        }
+        OnPopupRewards(ItemDef.ItemBaseInfo, NotifyMode, ItemData->GetItemNum());
     }
 }
 
@@ -311,6 +336,35 @@ TArray<FGuideElement> ADPlayerController::GetGuideElements() const
     return Elements;
 }
 
+
+void ADPlayerController::SpawnDropRewards(const FItemListHandle& Rewards, const FVector& Location)
+{
+    if (GetLocalRole() != ROLE_Authority)
+    {
+        return;
+    }
+
+    for (const TSharedPtr<FItem>& DropReward : Rewards)
+    {
+        if (!DropReward.IsValid())
+        {
+            continue;
+        }
+        
+        EItemType::Type ItemType = GetItemType(DropReward->GetItemGuid());
+        TSubclassOf<ADDropReward> DropClass = UDProjectSettings::GetProjectSettings()->GetRewardDropClass(ItemType);
+
+        if (DropClass)
+        {
+            FTransform Transform(Location);
+        
+            ADDropReward* DropRewardActor = GetWorld()->SpawnActorDeferred<ADDropReward>(DropClass, Transform, this);
+            DropRewardActor->Initialize(DropReward);
+            DropRewardActor->FinishSpawning(Transform);
+        }
+    }
+}
+
 void ADPlayerController::ClientReturnToMainMenuWithTextReason_Implementation(const FText& ReturnReason)
 {
     Super::ClientReturnToMainMenuWithTextReason_Implementation(ReturnReason);
@@ -318,47 +372,37 @@ void ADPlayerController::ClientReturnToMainMenuWithTextReason_Implementation(con
     UDreamWidgetStatics::PopupDialog(this, EDialogType::ERROR, ReturnReason, 3.f);
 }
 
-bool ADPlayerController::AddWeaponAmmunition(EAmmoType AmmoType, int32 AmmunitionAmount)
+bool ADPlayerController::AddWeaponAmmunition(EAmmoType AmmoType, float RecoveryAmount)
 {
-    const ADPlayerController* CDO = GetDefault<ADPlayerController>();
-
-    bool bSuccess = false;
-
-    switch (AmmoType)
+    float& Ammunition = GetWeaponAmmunition(AmmoType);
+    
+    if (FMath::IsNearlyEqual(Ammunition, 1.f))
     {
-    case EAmmoType::Level1:
-        bSuccess = LevelOneAmmunition < CDO->LevelOneAmmunition;
-        break;
-    case EAmmoType::Level2:
-        bSuccess = LevelTwoAmmunition < CDO->LevelTwoAmmunition;
-        break;
-    case EAmmoType::Level3:
-        bSuccess = LevelThreeAmmunition < CDO->LevelThreeAmmunition;
-        break;
-    default:
-        break;
+        return false;
     }
+    
+    Ammunition = FMath::Clamp(Ammunition + RecoveryAmount, 0.f, 1.f);
 
-    if (bSuccess)
-    {
-        int32 DAmmunition = GetDefaultAmmunition(AmmoType);
-        int32& Ammunition = GetWeaponAmmunition(AmmoType);
-        Ammunition = FMath::Min(Ammunition + AmmunitionAmount, DAmmunition);
-    }
-
-    return bSuccess;
+    OnAmmunitionChange.Broadcast(Ammunition);
+    
+    return true;
 }
 
-void ADPlayerController::SetWeaponAmmunition(EAmmoType AmmoType, int32 NewValue)
+void ADPlayerController::SetWeaponAmmunition(EAmmoType AmmoType, float NewAmmunition)
 {
-    int32& Ammunition = GetWeaponAmmunition(AmmoType);
-    Ammunition = NewValue;
+    float& Ammunition = GetWeaponAmmunition(AmmoType);
+    Ammunition = FMath::Clamp(NewAmmunition, 0.f, 1.f);
+
+    OnAmmunitionChange.Broadcast(Ammunition);
 }
 
-void ADPlayerController::DecrementAmmunition(EAmmoType AmmoType, int32 Amount)
+float& ADPlayerController::GetWeaponAmmunition(EAmmoType AmmoType)
 {
-    int32& Ammunition = GetWeaponAmmunition(AmmoType);
-    Ammunition -= Amount;
+    return AmmoType == EAmmoType::Level1
+               ? Ammunition_L1
+               : AmmoType == EAmmoType::Level2
+               ? Ammunition_L2
+               : Ammunition_L3;
 }
 
 void ADPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

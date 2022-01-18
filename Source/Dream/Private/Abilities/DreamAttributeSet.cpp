@@ -31,6 +31,28 @@ void UDreamAttributeSet::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& O
 	DOREPLIFETIME(UDreamAttributeSet, CriticalDamage);
 }
 
+void UDreamAttributeSet::IncrementAttributes(const FEquipmentAttributes& Attributes)
+{
+	UAbilitySystemComponent* ASC = GetOwningAbilitySystemComponent();
+
+	ASC->ApplyModToAttribute(DreamAttrStatics().AttackPowerProperty, EGameplayModOp::Additive, Attributes.AttackPower);
+	ASC->ApplyModToAttribute(DreamAttrStatics().CriticalDamageProperty, EGameplayModOp::Additive, Attributes.CriticalDamage);
+	ASC->ApplyModToAttribute(DreamAttrStatics().CriticalRateProperty, EGameplayModOp::Additive, Attributes.CriticalRate);
+	ASC->ApplyModToAttribute(DreamAttrStatics().DefensePowerProperty, EGameplayModOp::Additive, Attributes.Defense);
+	ASC->ApplyModToAttribute(DreamAttrStatics().MaxHealthProperty, EGameplayModOp::Additive, Attributes.MaxHealth);
+	ASC->ApplyModToAttribute(DreamAttrStatics().HealthStealProperty, EGameplayModOp::Additive, Attributes.HealthSteal);
+}
+
+void UDreamAttributeSet::UpdateAttributesBase(const FEquipmentAttributes& Attributes)
+{
+	SetAttackPower(Attributes.AttackPower);
+	SetCriticalDamage(Attributes.CriticalDamage);
+	SetCriticalRate(Attributes.CriticalRate);
+	SetDefensePower(Attributes.Defense);
+	SetMaxHealth(Attributes.MaxHealth);
+	SetHealthSteal(Attributes.HealthSteal);
+}
+
 void UDreamAttributeSet::OnRep_Health(const FGameplayAttributeData& OldValue)
 {
 	GAMEPLAYATTRIBUTE_REPNOTIFY(UDreamAttributeSet, Health, OldValue);

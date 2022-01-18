@@ -3,6 +3,7 @@
 #include "SPlayerHUD.h"
 #include "SMinimap.h"
 #include "DCharacterPlayer.h"
+#include "DPlayerController.h"
 #include "SImage.h"
 #include "SCanvas.h"
 #include "SBoxPanel.h"
@@ -79,13 +80,10 @@ void SPlayerHUD::Construct(const FArguments& InArgs)
             .VAlign(VAlign_Bottom)
             .Padding(0, 0, 0, 80.f)
             [
-            	SNew(SBox)
-            	.WidthOverride(510.f)
-            	[
-            		SAssignNew(StatePanel, SWrapBox)
-                    .RenderTransform(FTransform2D(FQuat2D(FVector2D(-1, 0))))  // 将panel倒过来, 这么做的目的是为了让内容从下往上增长
-                    .RenderTransformPivot(FVector2D(0.5f, 0.5f))
-            	]
+	            SAssignNew(StatePanel, SUniformGridPanel)
+	            .SlotPadding(FVector2D(1.f, 1.f))
+	            .RenderTransform(FTransform2D(FQuat2D(FVector2D(-1, 0))))  // 将panel倒过来, 这么做的目的是为了让内容从下往上增长
+	            .RenderTransformPivot(FVector2D(0.5f, 0.5f))
             ]
 			+ SOverlay::Slot()
 			.VAlign(VAlign_Bottom)
@@ -265,13 +263,12 @@ void SPlayerHUD::AddStateIcon(const FGameplayTag& StateTag, UTexture2D* Icon, co
         .IconResource(Icon)
         .StackCount(StackCount);
 
-	/*int32 StateIconNum = StatePanel->GetChildren()->Num();
+	int32 StateIconNum = StatePanel->GetChildren()->Num();
 
 	int32 Row = StateIconNum / StateGridMaxColumn;
-	int32 Column = StateIconNum % StateGridMaxColumn;*/
+	int32 Column = StateIconNum % StateGridMaxColumn;
 
-	StatePanel->AddSlot()
-	.Padding(2.f)
+	StatePanel->AddSlot(Column, Row)
 	[
 		StateIcon
 	];
@@ -298,6 +295,17 @@ void SPlayerHUD::RemoveStateIcon(const FGameplayTag& StateTag)
 	if (StateIcons.RemoveAndCopyValue(StateTag, StateIcon))
 	{
 		StatePanel->RemoveSlot(StateIcon.ToSharedRef());
+
+		// 刷新buff图标的位置
+		TPanelChildren<SUniformGridPanel::FSlot>* Children =
+			static_cast<TPanelChildren<SUniformGridPanel::FSlot>*>(StatePanel->GetChildren());
+
+		for (int32 Idx = 0; Idx < Children->Num(); Idx++)
+		{
+			SUniformGridPanel::FSlot& Slot = (*Children)[Idx];
+			Slot.Column = Idx % StateGridMaxColumn;
+			Slot.Row = Idx / StateGridMaxColumn;
+		}
 	}
 }
 

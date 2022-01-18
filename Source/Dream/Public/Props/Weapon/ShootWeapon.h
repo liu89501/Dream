@@ -4,13 +4,13 @@
 #include "CoreMinimal.h"
 #include "DreamType.h"
 #include "DPropsType.h"
-#include "PropsInterface.h"
 #include "SlateBrush.h"
 #include "GameFramework/Actor.h"
 #include "Sound/SoundCue.h"
 #include "Components/TimelineComponent.h"
 #include "Projectile/DProjectile.h"
 #include "GameplayTagContainer.h"
+#include "PreviewInterface.h"
 #include "ShootWeapon.generated.h"
 
 USTRUCT()
@@ -318,7 +318,7 @@ public:
 };
 
 UCLASS(Abstract)
-class DREAM_API AShootWeapon : public AActor, public IPropsInterface
+class DREAM_API AShootWeapon : public AActor, public IPreviewInterface
 {
 	GENERATED_BODY()
 
@@ -355,8 +355,12 @@ public:
 	int32 RateOfFire;
 
 	/** 每个弹夹的子弹数量 */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Weapon)
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
 	int32 AmmoNum;
+
+	/** 储备弹药 */
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
+	int32 ReserveAmmo;
 	
 	/** 弹药类型 */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Weapon)
@@ -471,6 +475,9 @@ public:
 	class ADCharacterPlayer* GetOwningShooter() const;
 
 	UFUNCTION(BlueprintCallable, Category = Weapon)
+	class ADPlayerController* GetOwningController() const;
+	
+	UFUNCTION(BlueprintCallable, Category = Weapon)
 	float GetCurrentRecoil() const;
 
 	UFUNCTION(BlueprintCallable, Category = Weapon)
@@ -481,15 +488,8 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (ScriptName = "GetLineTracePoint", DisplayName = "GetLineTracePoint"), Category = Weapon)
 	void BP_GetLineTracePoint(FVector& Point, FRotator& Direction) const;
 
-	/*
-		判断当前武器 是否属于网络模式下的本地玩家
-		isLocalPlayer  and  NetMode > NM_Standalone
-	*/
 	UFUNCTION(BlueprintCallable, Category = Weapon)
-	bool IsNetLocalPlayerCtrl() const;
-
-	UFUNCTION(BlueprintCallable, Category = Weapon)
-	bool IsLocalPlayerCtrl() const;
+	bool IsLocalWeapon() const;
 
 	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName = "OnStartFire", DisplayName = "OnStartFire"), Category = "Weapon|Event")
 	void BP_OnStartFire();
@@ -506,11 +506,10 @@ public:
 
 public:
 
-	virtual const FPropsInfo& GetPropsInfo() const override;
-
-	virtual ERewardNotifyMode GetRewardNotifyMode() const override;
-
 	virtual FTransform GetPreviewRelativeTransform() const override;
+
+	/** @return Ammunition Percentage */
+	virtual void ReloadingWeapon();
 
 	// ServerOnly
 	virtual void ApplyPointDamage(const FHitResult& HitInfo);
@@ -522,30 +521,22 @@ public:
 
 	virtual void SetWeaponEnable(bool bEnable);
 
-	void DecrementTotalAmmo(int32 Amount) const;
-
-	FORCEINLINE float GetFireInterval() const
+	float GetFireInterval() const
 	{
 		return 1.f / (RateOfFire / 60.f);
 	}
 
-	FORCEINLINE float GetLastFireTimeSeconds() const
+	float GetLastFireTimeSeconds() const
 	{
 		return LastFireTime;
 	}
 
 	void AttachToCharacter(bool bActiveSocket, USkeletalMeshComponent* Mesh);
 
-protected:
-
-	float CurrentSpread;
-
-	FTimeline RecoveryTimeline;
-	FTimeline RecoilTimeline;
-	FTimeline AimTimeline;
-
-	UPROPERTY(BlueprintReadWrite, Category = Weapon)
-	bool bAimed;
+	bool IsFullAmmo() const
+	{
+		return AmmoNum == InitAmmo;
+	}
 
 protected:
 
@@ -558,6 +549,10 @@ protected:
 	UFUNCTION(Reliable, Server)
 	void ServerSpawnAmmo(const FBulletHitInfoHandle& HitInfo);
 
+	void InitializeAmmunition();
+
+	void OnPlayerAmmunitionChanged(float NewAmmunition);
+
 	virtual void HandleSpawnAmmo(const FHitResult& HitResult) {};
 
 	void DoApplyDamageEffect(const FHitResult& Hit, const FVector& Origin) const;
@@ -567,6 +562,8 @@ protected:
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+	
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void SpreadRecovery();
@@ -583,8 +580,19 @@ protected:
 	virtual void CameraOffsetTimelineTick(float Value) const;
 	virtual void AimTimelineTick(float Value) const;
 
-	// 记录默认值
-	int32 DAmmoNum;
+protected:
+
+	float CurrentSpread;
+
+	FTimeline RecoveryTimeline;
+	FTimeline RecoilTimeline;
+	FTimeline AimTimeline;
+
+	UPROPERTY(BlueprintReadWrite, Category = Weapon)
+	bool bAimed;
+
+	int32 InitAmmo;
+	int32 InitReserveAmmo;
 
 private:
 
@@ -596,6 +604,8 @@ private:
 	float LastFireTime;
 
 	FTimerHandle Handle_ReSpread;
+
+	FDelegateHandle Handle_PlayerAmmunitionChange;
 
 	UPROPERTY()
 	UMaterialInstanceDynamic* CrosshairDynamic;

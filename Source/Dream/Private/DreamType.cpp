@@ -33,3 +33,8 @@ FString IPTools::IPV4Uint32ToString(uint32 IP)
 	ServerAddr.AppendInt((IP & 255));
 	return ServerAddr;
 }
+
+float FRangeRandomFloat::GetRandomFloat() const
+{
+	return FMath::FRandRange(Min, Max);
+}

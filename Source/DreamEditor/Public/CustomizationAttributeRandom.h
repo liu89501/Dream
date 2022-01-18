@@ -10,14 +10,20 @@ struct FComboboxItem
 	{
 	}
 	
-	FComboboxItem(const FString& InText, int32 InGuid)
-		: Text(InText)
+	FComboboxItem(const FText& InItemName, int32 InGuid)
+		: ItemName(InItemName)
 		, Guid(InGuid)
 	{
 	}
 	
-	FString Text;
+	FText ItemName;
 	int32 Guid;
+};
+
+struct FItemDetails
+{
+	int32 ItemGuid;
+	FText ItemName;
 };
 
 class FItemSelectedCustomization : public IPropertyTypeCustomization
@@ -42,6 +48,8 @@ private:
 
 	FText FormatItemText(TSharedPtr<FComboboxItem> Item) const;
 
+	bool GetAllItems(TArray<FItemDetails>& Items) const;
+
 private:
 
 	int32 FilterType;
@@ -53,3 +61,4 @@ private:
 
 	TSharedPtr<IPropertyHandle> GuidHandle;
 };
+

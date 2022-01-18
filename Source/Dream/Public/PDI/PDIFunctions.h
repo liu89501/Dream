@@ -28,20 +28,14 @@ public:
 	UFUNCTION(BlueprintPure, meta=(CompactNodeTitle = "ToQuestDesc"), Category = "DreamStatics|PDI")
     static class UDQuestDescription* SoftObjectToDQuestDescription(const FSoftObjectPath& ObjectPath);
 
+	UFUNCTION(BlueprintPure, meta=(CompactNodeTitle = "ItemArray"), Category = "DreamStatics|PDI")
+	static void MakeItemArray(const FItemListHandle& ItemListHandle, TArray<FItemHandle>& ItemArray);
+	
 	UFUNCTION(BlueprintPure, Category = "DreamStatics|PDI")
 	static const FPlayerProperties& GetCachedPlayerProperties();
 
 	UFUNCTION(BlueprintPure, Category = "DreamStatics|PDI")
-	static int32 GetCacheItemCount(int32 ItemGuid);
-	
-	UFUNCTION(BlueprintCallable, Category = "DreamStatics|PDI")
-	static void DecreaseCacheItemCount(int32 ItemGuid, int32 DecValue);
-	
-	UFUNCTION(BlueprintCallable, Category = "DreamStatics|PDI")
-	static void IncreaseCacheItemCount(int32 ItemGuid, int32 IncValue);
-
-	UFUNCTION(BlueprintCallable, Category = "DreamStatics|PDI")
-	static void UpdateCacheItemCount(const TArray<FAcquisitionCost>& Costs);
+	static int32 GetPlayerMaterialNum(int32 ItemGuid);
 	
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "DreamStatics|PDI")
 	static void SendUpdateTaskCondForEvent(APlayerController* PlayerCtrl, FName EventName);
@@ -62,9 +56,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DreamStatics|PDI")
 	static void GetEquippedModule(const TArray<FPlayerModule>& Modules, TArray<FPlayerModule>& EquippedModules);
 
-	UFUNCTION(BlueprintCallable, Category="DreamStatics|PDI")
-    static void TiledCondition(const FQuestConditionHandle& Condition, TArray<UDQuestCondition*>& Conditions);
-    
 	UFUNCTION(BlueprintPure, Category="DreamStatics|PDI")
     static bool IsConditionCompleted(const FTaskInformation& Task);
+
+	UFUNCTION(BlueprintPure, Category="DreamStatics|PDI")
+	static float GetConditionPercentage(const FQuestConditionHandle& Handle);
+
+	UFUNCTION(BlueprintCallable, Category="DreamStatics|PDI")
+	static FItemHandle MakeSimpleItemHandle(FItemGuidHandle Guid, int32 Num); 
 };

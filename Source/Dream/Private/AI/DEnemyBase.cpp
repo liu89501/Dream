@@ -10,16 +10,15 @@
 #include "Kismet/GameplayStatics.h"
 #include "AIController.h"
 #include "DAIGeneratorBase.h"
+#include "DProjectSettings.h"
 #include "DreamAttributeSet.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "PlayerDataInterface.h"
 #include "Perception/AISense_Damage.h"
-#include "DreamGameInstance.h"
 #include "HealthWidgetComponent.h"
 #include "Character/DPlayerController.h"
 #include "Character/DCharacterPlayer.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "DreamDropProps.h"
 #include "DRewardPool.h"
 #include "PlayerDataInterfaceStatic.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
@@ -27,6 +26,32 @@
 #include "GameFramework/PlayerState.h"
 #include "Perception/AISense_Sight.h"
 #include "Perception/AISense_Team.h"
+
+bool FAmmunitionDropProbability::RandomDrawing(EAmmoType& Type)
+{
+	float Rand = FMath::FRand();
+
+	if (Rand <= Ammunition_L1)
+	{
+		Type = EAmmoType::Level1;
+		return true;
+	}
+
+	float L2Range = Ammunition_L1 + Ammunition_L2;
+	if (Rand > Ammunition_L1 && Rand <= L2Range)
+	{
+		Type =  EAmmoType::Level2;
+		return true;
+	}
+
+	if (Rand > L2Range && Rand <= (L2Range + Ammunition_L3))
+	{
+		Type =  EAmmoType::Level3;
+		return true;
+	}
+
+	return false;
+}
 
 ADEnemyBase::ADEnemyBase()
 {
@@ -54,12 +79,18 @@ void ADEnemyBase::HealthChanged(const FOnAttributeChangeData& AttrData)
 
 	if (IsDeath())
 	{
-		// todo 放在这可能不太好
-		if (TSubclassOf<ADreamDropProps> DropMagazine = FRandomProbability::RandomProbabilityEx<TSubclassOf<ADreamDropProps>>(AmmunitionReward))
+		EAmmoType RandomDropAmmoType;
+		if (AmmunitionDrop.RandomDrawing(RandomDropAmmoType))
 		{
-			GetWorld()->SpawnActor<ADreamDropProps>(DropMagazine, FTransform(GetActorLocation()));
+			TSubclassOf<ADDropMagazine> MagazineDropClass = UDProjectSettings::GetProjectSettings()->GetMagazineDropClass(RandomDropAmmoType);
+
+			if (MagazineDropClass)
+			{
+				GetWorld()->SpawnActor<ADDropMagazine>(MagazineDropClass, FTransform(GetActorLocation()));
+			}
 		}
 
+		GetWorldTimerManager().ClearTimer(Handle_ShowUI);
 		HealthUI->DestroyComponent();
 	}
 	else
@@ -87,12 +118,18 @@ FRotator ADEnemyBase::GetReplicationControllerRotation() const
 
 void ADEnemyBase::HiddenHealthUI()
 {
-	HealthUI->SetVisibility(false);
+	if (HealthUI)
+	{
+		HealthUI->SetVisibility(false);
+	}
 }
 
 void ADEnemyBase::UpdateHealthUI()
 {
-	HealthUI->UpdateStatus(GetHealthPercent());
+	if (HealthUI)
+	{
+		HealthUI->UpdateStatus(GetHealthPercent());
+	}
 }
 
 void ADEnemyBase::BeginPlay()
@@ -137,6 +174,11 @@ void ADEnemyBase::BeginPlay()
 	}
 }
 
+void ADEnemyBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	Super::EndPlay(EndPlayReason);
+}
+
 void ADEnemyBase::HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle)
 {
 	Super::HandleDamage(DamageDone, Handle);
@@ -174,13 +216,10 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 	TArray<AActor*> HostileActors;
 	AIPerception->GetHostileActors(HostileActors);
 
-	TArray<UItemData*> RewardItems;
-	TMap<ADPlayerController*, TArray<UItemData*>> AllPlayerRewards;
-
 	for (AActor* Hostile : HostileActors)
 	{
 		ADPlayerController* PlayerController = nullptr;
-			
+
 		if (ADCharacterPlayer* HostileCharacter = Cast<ADCharacterPlayer>(Hostile))
 		{
 			PlayerController = HostileCharacter->GetPlayerController();
@@ -198,15 +237,22 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 			continue;
 		}
 
-		TArray<UItemData*> Items;
-		RewardPool->GenerateRewards(Items);
-		if (Items.Num() > 0)
-		{
-			AllPlayerRewards.Add(PlayerController, Items);
-			RewardItems.Append(Items);
-		}
+		FItemListParam DirectRewards;
+		DirectRewards.PlayerId = HostilePlayerState->GetPlayerId();
+
+		FItemListHandle DropRewards;
 		
-		FPDIStatic::Get()->AddPlayerRewards(FItemListHandle(HostilePlayerState->GetPlayerId(), RewardItems));
+		RewardPool->GenerateRewards(DropRewards, DirectRewards.ListHandle);
+
+		if (DropRewards.IsNotEmpty())
+		{
+			PlayerController->SpawnDropRewards(DropRewards, GetActorLocation());
+		}
+
+		if (DirectRewards.IsNotEmpty())
+		{
+			FPDIStatic::Get()->AddPlayerRewards(DirectRewards);
+		}
 	}
 
 	if (const ADCharacterPlayer* Player = Cast<ADCharacterPlayer>(Causer))
@@ -214,13 +260,11 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 		if (ADPlayerController* Ctrl = Player->GetPlayerController())
 		{
 			int32 PlayerId = Ctrl->PlayerState->GetPlayerId();
-
-			FQuestAction_KilledTarget Action(PawnType);
-			FPDIStatic::Get()->UpdateTaskState(FQuestActionHandle(PlayerId, &Action));
+			FPDIStatic::Get()->UpdateTaskState(FQuestActionHandle(PlayerId, MakeShared<FQuestAction_KilledTarget>(PawnType)));
 		}
 	}
 
-	SetLifeSpan(3.f);
+	SetLifeSpan(5.f);
 }
 
 UAIPerceptionComponent* ADEnemyBase::GetPerceptionComponent()

@@ -5,53 +5,52 @@
 #include "PlayerDataInterfaceType.h"
 #include "Kismet/KismetMathLibrary.h"
 
-void UDRewardPool::GenerateRewards(TArray<UItemData*>& Rewards)
+void HandleItemDetails(const FRewardItem& RewardItem, FItemListHandle& DropRewards, FItemListHandle& DirectRewards)
+{
+	if (RewardItem.Reward)
+	{
+		TSharedPtr<FItem> ItemStruct = RewardItem.Reward->MakeItemStruct();
+
+		if (RewardItem.bDrop)
+		{
+			DropRewards.AddItem(ItemStruct);
+		}
+		else
+		{
+			DirectRewards.AddItem(ItemStruct);
+		}
+	}
+}
+
+void UDRewardPool::GenerateRewards(FItemListHandle& DropRewards, FItemListHandle& DirectRewards)
 {
 	for (const FRewardGroup Group : RewardGroup)
 	{
 		if (Group.Strategy == EProbabilityStrategy::OneOf)
 		{
 			TArray<float> Probability;
-			TArray<UItemData*> RewardsTemplate;
-			for (const FRewardItem& RewardItem : Group.RewardItems)
+			Probability.SetNumUninitialized(Group.RewardItems.Num());
+			for (int32 N = 0; N < Probability.Num(); N++)
 			{
-				check(RewardItem.Reward);
-
-				RewardsTemplate.Add(RewardItem.Reward);
-				Probability.Add(RewardItem.Probability);
+				Probability[N] = Group.RewardItems[N].Probability;
 			}
 
 			int32 Index = FRandomProbability::RandomProbability(Probability);
 			if (Index > INDEX_NONE)
 			{
-				Rewards.Add(HandleItemDetails(RewardsTemplate[Index]));
+				HandleItemDetails(Group.RewardItems[Index], DropRewards, DirectRewards);
 			}
 		}
 		else
 		{
 			for (const FRewardItem& RewardItem : Group.RewardItems)
 			{
-				check(RewardItem.Reward);
-
 				if (UKismetMathLibrary::RandomBoolWithWeight(RewardItem.Probability))
 				{
-					Rewards.Add(HandleItemDetails(RewardItem.Reward));
+					HandleItemDetails(RewardItem, DropRewards, DirectRewards);
 				}
 			}
 		}
 	}
 }
 
-UItemData* UDRewardPool::HandleItemDetails(UItemData* SelectedTemplate) const
-{
-	if (SelectedTemplate->IsA<UItemDataEquipment_Random>())
-	{
-		UItemDataEquipment_Random* EquipmentRandom = Cast<UItemDataEquipment_Random>(SelectedTemplate);
-		return EquipmentRandom->CastToEquipment();
-	}
-
-	return NewObject<UItemData>(GetTransientPackage(),
-                         SelectedTemplate->GetClass(),
-                         NAME_None, RF_NoFlags,
-                         SelectedTemplate);
-}

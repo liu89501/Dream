@@ -61,6 +61,32 @@ struct FSurfaceImpactEffect
 	class UMaterialInterface* ImpactDecal;
 };
 
+USTRUCT(BlueprintType)
+struct FRangeRandomFloat
+{
+	GENERATED_BODY()
+
+	FRangeRandomFloat()
+        : Min(0),
+          Max(0)
+	{
+	}
+
+	FRangeRandomFloat(float InMin, float InMax)
+        : Min(InMin),
+          Max(InMax)
+	{
+	}
+
+	float GetRandomFloat() const;
+
+	UPROPERTY(EditAnywhere)
+	float Min;
+
+	UPROPERTY(EditAnywhere)
+	float Max;
+};
+
 namespace IPTools
 {
 	uint32 IPV4StringToUint32(const FString& IpString);

@@ -4,29 +4,21 @@
 
 #include "CoreMinimal.h"
 #include "DPropsType.h"
-#include "PropsInterface.h"
 #include "DModuleBase.generated.h"
 
 /**
  * 
  */
 UCLASS(Blueprintable)
-class DREAM_API UDModuleBase : public UObject, public IPropsInterface
+class DREAM_API UDModuleBase : public UObject
 {
 	GENERATED_BODY()
 
 public:
-
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Module")
-	FPropsInfo PropsInfo;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Module")
 	FEquipmentAttributes ModuleAttributes;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Module")
 	EModuleCategory Category;
-
-	virtual const FPropsInfo& GetPropsInfo() const override;
-	
-	virtual ERewardNotifyMode GetRewardNotifyMode() const override;
 };

@@ -84,7 +84,7 @@ private:
 	FLinearAnimation HitMarkDisplayTime;
 
 	int32 StateGridMaxColumn;
-	TSharedPtr<class SWrapBox> StatePanel;
+	TSharedPtr<class SUniformGridPanel> StatePanel;
 
 	TSharedPtr<SImage> HurtMark;
 	FTimeline HurtAnim;

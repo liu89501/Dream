@@ -3,10 +3,15 @@
 #include "CoreMinimal.h"
 #include "PlayerDataInterfaceBase.h"
 
+#define DEFAULT_SERVICE_IMPLEMENT(FuncName, Service) virtual void FuncName(const Service::Type& Param) override \
+	{ \
+		SocketSender->Send(PDIBuildParam<Service>(Param)); \
+	}
+
 DEFINED_SERVICE_INFO(9, void, TService_UpdatedTrackingTask);
 
-DEFINED_SERVICE_INFO(10, EGetEquipmentCondition, TService_PlayerInfo);
-DEFINED_SERVICE_INFO(11, FItemListHandle, TService_AddRewards);
+DEFINED_SERVICE_INFO(10, int32, TService_PlayerInfo);
+DEFINED_SERVICE_INFO(11, FItemListParam, TService_AddRewards);
 DEFINED_SERVICE_INFO(12, int64, TService_DeliverTask);
 DEFINED_SERVICE_INFO(13, FAcceptTaskParam, TService_AcceptTask);
 DEFINED_SERVICE_INFO(14, FQuestActionHandle, TService_UpdateTaskState);
@@ -19,8 +24,12 @@ DEFINED_SERVICE_INFO(20, int64, TService_PayItem);
 DEFINED_SERVICE_INFO(21, ETalentCategory, TService_GetTalents);
 DEFINED_SERVICE_INFO(22, FSearchTaskParam, TService_GetTasks);
 
+DEFINED_SERVICE_INFO(25, FDecomposeParam, TService_Decompose);
+
+
 DEFINED_SERVICE_INFO(23, void, TReceive_PropertiesChange);
 DEFINED_SERVICE_INFO(24, void, TReceive_Rewards);
+DEFINED_SERVICE_INFO(26, void, TReceive_MaterialsChange);
 
 
 class FPlayerServerDataInterface : public FPlayerDataInterfaceBase
@@ -32,33 +41,24 @@ public:
 
 	virtual void Initialize() override;
 
-	virtual void AddPlayerRewards(const FItemListHandle& Rewards) override;
-	
-	virtual void EquipWeapon(const FEquipWeaponParam& Param) override;
-
-	virtual void EquipModule(const FEquipModuleParam& Param) override;
-
-	virtual void LearningTalents(int64 LearnedTalents) override;
-
-	virtual void GetStoreItems(const FSearchStoreItemsParam& Param) override;
-
-	virtual void PayItem(int64 ItemId) override;
-
-	virtual void GetPlayerInfo(EGetEquipmentCondition Condition) override;
-
-	virtual void GetTalents(ETalentCategory TalentCategory) override;
-
-	virtual void GetTasks(const FSearchTaskParam& Param) override;
-
-	virtual void DeliverTask(int64 TaskId) override;
-	virtual void AcceptTask(const FAcceptTaskParam& Param) override;
-	virtual void UpdateTaskState(const FQuestActionHandle& Handle) override;
-	virtual void ModifyTrackingState(const FModifyTrackingParam& Param) override;
+	DEFAULT_SERVICE_IMPLEMENT(AddPlayerRewards, TService_AddRewards);
+	DEFAULT_SERVICE_IMPLEMENT(EquipWeapon, TService_EquipWeapon);
+	DEFAULT_SERVICE_IMPLEMENT(EquipModule, TService_EquipModule);
+	DEFAULT_SERVICE_IMPLEMENT(LearningTalents, TService_LearningTalents);
+	DEFAULT_SERVICE_IMPLEMENT(GetStoreItems, TService_GetStoreItems);
+	DEFAULT_SERVICE_IMPLEMENT(PayItem, TService_PayItem);
+	DEFAULT_SERVICE_IMPLEMENT(GetPlayerInfo, TService_PlayerInfo);
+	DEFAULT_SERVICE_IMPLEMENT(GetTalents, TService_GetTalents);
+	DEFAULT_SERVICE_IMPLEMENT(GetTasks, TService_GetTasks);
+	DEFAULT_SERVICE_IMPLEMENT(DeliverTask, TService_DeliverTask);
+	DEFAULT_SERVICE_IMPLEMENT(AcceptTask, TService_AcceptTask);
+	DEFAULT_SERVICE_IMPLEMENT(UpdateTaskState, TService_UpdateTaskState);
+	DEFAULT_SERVICE_IMPLEMENT(ModifyTrackingState, TService_ModifyTrackingState);
+	DEFAULT_SERVICE_IMPLEMENT(DecomposeItem, TService_Decompose);
 	
 	virtual const FPlayerProperties& GetCachedProperties() const override;
 
-	virtual int32 GetCacheItemCount(int32 ItemGuid) override;
-	virtual void IncreaseItemCount(int32 ItemGuid, int32 Delta) override;
+	virtual const FMaterialsHandle& GetMaterialsHandle() const override;
 
 public:
 
@@ -76,10 +76,13 @@ public:
 	void OnReceiveUpdatedTrackingTaskState(FPacketArchiveReader& Reader);
 	void OnReceiveModifyTrackingState(FPacketArchiveReader& Reader);
 	void OnReceivePropertiesChange(FPacketArchiveReader& Reader);
+	void OnReceiveDecomposeItem(FPacketArchiveReader& Reader);
+	void OnReceiveMaterialsChange(FPacketArchiveReader& Reader);
 
 private:
 
 	FPlayerProperties CachedProperties;
-
-	TMap<int32, int32> CacheItemCount;
+	
+	FMaterialsHandle MaterialsHandle;
 };
+

@@ -1,20 +1,22 @@
 ﻿// Fill out your copyright notice in the Description page of Project Settings.
 
-// ReSharper disable All
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DreamType.h"
 #include "DCharacterBase.h"
-#include "DModuleBase.h"
+#include "DPropsType.h"
 #include "GameplayAbilitySpec.h"
-#include "DPlayerController.h"
 #include "PlayerDataInterfaceType.h"
 #include "GameFramework/Character.h"
 #include "DCharacterPlayer.generated.h"
 
 class AShootWeapon;
 class ADCharacterPlayer;
+class UDModuleBase;
+class UDProjectSettings;
+
+enum class EAmmoType : uint8;
+
 
 DECLARE_DYNAMIC_DELEGATE_OneParam(FDynamicOnInteractiveCompleted, ADCharacterPlayer*, PlayerCharacter);
 
@@ -38,6 +40,56 @@ enum class EWeaponStatus : uint8
     Firing,
     Reloading,
     Equipping
+};
+
+USTRUCT()
+struct FMoveInput
+{
+	GENERATED_BODY()
+	
+public:
+
+	float X;
+
+	float Y;
+
+public:
+
+	bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess)
+	{
+		bOutSuccess = true;
+		if (Ar.IsSaving())
+		{
+			bOutSuccess &= WriteFixedCompressedFloat<1, 16>(X, Ar);
+			bOutSuccess &= WriteFixedCompressedFloat<1, 16>(Y, Ar);
+			return bOutSuccess;
+		}
+
+		ReadFixedCompressedFloat<1, 16>(X, Ar);
+		ReadFixedCompressedFloat<1, 16>(Y, Ar);
+		return bOutSuccess;
+	}
+
+	void Assign(FVector2D& V)
+	{
+		V.X = X;
+		V.Y = Y;
+	}
+
+	bool Equals(const FVector2D& V)
+	{
+		return FMath::Abs(X - V.X) <= KINDA_SMALL_NUMBER && FMath::Abs(Y - V.Y) <= KINDA_SMALL_NUMBER;
+	}
+};
+
+template<>
+struct TStructOpsTypeTraits< FMoveInput > : public TStructOpsTypeTraitsBase2< FMoveInput >
+{
+	enum 
+	{
+		WithNetSerializer = true,
+        WithNetSharedSerialization = true,
+    };
 };
 
 UCLASS(Blueprintable)
@@ -113,9 +165,6 @@ public:
 	UPROPERTY(BlueprintReadWrite, Replicated, Category = "CharacterPlayer")
 	bool bSprinted;
 
-	UPROPERTY(EditAnywhere, Category = "CharacterPlayer|Weapon")
-	float CombatToIdleTime;
-
 	/**
 	 * 默认属性值配置
 	 */
@@ -173,9 +222,6 @@ public:
 	bool CanAim() const;
 
 	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
-	int32 GetWeaponAmmunition() const;
-
-	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	void EquipWeapon(int32 Index, const FEquipmentAttributes& Attrs, TSubclassOf<AShootWeapon> WeaponClass);
 
 	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
@@ -231,33 +277,26 @@ public:
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	void DisableInteractiveButton();
 
-	// todo 待删除
-	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
-	void TestFunction(FGameplayTag Tag, UTexture2D* Icon);
-
 	/**
 	* 一般用于在交互时需要调用一下这个，避免出现在瞄准状态下打开商店时导致无法取消瞄准状态
 	*/
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	void StopAllActions();
 
+	/**
+	 * 恢复当前武器的弹药量 (不会消耗武器的储备弹药)
+	 */
+	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
+	void RecoveryActiveWeaponAmmunition(int32 AmmoNum);
+	
 public:
 
-	
 	const struct FCharacterMontage* GetCurrentActionMontage() const;
 
 	/** Camera 相关 */
-	void SetCameraFieldOfView(float NewFOV);
-	void CameraAimTransformLerp(float Alpha);
+	void SetCameraFieldOfView(float NewFOV) const;
+	void CameraAimTransformLerp(float Alpha) const;
 	
-	/** GameplayAbility 相关 */
-
-	/**
-	 *	通过GameplayTag 触发Ability
-	 *	@param Target Ability应用的目标 如果有的话 没有就是自身
-	 */
-	void TriggerAbilityFromTag(const FGameplayTag& Tag, AActor* Target);
-
 	FORCEINLINE UCharacterMesh* GetCharacterMesh() const
 	{
 		return CurrentCharacterMesh;
@@ -265,18 +304,14 @@ public:
 
 protected:
 
-	/*UFUNCTION()
-	void OnRep_CombatStatus();*/
-
 	UFUNCTION()
 	void OnRep_ActiveWeapon();
 
 	/** 状态切换相关 */
-	void StateSwitchToCombatAndKeep();
-	void StateSwitchToRelaxAndCancelKeep();
-	void StateSwitchToRelaxAndCancelKeepImmediately();
 	void StateSwitchToCombat();
 	void StateSwitchToRelax();
+	void StateSwitchToRelaxImmediately();
+	
 	void SetStateToRelax();
 	
 	UFUNCTION(server, reliable)
@@ -290,7 +325,7 @@ protected:
 
 	/** 换弹夹 */
 	void ReloadMagazine();
-	void HandleStopReload();
+	void StopReloadMagazine();
 	void ReloadFinished();
 
 	UFUNCTION(Reliable, Server)
@@ -339,7 +374,7 @@ protected:
 	UFUNCTION(server, reliable)
 	void ServerStopAim();
 
-	void UpdateAmmoUI();
+	void UpdateAmmoUI() const;
 
 	/** 跳 */
 	void StartJump();
@@ -402,27 +437,25 @@ protected:
     void ClientReceiveDamage(AActor* Causer);
 
 	UFUNCTION(Client, unreliable)
-	void ClientHitEnemy(const FDamageTargetInfo& DamageInfo);
+	void ClientHitEnemy(const FDamageTargetInfo& DamageInfo, ADCharacterBase* HitTarget);
 	virtual void HitEnemy(const FDamageTargetInfo& DamageInfo, ADCharacterBase* HitTarget) override;
-
-	virtual int32 GetPickUpMagazineNumber(EAmmoType AmmoType) const;
 
 	/* 尝试将Pawn状态修改未空闲 */
 	/*void AttemptSetStatusToRelax();
 
 	void ModStatusToRelax();*/
 
-	void AimedMoveSpeedChange(bool bNewAim);
+	void AimedMoveSpeedChange(bool bNewAim) const;
 
-	void SprintMoveSpeedChange(bool bNewSprint);
+	void SprintMoveSpeedChange(bool bNewSprint) const;
 
 	void OnInitPlayer(const FPlayerInfo& PlayerInfo, bool bSuccess);
 
 	void OnPlayerPropertiesChanged(const FPlayerProperties& Properties);
 
 	/** 属性相关 */
-	void AdditiveAttributes(const FEquipmentAttributes& Attributes);
     void RefreshAttributeBaseValue();
+	
     void FastRefreshWeaponAttribute(const FEquipmentAttributes& PrevWeaponAttrs);
 	
 	UFUNCTION(Server, Reliable)
@@ -432,7 +465,7 @@ protected:
     void ServerInitializePlayer(const FPlayerInfo& PlayerInfo);
 
 	UFUNCTION(Server, UnReliable)
-	void ServerUpdateMovingInput(const FVector2D& NewMovingInput);
+	void ServerUpdateMovingInput(const FMoveInput& NewMovingInput);
 
 	UFUNCTION(Server, Reliable)
 	void ServerUpdateCharacterMesh(UCharacterMesh* CharacterMesh);
@@ -457,24 +490,24 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = CharacterPlayer)
 	bool bCombatStatus;
-
-	bool bKeepCombatStatus;
-	uint16 KeepCount;
+	uint16 CombatStatusCount;
 
 	UPROPERTY(BlueprintReadOnly, ReplicatedUsing = OnRep_CharacterMesh, Category = CharacterPlayer)
 	UCharacterMesh* CurrentCharacterMesh;
 
-	UPROPERTY()
 	EWeaponStatus WeaponStatus;
 
+	bool bFiring;
+
+	// 前两个字节为X , 后两个字节为Y
 	UPROPERTY(Replicated)
-	FVector2D MovingInput;
+	FMoveInput MovingInput;
 	
 	FVector2D PrevMovingInput;
 
 private:
 
-	class UDProjectSettings* CDOProjectSettings;
+	static UDProjectSettings* CDOProjectSettings;
 
 	/** Base turn rate, in deg/sec. Other scaling may affect final turn rate. */
 	int32 BaseTurnRate;
@@ -488,8 +521,6 @@ private:
 	
 
 	TSharedPtr<class SPlayerHUD> PlayerHUD;
-	/*UPROPERTY()
-	class UPlayerHUD* PlayerHUD;*/
 
 	/** 当前正在使用的武器 在 WeaponInventory 的索引 */
 	UPROPERTY(Replicated)
@@ -511,7 +542,6 @@ private:
 	/** 战斗状态Handle */
 	FTimerHandle Handle_CombatStatus;
 	
-	//FTimerHandle Handle_CanTurn;
 
 	/* 武器相关 */
 	FTimerHandle Handle_Shoot;
@@ -519,14 +549,7 @@ private:
 	FTimerHandle Handle_Equip;
 
 	FDelegateHandle Handle_Properties;
-
 	FDelegateHandle Handle_PlayerInfo;
-
-	/* 记录进入战斗状态的次数 */
-	//uint16 CombatStatusCounter;
-	
-	/* 记录开火按键是否按下 */
-	bool bFireButtonDown;
 
 	/** 控制器 yaw 的累计值 */	
 	float CtrlYawDeltaCount;

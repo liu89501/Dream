@@ -34,19 +34,6 @@ void ADreamGameMode::ReSpawnCharacter(ACharacter* Character)
 	GetWorldTimerManager().SetTimer(Handle, Delegate, PlayerResurrectionTime, false);
 }
 
-FOnClientRPC& ADreamGameMode::GetClientRPCDelegate(const FGameplayTag& Tag)
-{
-	return ClientRPC.FindOrAdd(Tag);
-}
-
-void ADreamGameMode::BroadcastClientRPCDelegate(const FGameplayTag& Tag)
-{
-	if (FOnClientRPC* ClientRPCPtr = ClientRPC.Find(Tag))
-	{
-		ClientRPCPtr->Broadcast();
-	}
-}
-
 void ADreamGameMode::OnReSpawnCharacter(ACharacter* Character)
 {
 	FActorSpawnParameters Params;
@@ -91,9 +78,17 @@ FString ADreamGameMode::InitNewPlayer(APlayerController* NewPlayerController, co
 		if (NewPlayerController->PlayerState)
 		{
 			//UE_LOG(LogDream, Verbose, TEXT("InitNewPlayer Options: %s"), *Options);
-			
+
+#if WITH_EDITOR
+
+			NewPlayerController->PlayerState->SetPlayerId(FPDIStatic::Get()->GetClientPlayerID());
+
+#else
+
 			int32 PlayerId = UGameplayStatics::GetIntOption(Options, TEXT("PlayerId"), 0);
 			NewPlayerController->PlayerState->SetPlayerId(PlayerId);	
+
+#endif
 		}
 	}
 

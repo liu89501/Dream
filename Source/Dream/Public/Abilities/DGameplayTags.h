@@ -2,6 +2,8 @@
 
 #include "GameplayTags.h"
 
+#define CUSTOMIZE_TAG(Tag) CustomizeTags().Tag
+
 struct MyCustomizeTags
 {
     MyCustomizeTags();
@@ -16,9 +18,10 @@ struct MyCustomizeTags
     FGameplayTag Condition_Immediately;
     FGameplayTag Condition_Reloading;
     FGameplayTag Condition_Injured;
-    FGameplayTag Condition_Firing;
+    FGameplayTag Condition_Firing_Client;
     FGameplayTag Condition_KilledEnemy;
     FGameplayTag Condition_HitEnemy;
+    FGameplayTag Condition_HitEnemy_Client;
     FGameplayTag Condition_Crit; // 暴击时
 
     // 生命偷取 SetByCallerTag

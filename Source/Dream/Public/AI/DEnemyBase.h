@@ -9,6 +9,39 @@
 #include "Perception/AIPerceptionListenerInterface.h"
 #include "DEnemyBase.generated.h"
 
+USTRUCT()
+struct FAmmunitionDropProbability
+{
+	GENERATED_BODY()
+
+	FAmmunitionDropProbability()
+		: Ammunition_L1(0.5f)
+		, Ammunition_L2(0.3f)
+		, Ammunition_L3(0.2f)
+	{
+	}
+
+	/**
+	 * L1 弹药的掉落几率
+	 */
+	UPROPERTY(EditAnywhere, Meta = (ClampMin=0, ClampMax=1))
+	float Ammunition_L1;
+
+	/**
+	* L2 弹药的掉落几率
+	*/
+	UPROPERTY(EditAnywhere, Meta = (ClampMin=0, ClampMax=1))
+	float Ammunition_L2;
+
+	/**
+	* L3 弹药的掉落几率
+	*/
+	UPROPERTY(EditAnywhere, Meta = (ClampMin=0, ClampMax=1))
+	float Ammunition_L3;
+
+	bool RandomDrawing(EAmmoType& Type);
+};
+
 /**
  * 
  */
@@ -32,10 +65,10 @@ public:
 	class UBehaviorTree* BehaviorTree;
 	
 	/**
-	 * 被击杀时的奖励
+	 * 弹药掉落
 	 */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AISettings)
-	TMap<TSubclassOf<class ADreamDropProps>, float> AmmunitionReward;
+	UPROPERTY(EditAnywhere, Category = AISettings)
+	FAmmunitionDropProbability AmmunitionDrop;
 
 	UPROPERTY(EditAnywhere, Category = "AISettings|Abilities")
 	UDataTable* DefaultAttributes;
@@ -92,6 +125,7 @@ protected:
 	virtual void UpdateHealthUI();
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	virtual void HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle) override;
 	

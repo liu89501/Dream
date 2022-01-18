@@ -519,3 +519,4 @@ TSharedRef<class FExtender> FWeaponMeshPreviewCustomizationMenu::ProcessMenuCont
 
 	return Extender;
 }
+#undef LOCTEXT_NAMESPACE

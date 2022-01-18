@@ -5,9 +5,10 @@ MyCustomizeTags::MyCustomizeTags()
 	Condition_Immediately = FGameplayTag::RequestGameplayTag(TEXT("Condition.Immediately"));
 	Condition_Reloading = FGameplayTag::RequestGameplayTag(TEXT("Condition.Reloading"));
 	Condition_Injured = FGameplayTag::RequestGameplayTag(TEXT("Condition.Injured"));
-	Condition_Firing = FGameplayTag::RequestGameplayTag(TEXT("Condition.Firing"));
+	Condition_Firing_Client = FGameplayTag::RequestGameplayTag(TEXT("Condition.Firing_Client"));
 	Condition_KilledEnemy = FGameplayTag::RequestGameplayTag(TEXT("Condition.KilledEnemy"));
 	Condition_HitEnemy = FGameplayTag::RequestGameplayTag(TEXT("Condition.HitEnemy"));
+	Condition_HitEnemy_Client = FGameplayTag::RequestGameplayTag(TEXT("Condition.HitEnemy_Client"));
 	Condition_Crit = FGameplayTag::RequestGameplayTag(TEXT("Condition.Crit"));
 
 	GE_Buff_Weapon = FGameplayTag::RequestGameplayTag(TEXT("GE.Buff.Weapon"));
