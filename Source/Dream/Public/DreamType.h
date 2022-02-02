@@ -8,12 +8,20 @@
 DECLARE_LOG_CATEGORY_EXTERN(LogDream, Log, All);
 
 #define DREAM_NLOG(Verbosity, Format, ...) UE_LOG(LogDream, Verbosity, TEXT("%s"), *FString::Printf(Format, ##__VA_ARGS__));
+#define DREAM_RLOG(Verbosity, Format, ...) UE_LOG(LogDream, Verbosity, TEXT("%s <-> %s"), *UEnum::GetValueAsString(GetLocalRole()), *FString::Printf(Format, ##__VA_ARGS__));
 
 #define Collision_ObjectType_Projectile ECollisionChannel::ECC_GameTraceChannel1
 #define Collision_ObjectType_Weapon ECollisionChannel::ECC_GameTraceChannel2
 
-#define IfStandalone(Key) if (GetNetMode() == NM_Standalone) { Key; }
+#define Collision_ObjectTrace_Player EObjectTypeQuery::ObjectTypeQuery3
 
+#define Collision_TraceType_Climbable ETraceTypeQuery::TraceTypeQuery3
+
+#define DOREPLIFETIME_WITH_PARAMS_FAST_PUSH_MODEL(c, v, COND) \
+	FDoRepLifetimeParams Params_##v; \
+	Params_##v.bIsPushBased = true; \
+	Params_##v.Condition = COND; \
+	DOREPLIFETIME_WITH_PARAMS_FAST(c, v, Params_##v)
 
 namespace DreamActorTagName
 {
@@ -92,6 +100,157 @@ namespace IPTools
 	uint32 IPV4StringToUint32(const FString& IpString);
 	FString IPV4Uint32ToString(uint32 IP);
 }
+
+struct FTimerTemplate
+{
+	
+public:
+
+	FTimerTemplate()
+		: TargetTime(0)
+		, CurrentTime(0)
+		, bPause(true)
+	{
+	}
+
+	FORCEINLINE bool Tick(float DeltaTime)
+	{
+		if (TargetTime > 0)
+		{
+			CurrentTime = FMath::Min(CurrentTime + DeltaTime, TargetTime);
+			return IsCompleted();
+		}
+		return false;
+	}
+
+	FORCEINLINE bool IsCompleted() const
+	{
+		return TargetTime > 0 && FMath::IsNearlyEqual(CurrentTime, TargetTime, KINDA_SMALL_NUMBER);
+	}
+	
+	FORCEINLINE bool IsInProgress() const
+	{
+		return !bPause && CurrentTime < TargetTime;
+	}
+
+	FORCEINLINE void Reset()
+	{
+		CurrentTime = 0;
+	}
+	
+	FORCEINLINE void Reset(float NewTargetTime)
+	{
+		CurrentTime = 0;
+		TargetTime = NewTargetTime;
+	}
+
+	FORCEINLINE void SetTargetTime(float NewTargetTime)
+	{
+		TargetTime = NewTargetTime;
+	}
+
+	FORCEINLINE void Pause()
+	{
+		bPause = true;
+	}
+	
+	FORCEINLINE void Resume()
+	{
+		bPause = false;
+	}
+	
+	FORCEINLINE bool IsPause() const
+	{
+		return bPause;
+	}
+
+private:
+
+	float TargetTime;
+
+	float CurrentTime;
+
+	bool bPause;
+};
+
+
+struct FIntervalGate
+{
+
+public:
+
+	FIntervalGate()
+		: Interval(0)
+		, Delta(0)
+	{
+	}
+	
+	explicit FIntervalGate(float InInterval)
+		: Interval(InInterval)
+		, Delta(0)
+	{
+	}
+
+	FORCEINLINE void SetInterval(float InInterval)
+	{
+		Interval = InInterval;
+	}
+
+	FORCEINLINE bool Tick(float DeltaTime, float& OutDelta)
+	{
+		Delta += DeltaTime;
+
+		if (Delta >= Interval)
+		{
+			OutDelta = Delta;
+			Delta = 0;
+			return true;
+		}
+
+		return false;
+	}
+
+private:
+
+	float Interval;
+
+	float Delta;
+};
+
+struct FTimeInterval
+{
+
+public:
+
+	FTimeInterval()
+		: Interval(0)
+		, LastArriveTime(0)
+	{
+	}
+	
+	FTimeInterval(float InInterval)
+		: Interval(InInterval)
+		, LastArriveTime(0)
+	{
+	}
+	
+	FORCEINLINE bool IsArrive(float CurrentWorldSeconds)
+	{
+		if (LastArriveTime + Interval < CurrentWorldSeconds)
+		{
+			LastArriveTime = CurrentWorldSeconds;
+			return true;
+		}
+		
+		return LastArriveTime == 0;
+	}
+
+private:
+
+	float Interval;
+	
+	float LastArriveTime;
+};
 
 /*
 	按几率随机

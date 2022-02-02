@@ -3,7 +3,7 @@
 #include "DDropReward.h"
 #include "DCharacterPlayer.h"
 #include "DGameplayStatics.h"
-#include "DProjectSettings.h"
+#include "DMProjectSettings.h"
 #include "PlayerDataInterface.h"
 #include "PlayerDataInterfaceStatic.h"
 #include "UnrealNetwork.h"
@@ -32,13 +32,13 @@ ADDropReward::ADDropReward()
 
 const FItemDef& ADDropReward::GetItemDefinition() const
 {
-	return UDProjectSettings::GetProjectSettings()->GetItemDefinition(ItemGuid);
+	return GSProject->GetItemDefinition(ItemGuid);
 }
 
 const FLinearColor& ADDropReward::GetItemQualityColor() const
 {
 	const EPropsQuality& PropsQuality = GetItemDefinition().ItemBaseInfo.PropsQuality;
-	return UDProjectSettings::GetProjectSettings()->GetQualityInfo(PropsQuality).QualityThemeColor;
+	return UDMProjectSettings::GetProjectSettings()->GetQualityInfo(PropsQuality).QualityThemeColor;
 }
 
 void ADDropReward::ServerPickupReward_Implementation()
@@ -74,7 +74,7 @@ void ADDropReward::BeginPlay()
 
 	if (OwnerActor == nullptr)
 	{
-		UE_LOG(LogDream, Warning, TEXT("奖励又没所有者"));
+		UE_LOG(LogDream, Warning, TEXT("奖励没有所有者"));
 		return;
 	}
 

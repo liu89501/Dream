@@ -11,8 +11,6 @@ public:
 
 	virtual void ShutdownModule() override;
 
-	virtual bool IsGameModule() const override;
-
 private:
 
 	TSharedPtr<class FWeaponMeshPreviewCustomizationMenu> WeaponMeshPreview;

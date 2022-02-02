@@ -3,7 +3,7 @@
 #include "SPlayerHUD.h"
 #include "SMinimap.h"
 #include "DCharacterPlayer.h"
-#include "DPlayerController.h"
+#include "DMPlayerController.h"
 #include "SImage.h"
 #include "SCanvas.h"
 #include "SBoxPanel.h"
@@ -29,6 +29,7 @@ void SPlayerHUD::Construct(const FArguments& InArgs)
 
 	HitMarkDisplayTime = InArgs._HitMarkDisplayTime;
 
+	HealthBarPercent = 1.f;
 
 	// 受伤标记
 	HurtBrush = HUDStyle.HurtBrush;
@@ -65,7 +66,7 @@ void SPlayerHUD::Construct(const FArguments& InArgs)
 			+ SOverlay::Slot()
 			.HAlign(HAlign_Right)
 			.VAlign(VAlign_Top)
-			.Padding(40.f)
+			.Padding(30.f)
 			[
 				SNew(SBox)
 				.HeightOverride(260.f)
@@ -166,8 +167,7 @@ void SPlayerHUD::Construct(const FArguments& InArgs)
 	                    + SOverlay::Slot()
 	                    .Padding(1)
 	                    [
-		                    SAssignNew(HealthBackground, SProgressBar)
-                            .Percent(1)
+		                    SAssignNew(HealthBackgroundBar, SProgressBar)
                             .Style(&HUDStyle.HealthBarBackgroundStyle)
                             .BarFillType(EProgressBarFillType::RightToLeft)
 	                    ]
@@ -176,6 +176,7 @@ void SPlayerHUD::Construct(const FArguments& InArgs)
 	                    [
 		                    SAssignNew(HealthBar, SProgressBar)
 		                    .Style(&HUDStyle.HealthBarStyle)
+		                    .Percent(HealthBarPercent)
 		                    .BarFillType(EProgressBarFillType::RightToLeft)
 	                    ]
                 	]
@@ -195,11 +196,20 @@ void SPlayerHUD::Construct(const FArguments& InArgs)
 
 END_SLATE_FUNCTION_BUILD_OPTIMIZATION
 
-void SPlayerHUD::SetHealthPercent(float Percentage)
+
+void SPlayerHUD::ReduceHealth(float Percentage)
 {
 	HealthBackgroundAnim = Percentage;
 	HealthBackgroundAnim.Activate();
+
+	HealthBarPercent = Percentage;
 	HealthBar->SetPercent(Percentage);
+}
+
+void SPlayerHUD::RecoveryHealth(float Percentage)
+{
+	HealthRecoveryAnim.Set(HealthBarPercent, Percentage);
+	HealthRecoveryAnim.Activate();
 }
 
 void SPlayerHUD::SetCrosshairBrush(const FSlateBrush& NewCrosshairBrush) const
@@ -311,24 +321,24 @@ void SPlayerHUD::RemoveStateIcon(const FGameplayTag& StateTag)
 
 void SPlayerHUD::ActivateInteractiveButton(float InteractiveTime, const FText& InteractiveText, FOnInteractiveCompleted Delegate) const
 {
-	if (InteractiveButton->GetVisibility() != EVisibility::SelfHitTestInvisible)
-	{
-		InteractiveButton->SetInteractiveText(InteractiveText);
-		InteractiveButton->SetInteractiveTime(InteractiveTime);
-		InteractiveButton->SetOnCompleted(Delegate);
-		InteractiveButton->SetVisibility(EVisibility::SelfHitTestInvisible);
-		InteractiveButton->EnableInput();
-	}
+	InteractiveButton->SetInteractiveText(InteractiveText);
+	InteractiveButton->SetInteractiveTime(InteractiveTime);
+	InteractiveButton->SetOnCompleted(Delegate);
+	InteractiveButton->SetVisibility(EVisibility::SelfHitTestInvisible);
+	InteractiveButton->EnableInput();
+}
+
+void SPlayerHUD::DisplayInteractiveButton(const FText& InteractiveText)
+{
+	InteractiveButton->SetInteractiveText(InteractiveText);
+	InteractiveButton->SetVisibility(EVisibility::SelfHitTestInvisible);
 }
 
 void SPlayerHUD::DeactivateInteractiveButton() const
 {
-	if (InteractiveButton->GetVisibility() != EVisibility::Collapsed)
-	{
-		InteractiveButton->SetVisibility(EVisibility::Collapsed);
-		InteractiveButton->DisableInput();
-		InteractiveButton->ForceDeactivate();
-	}
+	InteractiveButton->SetVisibility(EVisibility::Collapsed);
+	InteractiveButton->DisableInput();
+	InteractiveButton->ForceDeactivate();
 }
 
 void SPlayerHUD::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
@@ -345,13 +355,20 @@ void SPlayerHUD::Tick(const FGeometry& AllottedGeometry, const double InCurrentT
 
 	if (HealthBackgroundAnim.IsActive())
 	{
-		HealthBackgroundAnim.InterpConstantTo(InDeltaTime);
+		HealthBackgroundAnim.ConstantToAndDeactivate(InDeltaTime);
+		HealthBackgroundBar->SetPercent(HealthBackgroundAnim.GetValue());
+	}
 
-		HealthBackground->SetPercent(HealthBackgroundAnim.GetValue());
+	if (HealthRecoveryAnim.IsActive())
+	{
+		HealthRecoveryAnim.InterpConstantTo(InDeltaTime);
+		HealthBarPercent = HealthRecoveryAnim.GetValue();
+		HealthBar->SetPercent(HealthBarPercent);
 		
-		if (HealthBackgroundAnim.IsCompleted())
+		if (HealthRecoveryAnim.IsCompleted())
 		{
-			HealthBackgroundAnim.Deactivate();
+			HealthBackgroundBar->SetPercent(HealthRecoveryAnim.GetValue());
+			HealthRecoveryAnim.Deactivate();
 		}
 	}
 

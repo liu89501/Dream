@@ -61,49 +61,49 @@ public:
 	class UHealthWidgetComponent* HealthUI;
 	
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AISettings)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = DMAISettings)
 	class UBehaviorTree* BehaviorTree;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = DMAISettings)
+	bool bAutoActivateBehaviorTree;
 	
 	/**
 	 * 弹药掉落
 	 */
-	UPROPERTY(EditAnywhere, Category = AISettings)
+	UPROPERTY(EditAnywhere, Category = DMAISettings)
 	FAmmunitionDropProbability AmmunitionDrop;
-
-	UPROPERTY(EditAnywhere, Category = "AISettings|Abilities")
-	UDataTable* DefaultAttributes;
 
 	UPROPERTY(BlueprintReadOnly)
 	FVector SpawnLocation;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AISettings)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = DMAISettings)
 	float HealthUIShowSecond;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AISettings)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = DMAISettings)
 	TArray<TSubclassOf<class UGameplayAbility>> OwningAbilities;
 
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AISettings)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = DMAISettings)
 	class UDRewardPool* RewardPool;
 
 	/**
 	 * 	AI最大的巡逻范围, 相对于 SpawnLocation
 	 */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = AISettings)
+	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = DMAISettings)
 	float MaxPatrolRange;
 	
-	UPROPERTY(EditDefaultsOnly, Category = AISettings)
+	UPROPERTY(EditDefaultsOnly, Category = DMAISettings)
 	FName BlackboardName_HostileTarget;
 
 	/**
 	* 触发Team感知事件的直径
 	*/
-	UPROPERTY(EditDefaultsOnly, Category = AISettings)
+	UPROPERTY(EditDefaultsOnly, Category = DMAISettings)
 	float NotifyTeamDiameter;
 
-	UPROPERTY(BlueprintReadOnly, Category = AISettings)
+	UPROPERTY(BlueprintReadOnly, Category = DMAISettings)
 	float WalkSpeed;
 
-	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = AISettings)
+	UPROPERTY(BlueprintReadOnly, EditDefaultsOnly, Category = DMAISettings)
 	float JogSpeed;
 
 public:
@@ -111,6 +111,9 @@ public:
 	class AAIController* GetAIController() const;
 
 	void SetAIGenerator(class ADAIGeneratorBase* Generator);
+
+	UFUNCTION(BlueprintCallable, Category=DreamAI)
+	void ActivateBehaviorTree();
 
 	UFUNCTION(BlueprintPure, Category=AIEnemy)
 	FRotator GetReplicationControllerRotation() const;
@@ -156,7 +159,7 @@ protected:
 	class AAIController* AIController;
 
 	UPROPERTY(Replicated)
-	FVector_NetQuantize10 ReplicatedCtrlRotation;
+	FVector_NetQuantizeNormal ReplicatedCtrlRotation;
 
 	UPROPERTY(BlueprintReadOnly)
 	bool bTurnInProgress;

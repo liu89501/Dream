@@ -1,9 +1,9 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-#include "DPropsPreview.h"
+#include "DMPreviewProps.h"
 #include "PreviewInterface.h"
 
-AActor* ADPropsPreview::AddPreviewActorFromClass(TSubclassOf<AActor> ActorClass)
+AActor* ADMPreviewProps::AddPreviewActorFromClass(TSubclassOf<AActor> ActorClass)
 {
 	if (ActorClass->ImplementsInterface(IPreviewInterface::UClassType::StaticClass()))
 	{

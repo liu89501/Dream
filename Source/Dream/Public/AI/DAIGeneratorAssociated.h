@@ -3,6 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "AIController.h"
 #include "DAIGeneratorBase.h"
 #include "DAIGeneratorAssociated.generated.h"
 
@@ -26,7 +27,9 @@ public:
 
 protected:
 
-	virtual void ProcessAIGenerate() override;
+	virtual int32 ProcessAIGenerate() override;
+
+	virtual void Destroyed() override;
 
 	
 #if WITH_EDITOR

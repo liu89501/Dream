@@ -75,20 +75,6 @@ public:
 
 				if (ReceiveTrigger.IsBound())
 				{
-					
-#if WITH_EDITOR
-
-					/*FString BytesStr;
-
-					for (uint8& Byte : *Packet)
-					{
-						BytesStr.Appendf(TEXT("%d, "), Byte);
-					}
-
-					UE_LOG(LogDream, Verbose, TEXT("Receive Packet: %s"), *BytesStr);*/
-			
-#endif
-					
 					ReceiveTrigger.Execute(Packet);
 				}
 			}

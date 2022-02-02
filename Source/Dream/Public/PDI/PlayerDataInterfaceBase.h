@@ -60,8 +60,8 @@ public:
 
 DECLARE_DELEGATE_OneParam(FOnReceiveMessage, FPacketArchiveReader&);
 
-#define CALLBACK_BINDING_RAW(Mark, Target, FUnc) BindReceiveFunction(Mark, FOnReceiveMessage::CreateRaw(Target, FUnc))
-#define CALLBACK_BINDING_OBJECT(Mark, Target, FUnc) BindReceiveFunction(Mark, FOnReceiveMessage::CreateUObject(Target, FUnc))
+#define CALLBACK_BINDING_RAW(Service, Target, FUnc) BindReceiveFunction(Service::MarkId, FOnReceiveMessage::CreateRaw(Target, FUnc))
+#define CALLBACK_BINDING_OBJECT(Service, Target, FUnc) BindReceiveFunction(Service::MarkId, FOnReceiveMessage::CreateUObject(Target, FUnc))
 
 
 
@@ -142,10 +142,10 @@ public:
 
 public:
 
-	void OnReceiveClientLoginMessage(FPacketArchiveReader& Data);
-	void OnReceiveServerLoginMessage(FPacketArchiveReader& Data);
-	void OnReceiveSearchServerMessage(FPacketArchiveReader& Data);
-	void OnReceiveRegisterServerMessage(FPacketArchiveReader& Data);
+	virtual void OnReceiveClientLoginMessage(FPacketArchiveReader& Data);
+	virtual void OnReceiveServerLoginMessage(FPacketArchiveReader& Data);
+	virtual void OnReceiveSearchServerMessage(FPacketArchiveReader& Data);
+	virtual void OnReceiveRegisterServerMessage(FPacketArchiveReader& Data);
 
 	FORCEINLINE FTCPSocketSender* GetSender() const
 	{
@@ -153,6 +153,10 @@ public:
 	}
 
 protected:
+
+	bool ConnectToServer();
+	void ShutdownSocket();
+	bool HandleConnect(TSharedPtr<FInternetAddr> Addr);
 
 	void OnSocketDisconnect();
 	void OnReceiveData(FReceivePacket Packet);
@@ -164,13 +168,6 @@ protected:
 	FTCPSocketSender* SocketSender;
 	FTCPSocketReceiver* SocketReceiver;
 
-private:
-
-	bool ConnectToServer();
-	
-	void ShutdownSocket();
-
-	bool HandleConnect(TSharedPtr<FInternetAddr> Addr);
 
 	FSocket* Socket;
 

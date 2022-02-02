@@ -1,25 +1,18 @@
 ﻿// Copyright 1998-2019 Epic Games, Inc. All Rights Reserved.
 
 #include "DreamGameMode.h"
-#include "DGameState.h"
-#include "DPlayerController.h"
+#include "DMGameState.h"
 #include "Kismet/GameplayStatics.h"
 #include "GameFramework/PlayerController.h"
-#include "DreamType.h"
 #include "DreamGameSession.h"
-#include "GameFramework/Character.h"
 #include "GameFramework/GameMode.h"
 #include "GameFramework/PlayerState.h"
 #include "PDI/PlayerDataInterface.h"
 #include "PDI/PlayerDataInterfaceStatic.h"
 
 
-int32 ADreamGameMode::DEFAULT_MAX_PLAYERS = 4;
-
 ADreamGameMode::ADreamGameMode()
-	: PlayerResurrectionTime(5.f)
-	, MaxPlayers(4)
-	, SettlementWaitTime(15.f)
+	: DefaultPlayerRespawnDelay(5.f)
 {
 	PlayerStateClass = APlayerState::StaticClass();
 	GameSessionClass = ADreamGameSession::StaticClass();
@@ -27,46 +20,20 @@ ADreamGameMode::ADreamGameMode()
 	PrimaryActorTick.bStartWithTickEnabled = false;
 }
 
-void ADreamGameMode::ReSpawnCharacter(ACharacter* Character)
-{
-	FTimerHandle Handle;
-	FTimerDelegate Delegate = FTimerDelegate::CreateUObject(this, &ADreamGameMode::OnReSpawnCharacter, Character);
-	GetWorldTimerManager().SetTimer(Handle, Delegate, PlayerResurrectionTime, false);
-}
 
-void ADreamGameMode::OnReSpawnCharacter(ACharacter* Character)
+void ADreamGameMode::SetPlayerRespawnDelay(float NewRespawnDelay)
 {
-	FActorSpawnParameters Params;
-	Params.Owner = Character->Controller;
-	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	// DefaultPlayerRespawnDelay = NewRespawnDelay;
 
-	FTransform Transform;
-	if (!GetPlayerRestartTransform(Transform))
+	if (ADMGameState* DMGameState = GetGameState<ADMGameState>())
 	{
-		Transform = Character->GetActorTransform();
+		DMGameState->SetPlayerRespawnDelay(NewRespawnDelay);
 	}
-	
-	ACharacter* NewCharacter = GetWorld()->SpawnActor<ACharacter>(DefaultPawnClass, Transform, Params);
-	
-	Character->Controller->Possess(NewCharacter);
-
-	Character->Destroy();
 }
 
 void ADreamGameMode::EndMatch()
 {
-	if (ADGameState* DGameState = GetGameState<ADGameState>())
-	{
-		DGameState->EndMatch();
-
-		FTimerHandle Handle;
-		GetWorld()->GetTimerManager().SetTimer(Handle, this, &ADreamGameMode::OnResetGame, SettlementWaitTime + 1);
-	}
-}
-
-AActor* ADreamGameMode::ChoosePlayerStart_Implementation(AController* Player)
-{
-	return Super::ChoosePlayerStart_Implementation(Player);
+	HandleEndMatch();
 }
 
 FString ADreamGameMode::InitNewPlayer(APlayerController* NewPlayerController, const FUniqueNetIdRepl& UniqueId, const FString& Options, const FString& Portal)
@@ -95,33 +62,26 @@ FString ADreamGameMode::InitNewPlayer(APlayerController* NewPlayerController, co
 	return Error;
 }
 
-bool ADreamGameMode::GetPlayerRestartTransform(FTransform& RestartTransform)
-{
-	return false;
-}
-
-void ADreamGameMode::OnResetGame() const
-{
-	for (TPlayerControllerIterator<APlayerController>::ServerAll It(GetWorld()); It; ++It)
-	{
-		GameSession->KickPlayer(*It, FText::FromString(TEXT("EndMatch")));
-	}
-	
-	GetWorld()->ServerTravel(TEXT("?Restart"), true);
-}
-
 void ADreamGameMode::UpdateActivePlayers() const
 {
 	FPDIStatic::Get()->UpdateActivePlayers(FUpdateServerPlayerParam(CurrentPlayers));
+}
+
+void ADreamGameMode::OnPlayerCharacterDie(APlayerController* PlayerController)
+{
+}
+
+void ADreamGameMode::HandleEndMatch()
+{
 }
 
 void ADreamGameMode::InitGameState()
 {
 	Super::InitGameState();
 	
-	if (ADGameState* DGameState = GetGameState<ADGameState>())
+	if (ADMGameState* DMGameState = GetGameState<ADMGameState>())
 	{
-		DGameState->SettlementWaitTime = SettlementWaitTime;
+		DMGameState->SetPlayerRespawnDelay(DefaultPlayerRespawnDelay);
 	}
 }
 
@@ -129,10 +89,10 @@ void ADreamGameMode::PostLogin(APlayerController* NewPlayer)
 {
 	Super::PostLogin(NewPlayer);
 
-	IfStandalone(return);
-	
+#if !WITH_EDITOR
+
 	CurrentPlayers++;
-	
+
 	UpdateActivePlayers();
 
 	if (ADPlayerController* DPlayer = Cast<ADPlayerController>(NewPlayer))
@@ -146,6 +106,8 @@ void ADreamGameMode::PostLogin(APlayerController* NewPlayer)
 		
 		DPlayer->ClientChangeConnectedServer(Address, Port);
 	}
+
+#endif
 	
 }
 
@@ -153,19 +115,11 @@ void ADreamGameMode::Logout(AController* Exiting)
 {
 	Super::Logout(Exiting);
 
-	IfStandalone(return);
-	
+#if !WITH_EDITOR
+
 	CurrentPlayers--;
-	
 	UpdateActivePlayers();
-}
-
-void ADreamGameMode::EndPlay(const EEndPlayReason::Type EndPlayReason)
-{
-	Super::EndPlay(EndPlayReason);
-}
-
-void ADreamGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
-{
-	Super::InitGame(MapName, Options, ErrorMessage);
+	
+#endif
+	
 }

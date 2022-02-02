@@ -2,8 +2,7 @@
 
 
 #include "DGE_WeaponBaseDamage.h"
-
-#include "DreamAttributeSet.h"
+#include "DMAttributeSet.h"
 #include "DreamDamageCalculation.h"
 
 UDGE_WeaponBaseDamage::UDGE_WeaponBaseDamage()
@@ -11,6 +10,7 @@ UDGE_WeaponBaseDamage::UDGE_WeaponBaseDamage()
     FGameplayEffectExecutionDefinition ExecDef;
     ExecDef.CalculationClass = UDreamDamageCalculation::StaticClass();
     Executions.Add(ExecDef);
+    
     
     /*FGameplayEffectCue Cue;
     Cue.GameplayCueTags = FGameplayTagContainer(FGameplayTag::RequestGameplayTag(TEXT("GameplayCue.BaseDamage")));

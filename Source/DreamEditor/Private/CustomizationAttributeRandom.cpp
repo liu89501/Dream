@@ -1,6 +1,6 @@
 ﻿#include "CustomizationAttributeRandom.h"
 #include "DetailWidgetRow.h"
-#include "DProjectSettings.h"
+#include "DMProjectSettings.h"
 #include "DPropsType.h"
 #include "SComboBox.h"
 #include "IDetailChildrenBuilder.h"
@@ -71,7 +71,7 @@ void FItemSelectedCustomization::InitializeSelectedOption()
 	int32 Guid;
 	if (GuidHandle->GetValue(Guid) == FPropertyAccess::Success)
 	{
-		const FItemDef& Definition = UDProjectSettings::GetProjectSettings()->GetItemDefinition(Guid);
+		const FItemDef& Definition = GSProject->GetItemDefinition(Guid);
 		SelectedOption = MakeShared<FComboboxItem>(Definition.ItemBaseInfo.PropsName, Guid);
 	}
 }
@@ -118,7 +118,7 @@ FText FItemSelectedCustomization::FormatItemText(TSharedPtr<FComboboxItem> Item)
 
 bool FItemSelectedCustomization::GetAllItems(TArray<FItemDetails>& Items) const
 {
-	if (UDataTable* ItemTable = UDProjectSettings::GetProjectSettings()->GetItemTable())
+	if (UDataTable* ItemTable = GSProject->GetItemTable())
 	{
 		EItemType::Type ItemType = static_cast<EItemType::Type>(FilterType);
 

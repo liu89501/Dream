@@ -92,10 +92,10 @@ FPlayerDataInterfaceBase::FPlayerDataInterfaceBase()
 	  SocketReceiver(nullptr),
 	  Socket(nullptr)
 {
-	CALLBACK_BINDING_RAW(TService_ClientLogin::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveClientLoginMessage);
-	CALLBACK_BINDING_RAW(TService_ServerLogin::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveServerLoginMessage);
-	CALLBACK_BINDING_RAW(TService_SearchServer::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveSearchServerMessage);
-	CALLBACK_BINDING_RAW(TService_RegisterServer::MarkId, this, &FPlayerDataInterfaceBase::OnReceiveRegisterServerMessage);
+	CALLBACK_BINDING_RAW(TService_ClientLogin, this, &FPlayerDataInterfaceBase::OnReceiveClientLoginMessage);
+	CALLBACK_BINDING_RAW(TService_ServerLogin, this, &FPlayerDataInterfaceBase::OnReceiveServerLoginMessage);
+	CALLBACK_BINDING_RAW(TService_SearchServer, this, &FPlayerDataInterfaceBase::OnReceiveSearchServerMessage);
+	CALLBACK_BINDING_RAW(TService_RegisterServer, this, &FPlayerDataInterfaceBase::OnReceiveRegisterServerMessage);
 }
 
 FPlayerDataInterfaceBase::~FPlayerDataInterfaceBase()

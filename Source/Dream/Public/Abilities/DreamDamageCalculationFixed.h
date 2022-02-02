@@ -7,16 +7,16 @@
 #include "DreamDamageCalculationFixed.generated.h"
 
 /**
- * 
+ * 固定伤害，攻击力不会计算
  */
 UCLASS()
 class DREAM_API UDreamDamageCalculationFixed : public UGameplayEffectExecutionCalculation
 {
 	GENERATED_BODY()
 
-    UDreamDamageCalculationFixed();
-
 public:
+
+	UDreamDamageCalculationFixed();
 
     virtual void Execute_Implementation(const FGameplayEffectCustomExecutionParameters& ExecutionParams, FGameplayEffectCustomExecutionOutput& OutExecutionOutput) const override;
 };

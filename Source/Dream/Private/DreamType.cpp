@@ -36,5 +36,6 @@ FString IPTools::IPV4Uint32ToString(uint32 IP)
 
 float FRangeRandomFloat::GetRandomFloat() const
 {
-	return FMath::FRandRange(Min, Max);
+	FRandomStream Stream(FMath::Rand());
+	return Stream.FRandRange(Min, Max);
 }

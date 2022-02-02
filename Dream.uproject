@@ -7,18 +7,12 @@
 		{
 			"Name": "Dream",
 			"Type": "Runtime",
-			"LoadingPhase": "Default",
-			"AdditionalDependencies": [
-				"Engine",
-				"Slate",
-				"SlateCore",
-				"CoreUObject"
-			]
+			"LoadingPhase": "Default"
 		},
 		{
 			"Name": "DreamEditor",
-			"Type": "Editor",
-			"LoadingPhase": "Default"
+			"Type": "UncookedOnly",
+			"LoadingPhase": "PostEngineInit"
 		},
 		{
 			"Name": "DreamLoadingScreen",
@@ -95,10 +89,6 @@
 		{
 			"Name": "GPULightmass",
 			"Enabled": true
-		},
-		{
-			"Name": "promethean",
-			"Enabled": false
 		},
 		{
 			"Name": "ElectronicNodes",

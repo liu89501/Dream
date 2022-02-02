@@ -15,10 +15,19 @@ public:
 
 	ADAIGeneratorUnit();
 
-	UPROPERTY(EditInstanceOnly, Category=AIGenerator)
+	UPROPERTY(EditInstanceOnly, Category=DMAIGenerator)
 	TSubclassOf<class ADEnemyBase> AIClass;
 
+#if WITH_EDITORONLY_DATA
+	
+	UPROPERTY(VisibleAnywhere, Category=DMAIGenerator)
+	class UArrowComponent* Arrow;
+	
+#endif 
+
 public:
+
+	void InitializeAI(ADEnemyBase* AI);
 
 #if WITH_EDITOR
 
@@ -27,4 +36,5 @@ public:
 #endif
 
 };
+
 

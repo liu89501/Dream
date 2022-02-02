@@ -6,13 +6,18 @@
 #include "DGameplayTags.h"
 #include "DGE_DamageHealthSteal.h"
 #include "GenericTeamAgentInterface.h"
-#include "Abilities/DreamAttributeSet.h"
+#include "Abilities/DMAttributeSet.h"
 
 UDreamDamageCalculationFixed::UDreamDamageCalculationFixed()
 {
-    RelevantAttributesToCapture.Add(DreamAttrStatics().DefensePowerDef);
+    RelevantAttributesToCapture.Add(DMAttrStatics().DefensePowerDef);
+
+#if WITH_EDITORONLY_DATA
+
     ValidTransientAggregatorIdentifiers.AddTag(CustomizeTags().Exec_Temporary_PercentageDmgInc);
     ValidTransientAggregatorIdentifiers.AddTag(CustomizeTags().Exec_Temporary_FixedDamage);
+
+#endif
 }
 
 void UDreamDamageCalculationFixed::Execute_Implementation(const FGameplayEffectCustomExecutionParameters& ExecutionParams,
@@ -50,7 +55,7 @@ void UDreamDamageCalculationFixed::Execute_Implementation(const FGameplayEffectC
     // --------------------------------------
 
     float TargetDefensePower = 0.f;
-    ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DreamAttrStatics().DefensePowerDef, EvaluationParameters, TargetDefensePower);
+    ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DMAttrStatics().DefensePowerDef, EvaluationParameters, TargetDefensePower);
 
     float PercentageDmgInc = 0.f;
     ExecutionParams.AttemptCalculateTransientAggregatorMagnitude(CustomizeTags().Exec_Temporary_PercentageDmgInc, EvaluationParameters, PercentageDmgInc);
@@ -69,5 +74,5 @@ void UDreamDamageCalculationFixed::Execute_Implementation(const FGameplayEffectC
     
     DamageDone = FMath::Max(DamageDone, 1.f);
 
-    OutExecutionOutput.AddOutputModifier(FGameplayModifierEvaluatedData(DreamAttrStatics().DamageProperty, EGameplayModOp::Additive, DamageDone));
+    OutExecutionOutput.AddOutputModifier(FGameplayModifierEvaluatedData(DMAttrStatics().DamageProperty, EGameplayModOp::Additive, DamageDone));
 }

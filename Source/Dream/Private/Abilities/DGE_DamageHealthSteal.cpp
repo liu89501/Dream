@@ -4,7 +4,7 @@
 #include "DGE_DamageHealthSteal.h"
 
 #include "DGameplayTags.h"
-#include "DreamAttributeSet.h"
+#include "DMAttributeSet.h"
 
 UDGE_DamageHealthSteal::UDGE_DamageHealthSteal()
 {
@@ -12,7 +12,7 @@ UDGE_DamageHealthSteal::UDGE_DamageHealthSteal()
     ModifierMagnitudeHealth.DataTag = CustomizeTags().SetByCaller_HealthSteal;
     
     FGameplayModifierInfo ModifierHealth;
-    ModifierHealth.Attribute = DreamAttrStatics().HealthStealProperty;
+    ModifierHealth.Attribute = DMAttrStatics().HealthStealProperty;
     ModifierHealth.ModifierMagnitude = ModifierMagnitudeHealth;
     ModifierHealth.ModifierOp = EGameplayModOp::Additive;
 

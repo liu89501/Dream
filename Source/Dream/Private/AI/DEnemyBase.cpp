@@ -1,8 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "DEnemyBase.h"
-
 #include "AbilitySystemComponent.h"
 #include "Engine/World.h"
 #include "UnrealNetwork.h"
@@ -10,16 +8,16 @@
 #include "Kismet/GameplayStatics.h"
 #include "AIController.h"
 #include "DAIGeneratorBase.h"
-#include "DProjectSettings.h"
-#include "DreamAttributeSet.h"
+#include "DMProjectSettings.h"
+#include "DMAttributeSet.h"
 #include "Perception/AIPerceptionComponent.h"
 #include "PlayerDataInterface.h"
 #include "Perception/AISense_Damage.h"
 #include "HealthWidgetComponent.h"
-#include "Character/DPlayerController.h"
+#include "Character/DMPlayerController.h"
 #include "Character/DCharacterPlayer.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "DRewardPool.h"
+#include "PDIFunctions.h"
 #include "PlayerDataInterfaceStatic.h"
 #include "BehaviorTree/BehaviorTreeComponent.h"
 #include "BehaviorTree/BlackboardComponent.h"
@@ -54,18 +52,17 @@ bool FAmmunitionDropProbability::RandomDrawing(EAmmoType& Type)
 }
 
 ADEnemyBase::ADEnemyBase()
+	: bAutoActivateBehaviorTree(false)
+	, JogSpeed(400.f)
 {
 	AIPerception = CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("AIPerception"));
+	AIPerception->bAutoActivate = false;
 
 	HealthUI = CreateDefaultSubobject<UHealthWidgetComponent>(TEXT("HealthUI"));
 	HealthUI->SetupAttachment(RootComponent);
 
 	PrimaryActorTick.bCanEverTick = true;
 	PrimaryActorTick.bStartWithTickEnabled = false;
-
-	JogSpeed = 400.f;
-
-	//DREAM_NLOG(Error, TEXT("ADEnemyBase AttributeSet: %s"), *(AttributeSet ? FCoreTexts::Get().Yes : FCoreTexts::Get().No).ToString());
 }
 
 void ADEnemyBase::HealthChanged(const FOnAttributeChangeData& AttrData)
@@ -82,7 +79,7 @@ void ADEnemyBase::HealthChanged(const FOnAttributeChangeData& AttrData)
 		EAmmoType RandomDropAmmoType;
 		if (AmmunitionDrop.RandomDrawing(RandomDropAmmoType))
 		{
-			TSubclassOf<ADDropMagazine> MagazineDropClass = UDProjectSettings::GetProjectSettings()->GetMagazineDropClass(RandomDropAmmoType);
+			TSubclassOf<ADDropMagazine> MagazineDropClass = UDMProjectSettings::GetProjectSettings()->GetMagazineDropClass(RandomDropAmmoType);
 
 			if (MagazineDropClass)
 			{
@@ -111,9 +108,18 @@ void ADEnemyBase::SetAIGenerator(ADAIGeneratorBase* Generator)
 	OwnerAIGenerator = Generator;
 }
 
+void ADEnemyBase::ActivateBehaviorTree()
+{
+	if (BehaviorTree)
+	{
+		AIController->RunBehaviorTree(BehaviorTree);
+		AIPerception->Activate();
+	}
+}
+
 FRotator ADEnemyBase::GetReplicationControllerRotation() const
 {
-	return FRotator(ReplicatedCtrlRotation.X, ReplicatedCtrlRotation.Y, 0);
+	return ReplicatedCtrlRotation.Rotation();
 }
 
 void ADEnemyBase::HiddenHealthUI()
@@ -136,6 +142,8 @@ void ADEnemyBase::BeginPlay()
 {
 	Super::BeginPlay();
 
+	CharacterAttributes = const_cast<UDMAttributeSet*>(AbilitySystem->GetSet<UDMAttributeSet>());
+
 	SpawnLocation = GetActorLocation();
 
 	WalkSpeed = GetCharacterMovement()->MaxWalkSpeed;
@@ -144,17 +152,12 @@ void ADEnemyBase::BeginPlay()
 
 	if (GetLocalRole() == ROLE_Authority)
 	{
-		if (BehaviorTree)
+		if (bAutoActivateBehaviorTree)
 		{
-			AIController->RunBehaviorTree(BehaviorTree);
+			ActivateBehaviorTree();
 		}
 
 		AIPerception->OnTargetPerceptionUpdated.AddDynamic(this, &ADEnemyBase::OnTargetPerceptionUpdated0);
-
-		if (DefaultAttributes)
-		{
-			AttributeSet->InitFromMetaDataTable(DefaultAttributes);
-		}
 
 		for (TSubclassOf<UGameplayAbility> OwningAbility : OwningAbilities)
 		{
@@ -185,7 +188,7 @@ void ADEnemyBase::HandleDamage(const float DamageDone, const FGameplayEffectCont
 
 	AActor* OriginalInstigator = Handle.GetOriginalInstigator();
 
-	if (OriginalInstigator == nullptr || OriginalInstigator->IsA<ADEnemyBase>())
+	if (FGenericTeamId::GetAttitude(OriginalInstigator, this) != ETeamAttitude::Hostile)
 	{
 		return;
 	}
@@ -218,7 +221,7 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 
 	for (AActor* Hostile : HostileActors)
 	{
-		ADPlayerController* PlayerController = nullptr;
+		ADMPlayerController* PlayerController = nullptr;
 
 		if (ADCharacterPlayer* HostileCharacter = Cast<ADCharacterPlayer>(Hostile))
 		{
@@ -237,27 +240,12 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 			continue;
 		}
 
-		FItemListParam DirectRewards;
-		DirectRewards.PlayerId = HostilePlayerState->GetPlayerId();
-
-		FItemListHandle DropRewards;
-		
-		RewardPool->GenerateRewards(DropRewards, DirectRewards.ListHandle);
-
-		if (DropRewards.IsNotEmpty())
-		{
-			PlayerController->SpawnDropRewards(DropRewards, GetActorLocation());
-		}
-
-		if (DirectRewards.IsNotEmpty())
-		{
-			FPDIStatic::Get()->AddPlayerRewards(DirectRewards);
-		}
+		UPDIFunctions::SpawnRewardsAtLocation(PlayerController, RewardPool, GetActorLocation());
 	}
 
 	if (const ADCharacterPlayer* Player = Cast<ADCharacterPlayer>(Causer))
 	{
-		if (ADPlayerController* Ctrl = Player->GetPlayerController())
+		if (ADMPlayerController* Ctrl = Player->GetPlayerController())
 		{
 			int32 PlayerId = Ctrl->PlayerState->GetPlayerId();
 			FPDIStatic::Get()->UpdateTaskState(FQuestActionHandle(PlayerId, MakeShared<FQuestAction_KilledTarget>(PawnType)));
@@ -367,22 +355,24 @@ void ADEnemyBase::OnTargetPerceptionUpdated(ADCharacterBase* StimulusPawn, FAISt
 void ADEnemyBase::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	FRotator Rotation = GetControlRotation();
-	ReplicatedCtrlRotation.X = Rotation.Pitch;
-	ReplicatedCtrlRotation.Y = Rotation.Yaw;
-	ReplicatedCtrlRotation.Z = 0;
+
+	// [Server]
+	FRotator ControllerRotation = GetControlRotation();
+	ReplicatedCtrlRotation = ControllerRotation.Vector().GetSafeNormal();
+	//UE_LOG(LogDream, Error, TEXT("PreReplication: %s"), *ControllerRotation.ToString());
 
 	if (!bUseControllerRotationYaw)
 	{
+		FRotator CtrlRotation = GetControlRotation();
 		FRotator ActorRotation = GetActorRotation();
-		FRotator DeltaRotation = Rotation - ActorRotation;
+		FRotator DeltaRotation = CtrlRotation - ActorRotation;
 		DeltaRotation.Normalize();
 
 		float YawAbs = FMath::Abs(DeltaRotation.Yaw);
 
 		if (YawAbs >= 60.f || bTurnInProgress)
 		{
-			SetActorRotation(FMath::RInterpTo(ActorRotation, FRotator(0, Rotation.Yaw, 0), DeltaSeconds, 10.f));
+			SetActorRotation(FMath::RInterpTo(ActorRotation, FRotator(0, CtrlRotation.Yaw, 0), DeltaSeconds, 10.f));
 
 			if (FMath::IsNearlyZero(YawAbs, 2.f))
 			{

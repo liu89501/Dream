@@ -1,7 +1,7 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "PSceneCapture.h"
-#include "DItemPreview.h"
+#include "DMPreviewActor.h"
 #include "DPreviewScene.h"
 #include "EngineModule.h"
 #include "EngineUtils.h"
@@ -146,7 +146,7 @@ UPSceneCapture::UPSceneCapture(const FObjectInitializer& ObjectInitializer)
 	PreviewZoomTarget = CameraFOV;
 }
 
-ADItemPreview* UPSceneCapture::GetPreviewActor() const
+ADMPreviewActor* UPSceneCapture::GetPreviewActor() const
 {
 	return PreviewActor;
 }
@@ -233,7 +233,7 @@ void UPSceneCapture::NativeOnInitialized()
 
 	if (PreviewActorClass)
 	{
-		PreviewActor = PreviewWorld->GetWorld()->SpawnActor<ADItemPreview>(PreviewActorClass);
+		PreviewActor = PreviewWorld->GetWorld()->SpawnActor<ADMPreviewActor>(PreviewActorClass);
 		
 		ADPreviewScene* PreviewSceneActor = PreviewWorld->GetPreviewScene();
 		PreviewActor->AttachToComponent(PreviewSceneActor->PreviewActorPoint, FAttachmentTransformRules::KeepRelativeTransform);

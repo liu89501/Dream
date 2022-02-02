@@ -3,9 +3,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DreamGameplayType.h"
 #include "GameplayEffectExecutionCalculation.h"
 #include "DreamDamageCalculation.generated.h"
+
+enum class EDDamageType : uint8;
 
 /**
  * 
@@ -15,9 +16,9 @@ class DREAM_API UDreamDamageCalculation : public UGameplayEffectExecutionCalcula
 {
 	GENERATED_BODY()
 
-    UDreamDamageCalculation();
-
 public:
+
+	UDreamDamageCalculation();
 
     virtual void Execute_Implementation(const FGameplayEffectCustomExecutionParameters& ExecutionParams, FGameplayEffectCustomExecutionOutput& OutExecutionOutput) const override;
 

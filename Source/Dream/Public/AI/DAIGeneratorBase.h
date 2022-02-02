@@ -60,8 +60,12 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
-	virtual void ProcessAIGenerate();
+	virtual int32 ProcessAIGenerate();
 
+	void ReGenerate();
+
+private:
+	
 	uint16 ActiveAICounter;
 
 	int32 CurrentRevivedCount;

@@ -1,9 +1,8 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "DAIGeneratorUnit.h"
-
 #include "DEnemyBase.h"
+#include "Components/ArrowComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/PlayerStart.h"
 
@@ -13,18 +12,21 @@ ADAIGeneratorUnit::ADAIGeneratorUnit()
 	GetCapsuleComponent()->InitCapsuleSize(40.0f, 92.0f);
 	GetCapsuleComponent()->SetShouldUpdatePhysicsVolume(false);
 
-#if WITH_EDITOR
+#if WITH_EDITORONLY_DATA
 
-	if (AIClass)
-	{
-		ADEnemyBase* EnemyCDO = AIClass->GetDefaultObject<ADEnemyBase>();
-
-		UCapsuleComponent* AICapsuleComponent = EnemyCDO->GetCapsuleComponent();
-		GetCapsuleComponent()->InitCapsuleSize(
-            AICapsuleComponent->GetUnscaledCapsuleRadius(), AICapsuleComponent->GetUnscaledCapsuleHalfHeight());
-	}
+	Arrow = CreateDefaultSubobject<UArrowComponent>("Arrow");
+	Arrow->SetupAttachment(RootComponent);
 
 #endif
+	
+}
+
+void ADAIGeneratorUnit::InitializeAI(ADEnemyBase* AI)
+{
+	if (AI)
+	{
+		AI->ActivateBehaviorTree();
+	}
 }
 
 #if WITH_EDITOR

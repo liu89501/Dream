@@ -3,28 +3,28 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DItemPreview.h"
+#include "DMPreviewActor.h"
 #include "PlayerDataInterfaceType.h"
-#include "ShootWeapon.h"
+#include "DMPreviewCharacter.generated.h"
 
-
-#include "DCharacterPreview.generated.h"
+class AShootWeapon;
 
 /**
  * 
  */
 UCLASS()
-class DREAM_API ADCharacterPreview : public ADItemPreview
+class DREAM_API ADMPreviewCharacter : public ADMPreviewActor
 {
 	GENERATED_BODY()
 
 public:
 
-	ADCharacterPreview();
-	
+	ADMPreviewCharacter();
+
+public:
 	
 	UFUNCTION(BlueprintCallable, Category=CharacterPreview)
-	void InitPreviewCharacterFromPlayerInfo(int32 InUseWeaponSlot, const FPlayerInfo& PlayerInfo);
+	void InitPreviewCharacter(int32 InUseWeaponSlot, const FPlayerInfo& PlayerInfo, class ADCharacterPlayer* OwnerPlayer);
 
 	UFUNCTION(BlueprintCallable, Category=CharacterPreview)
 	void UpdatePreviewWeapon(TSubclassOf<AShootWeapon> WeaponClass, int32 NewIndex);
@@ -44,6 +44,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category=CharacterPreview)
 	int32 GetActiveWeaponIndex() const;
 
+	UFUNCTION(BlueprintCallable, Category=CharacterPreview)
+	const FEquipmentAttributes& GetCharacterAttributes() const;
+
 private:
 
 	int32 UseWeaponSlot;
@@ -53,4 +56,7 @@ private:
 
 	UPROPERTY()
 	TArray<AShootWeapon*> EquippedWeapons;
+
+	UPROPERTY()
+	FEquipmentAttributes CharacterAttributes;
 };

@@ -26,12 +26,6 @@ public:
 
 	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
-public:
-
-	static void InitInstance();
-	static void ResetInstance();
-
-	static TSharedPtr<SDialog> SINGLETON;
 
 private:
 

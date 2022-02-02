@@ -2,16 +2,16 @@
 
 #include "DProjectile.h"
 #include "DCharacterPlayer.h"
-#include "DPlayerController.h"
+#include "DMPlayerController.h"
 #include "DProjectileComponent.h"
-#include "DProjectSettings.h"
-#include "DreamGameInstance.h"
+#include "DMProjectSettings.h"
 #include "ShootWeapon.h"
 #include "UnrealNetwork.h"
 #include "Components/SphereComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Particles/ParticleSystemComponent.h"
+#include "Sound/SoundCue.h"
 
 ADProjectile::ADProjectile()
 {
@@ -94,14 +94,13 @@ void ADProjectile::OnRep_Impact()
 
         UWorld* World = GetWorld();
 
-        bool bHit = World->SweepSingleByChannel(HitInfo, Location, Location + 2.f, FQuat::Identity,
-                                                ECC_Visibility,
-                                                FCollisionShape::MakeSphere(
-                                                    SphereCollision->GetScaledSphereRadius() + 8.f), CollisionQuery);
+        bool bHit = World->SweepSingleByChannel(HitInfo, Location, Location,
+                                                FQuat::Identity, ECC_Visibility,
+                                                FCollisionShape::MakeSphere(SphereCollision->GetScaledSphereRadius() + 8.f), CollisionQuery);
 
         EPhysicalSurface SurfaceType = bHit ? SurfaceType = HitInfo.PhysMaterial->SurfaceType : EPhysicalSurface::SurfaceType_Default;
 
-        const FSurfaceImpactEffect& SurfaceEffect = UDProjectSettings::GetProjectSettings()->GetSurfaceImpactEffect(SurfaceType);
+        const FSurfaceImpactEffect& SurfaceEffect = GSProject->GetSurfaceImpactEffect(SurfaceType);
 
         FRotator Rotation = GetActorRotation();
         if (SurfaceEffect.ImpactParticles)
@@ -150,6 +149,15 @@ void ADProjectile::OnProjectileComponentHit(UPrimitiveComponent* HitComponent, A
     }
     
     bImpact = true;
+
+#if WITH_EDITOR
+
+    if (GetNetMode() == NM_Standalone)
+    {
+        OnRep_Impact();
+    }
+
+#endif
     
     Projectile->StopSimulating(Hit);
 

@@ -1,7 +1,6 @@
 // Copyright 1998-2019 Epic Games, Inc. All Rights Reserved.
 
 using UnrealBuildTool;
-using System.Collections.Generic;
 
 public class DreamTarget : TargetRules
 {
@@ -9,7 +8,7 @@ public class DreamTarget : TargetRules
 	{
 		Type = TargetType.Game;
 		bUsesSteam = true;
-		ExtraModuleNames.AddRange(new string[] { "Dream" });
+		ExtraModuleNames.AddRange(new[] { "Dream", "DreamLoadingScreen" });
 	}
 
 }

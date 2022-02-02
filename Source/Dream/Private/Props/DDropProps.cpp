@@ -13,6 +13,9 @@ ADDropProps::ADDropProps()
 
 void ADDropProps::ApplyImpulse(UMeshComponent* MeshComponent)
 {
-	MeshComponent->AddImpulse(FVector(RandomImpulseXY.GetRandomFloat(), RandomImpulseXY.GetRandomFloat(), ImpulseZ), NAME_None, true);
+	float RandomX = RandomImpulseXY.GetRandomFloat();
+	float RandomY = RandomImpulseXY.GetRandomFloat();
+
+	MeshComponent->AddImpulse(FVector(RandomX, RandomY, ImpulseZ), NAME_None, true);
 }
 

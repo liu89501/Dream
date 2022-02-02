@@ -12,7 +12,12 @@ void SSubtitle::Construct(const FArguments& InArgs)
 {
 	DisplayMode = InArgs._DisplayMode;
 
+	DisplayTime = InArgs._DisplayTime;
+	FadeOut = InArgs._FadeOutTime;
+
 	const FTextBlockStyle& SubtitleStyle = FDreamStyle::Get().GetWidgetStyle<FTextBlockStyle>("SubtitleTextStyle");
+
+	SetCanTick(false);
 
 	ChildSlot
 	[
@@ -41,9 +46,35 @@ void SSubtitle::Tick(const FGeometry& AllottedGeometry, const double InCurrentTi
 
 			if (SubtitleIdx.IsCompleted())
 			{
-				SubtitleIdx.Toggle();			
+				SubtitleIdx.Toggle();
+				DisplayTime.Activate();
 				PendingDisplaySubtitle.Empty();
 			}
+		}
+	}
+
+	if (DisplayTime.IsActive())
+	{
+		DisplayTime.InterpConstantTo(InDeltaTime);
+
+		if (DisplayTime.IsCompleted())
+		{
+			DisplayTime.Deactivate();
+			DisplayTime.Reset();
+			FadeOut.Activate();
+		}
+	}
+
+	if (FadeOut.IsActive())
+	{
+		FadeOut.InterpConstantTo(InDeltaTime);
+		SetRenderOpacity(FadeOut.GetReverseProgress());
+		
+		if (FadeOut.IsCompleted())
+		{
+			HiddenSubtitle();
+			FadeOut.Reset();
+			FadeOut.Deactivate();
 		}
 	}
 }
@@ -52,8 +83,9 @@ void SSubtitle::DisplaySubtitle(const FText& SubtitleText)
 {
 	Subtitle->SetVisibility(EVisibility::SelfHitTestInvisible);
 	
-	if (DisplayMode == EDisplayMode::All)
+	if (DisplayMode == EDisplayMode::Direct)
 	{
+		DisplayTime.Activate();
 		Subtitle->SetText(SubtitleText);
 	}
 	else

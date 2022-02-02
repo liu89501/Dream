@@ -1,6 +1,7 @@
 // Copyright 1998-2019 Epic Games, Inc. All Rights Reserved.
 
 #include "Dream.h"
+#include "DMProjectSettings.h"
 #include "PlayerDataInterfaceStatic.h"
 #include "Modules/ModuleManager.h"
 #include "UI/Style/DreamStyle.h"
@@ -18,6 +19,9 @@ public:
 		FDreamStyle::Initialize();
 		
 #endif
+
+		GSProject = NewObject<UDMProjectSettingsInstance>(GetTransientPackage());
+		GSProject->Initialize();
 		
 		FPDIStatic::Initialize();		
 	}

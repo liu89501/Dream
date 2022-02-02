@@ -21,7 +21,7 @@ void UConnectToServer::Activate()
 	FOnlineSessionSettings SessionSettings;
 	SessionSettings.Set(SETTING_MAPNAME, T_LevelInformation.Map.GetAssetName());
 	SessionSettings.Set(SETTING_GAMEMODE, T_LevelInformation.GameModeClassAlias);
-	SessionSettings.NumPublicConnections = T_LevelInformation.GetGameModeMaxPlayers();
+	SessionSettings.NumPublicConnections = T_LevelInformation.MaxPlayers;
 	SessionSettings.bUsesPresence = true;
 	SessionSettings.bAllowJoinInProgress = true;
 	SessionSettings.bShouldAdvertise = true;

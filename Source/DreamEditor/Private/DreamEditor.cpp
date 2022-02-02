@@ -2,7 +2,8 @@
 #include "DreamEditor.h"
 #include "CustomizationAttributeRandom.h"
 #include "DCustomizationEditorTools.h"
-#include "DProjectSettings.h"
+#include "DMDevelopmentSettings.h"
+#include "DMProjectSettings.h"
 #include "PreviewSceneSettings.h"
 #include "ISettingsModule.h"
 
@@ -20,21 +21,28 @@ void FDreamEditorModule::StartupModule()
 
 	WeaponMeshPreview = MakeShareable(new FWeaponMeshPreviewCustomizationMenu());
 	WeaponMeshPreview->LoadMenuContext();
-
-	ISettingsModule* SettingsModule = FModuleManager::GetModulePtr<ISettingsModule>("Settings");
-
-	SettingsModule->RegisterSettings("Project", "Project", "Preview",
-            LOCTEXT("PreviewSceneSettingsName", "预览场景设置"),
-            LOCTEXT("PreviewSceneSettingsDescription", "预览场景设置"),
-            GetMutableDefault<UPreviewSceneSettings>()
-        );
 	
-	SettingsModule->RegisterSettings("Project", "Project", "Dream",
-            LOCTEXT("GameProjectSettingsName", "当前游戏项目设置"),
-            LOCTEXT("GameProjectSettingsDescription", "当前游戏项目设置"),
-            GetMutableDefault<UDProjectSettings>()
-        );
-
+	ISettingsModule* SettingsModule = FModuleManager::GetModulePtr<ISettingsModule>("Settings");
+	if (SettingsModule != nullptr)
+	{
+		SettingsModule->RegisterSettings("Project", "Project", "Preview",
+                LOCTEXT("PreviewSceneSettingsName", "预览场景设置"),
+                LOCTEXT("PreviewSceneSettingsDescription", "预览场景设置"),
+                GetMutableDefault<UPreviewSceneSettings>()
+            );
+	
+		SettingsModule->RegisterSettings("Project", "Project", "Dream",
+                LOCTEXT("GameProjectSettingsName", "游戏相关设置"),
+                LOCTEXT("GameProjectSettingsDescription", "游戏相关设置"),
+                GetMutableDefault<UDMProjectSettings>()
+            );
+            
+		SettingsModule->RegisterSettings("Project", "Project", "DMDevelop",
+                LOCTEXT("DevSettingsName", "开发相关设置"),
+                LOCTEXT("DevSettingsDescription", "开发相关设置"),
+                GetMutableDefault<UDMDevelopmentSettings>()
+            );
+	}
 }
 
 void FDreamEditorModule::ShutdownModule()
@@ -44,15 +52,14 @@ void FDreamEditorModule::ShutdownModule()
 	PropertyModule.UnregisterCustomPropertyTypeLayout(TEXT("ItemGuidHandle"));
 
 	ISettingsModule* SettingsModule = FModuleManager::GetModulePtr<ISettingsModule>("Settings");
-	SettingsModule->UnregisterSettings("Project", "Project", "Preview");
-	SettingsModule->UnregisterSettings("Project", "Project", "Dream");
+	if (SettingsModule != nullptr)
+	{
+		SettingsModule->UnregisterSettings("Project", "Project", "Preview");
+		SettingsModule->UnregisterSettings("Project", "Project", "Dream");
+		SettingsModule->UnregisterSettings("Project", "Project", "DMDevelop");
+	}
 }
 
-bool FDreamEditorModule::IsGameModule() const
-{
-	return false;
-}
+IMPLEMENT_MODULE(FDreamEditorModule, DreamEditor);
 
 #undef LOCTEXT_NAMESPACE
-
-IMPLEMENT_GAME_MODULE(FDreamEditorModule, DreamEditor);

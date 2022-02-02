@@ -8,7 +8,6 @@
 #include "Style/DreamStyle.h"
 #include "SlateOptMacros.h"
 
-TSharedPtr<SDialog> SDialog::SINGLETON;
 
 BEGIN_SLATE_FUNCTION_BUILD_OPTIMIZATION
 void SDialog::Construct(const FArguments& InArgs)
@@ -21,6 +20,7 @@ void SDialog::Construct(const FArguments& InArgs)
 	ChildSlot
 	[
 		SNew(SOverlay)
+		.Visibility(EVisibility::SelfHitTestInvisible)
 		+ SOverlay::Slot()
 		.HAlign(HAlign_Fill)
 		.VAlign(VAlign_Bottom)
@@ -29,6 +29,7 @@ void SDialog::Construct(const FArguments& InArgs)
 			+ SOverlay::Slot()
 			[
 				SNew(SImage)
+				.Visibility(EVisibility::SelfHitTestInvisible)
 				.Image(&DialogStyle.BackgroundBrush)
 			]
 			+ SOverlay::Slot()
@@ -36,6 +37,7 @@ void SDialog::Construct(const FArguments& InArgs)
 			.VAlign(VAlign_Fill)
 			[
 				SNew(SImage)
+				.Visibility(EVisibility::SelfHitTestInvisible)
                 .Image(LineBrush.Get())
 			]
 			+ SOverlay::Slot()
@@ -44,6 +46,7 @@ void SDialog::Construct(const FArguments& InArgs)
 			.Padding(150.f, 0.f)
 			[
 				SNew(SHorizontalBox)
+				.Visibility(EVisibility::SelfHitTestInvisible)
 				+ SHorizontalBox::Slot()
 				.HAlign(HAlign_Center)
 				.VAlign(VAlign_Center)
@@ -126,15 +129,4 @@ void SDialog::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime
 			bPlayAnimation = false;
 		}
 	}
-}
-
-void SDialog::InitInstance()
-{
-	SAssignNew(SINGLETON, SDialog);
-}
-
-void SDialog::ResetInstance()
-{
-	SINGLETON.Reset();
-	SINGLETON = nullptr;
 }

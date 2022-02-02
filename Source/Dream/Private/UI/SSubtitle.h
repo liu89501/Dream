@@ -10,7 +10,7 @@
 enum class EDisplayMode : uint8
 {
 	OnePerFrame,
-	All
+	Direct
 };
 
 /**
@@ -22,9 +22,15 @@ class SSubtitle : public SCompoundWidget
 public:
 	
 	SLATE_BEGIN_ARGS(SSubtitle)
-		: _DisplayMode(EDisplayMode::All)
+		: _DisplayMode(EDisplayMode::OnePerFrame)
+		, _DisplayTime(2.f)
+		, _FadeOutTime(1.f)
 	{}
 		SLATE_ARGUMENT(EDisplayMode, DisplayMode);
+	
+		SLATE_ARGUMENT(float, DisplayTime);
+	
+		SLATE_ARGUMENT(float, FadeOutTime);
 	
 	SLATE_END_ARGS()
 
@@ -43,6 +49,10 @@ private:
 
 	FString PendingDisplaySubtitle;
 	FNumberCounter SubtitleIdx;
+
+	FLinearAnimation DisplayTime;
+	
+	FLinearAnimation FadeOut;
 	
 	EDisplayMode DisplayMode;
 

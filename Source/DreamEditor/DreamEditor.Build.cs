@@ -7,9 +7,7 @@ public class DreamEditor : ModuleRules
 {
     public DreamEditor(ReadOnlyTargetRules Target) : base(Target)
     {
-        PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
-
-        OverridePackageType = PackageOverrideType.GameUncookedOnly;
+        PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
         PublicIncludePaths.AddRange(
             new string[] {
@@ -32,14 +30,14 @@ public class DreamEditor : ModuleRules
             "Slate",
             "Engine",
             "EditorStyle",
+            "Settings",
             "PropertyEditor",
             "ContentBrowser",
             "EditorWidgets",
             "Dream",
             "UnrealEd",
             "BlueprintGraph",
-            "AIModule",
-            "Settings"
+            "AIModule"
         });
     }
 }

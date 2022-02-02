@@ -6,9 +6,10 @@
 #include "GameplayTagContainer.h"
 #include "PlayerDataInterfaceType.h"
 #include "GameFramework/PlayerController.h"
-#include "DPlayerController.generated.h"
+#include "DMPlayerController.generated.h"
 
 enum class EAmmoType : uint8;
+class UCharacterMesh;
 
 UENUM(BlueprintType)
 namespace ETalkType
@@ -61,13 +62,62 @@ public:
 	FGuid RewardUniqueId;
 };
 
+USTRUCT()
+struct FTemporaryGearInfo
+{
+	GENERATED_BODY()
+
+	UPROPERTY()
+	int32 EquippedIdx;
+	
+	UPROPERTY()
+	FEquipmentAttributes Attributes;
+	
+	UPROPERTY()
+	UClass* GearClass;
+};
+
+USTRUCT()
+struct FTemporaryPlayerInfo
+{
+	GENERATED_BODY()
+
+public:
+
+	FTemporaryPlayerInfo()
+		: Skin(nullptr)
+		, LearnedTalents(0)
+		, Level(0)
+	{
+	}
+
+	void Initialize(const FPlayerInfo& PlayerInfo);
+
+	UPROPERTY()
+	TArray<FTemporaryGearInfo> Weapons;
+	
+	UPROPERTY()
+	TArray<FTemporaryGearInfo> Modules;
+
+	UPROPERTY()
+	UCharacterMesh* Skin;
+
+	UPROPERTY()
+	int64 LearnedTalents;
+
+	UPROPERTY()
+	int32 Level;
+};
+
+
 DECLARE_MULTICAST_DELEGATE_OneParam(FOnPlayerAmmunitionChange, float/* New Ammunition */)
+DECLARE_DELEGATE_TwoParams(FPlayerInfoSignature, bool bResult, const FTemporaryPlayerInfo&)
 
 /**
  *
  */
 UCLASS()
-class DREAM_API ADPlayerController : public APlayerController
+class DREAM_API ADMPlayerController : public APlayerController
 {
 	GENERATED_BODY()
 
@@ -80,7 +130,7 @@ public:
 
 public:
 
-	ADPlayerController();
+	ADMPlayerController();
 
 	/*
 		发送聊天消息到所有连接到服务器的玩家
@@ -122,42 +172,16 @@ public:
 	void CallServerActor(FGameplayTag CallTag, AActor* TargetActor);
 
 
-	/**
-	 * 在指定的位置生成奖励
-	 */
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = DMController)
-	void SpawnRewardsAtLocation(class UDRewardPool* RewardPool, const FVector& Location);
-
-#if WITH_EDITOR
-
-	/* TEST ---------------------------------- */
-	UFUNCTION(Exec)
-    void TestLoginServer();
-
-	UFUNCTION(Exec)
-    void TestCreateSession();
-
-	UFUNCTION(Exec)
-    void TestFindSession();
-	
-	UFUNCTION(Exec)
-    void TestSocket() const;
-	/* TEST ---------------------------------- */
-	
-#endif
-
-	
-
 public:
+
+	// [Server]
+	void HandlePlayerCharacterDie();
+
+	// [Server]
+	void CancelRespawnCharacter();
 
 	UFUNCTION(Client, Reliable)
     void ClientChangeConnectedServer(uint32 Address, uint32 Port);
-
-
-	/**
-	 * 生成奖励 (仅服务器)
-	 */
-	void SpawnDropRewards(const FItemListHandle& Rewards, const FVector& Location);
 
 	virtual void ClientReturnToMainMenuWithTextReason_Implementation(const FText& ReturnReason) override;
 
@@ -172,11 +196,17 @@ public:
 		return OnAmmunitionChange;
 	}
 
+	void GetPlayerInformation(FPlayerInfoSignature Delegate);
+
 protected:
 
-	virtual void PostInitializeComponents() override;
-
 	virtual void BeginPlay() override;
+
+	virtual void BeginInactiveState() override;
+
+	virtual void OnRespawnPlayer();
+
+	virtual void FailedToSpawnPawn() override;
 
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -189,12 +219,14 @@ protected:
 
 	virtual void ClientWasKicked_Implementation(const FText& KickReason) override;
 
-	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
-
 	UFUNCTION(Server, Reliable)
 	void ServerCallServerActor(const FGameplayTag& DelegateTag, AActor* TargetActor);
 
+	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
+
 private:
+
+	void OnGetPlayerInfo(const FPlayerInfo& PlayerInfo, bool bQueryResult, FPlayerInfoSignature Delegate);
 
 	void OnUpdatedTasks(const TArray<FTaskInProgressInfo>& UpdatedTasks);
 
@@ -204,10 +236,16 @@ private:
 	
 private:
 
+	UPROPERTY()
+	FTemporaryPlayerInfo TemporaryPlayerInfo;
+	bool bInitializeTemporaryPlayerInfo;
+
 	FOnPlayerAmmunitionChange OnAmmunitionChange;
 
 	FDelegateHandle Handle_UpdateTask;
 	FDelegateHandle Handle_ReceiveRewards;
+
+	FTimerHandle Handle_RespawnPlayer;
 
 	// 引导点
 	UPROPERTY()

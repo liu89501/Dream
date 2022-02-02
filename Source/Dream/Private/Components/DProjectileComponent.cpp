@@ -2,33 +2,36 @@
 
 
 #include "Components/DProjectileComponent.h"
-
-#include "DreamType.h"
 #include "Kismet/KismetMathLibrary.h"
 
 
 UDProjectileComponent::UDProjectileComponent()
-		: HomingTrackingAngleYaw(60.f),
-          HomingTrackingAnglePitch(60.f)
+	: LimitAngle(135.f)
 {
 }
 
 FVector UDProjectileComponent::ComputeHomingAcceleration(const FVector& InVelocity, float DeltaTime) const
 {
-	FRotator HomingDirection = UKismetMathLibrary::FindLookAtRotation(UpdatedComponent->GetComponentLocation(), HomingTargetComponent->GetComponentLocation());
-	FRotator PrevDirection = InVelocity.ToOrientationRotator();
+	FVector NewDirection = HomingTargetComponent->GetComponentLocation() - UpdatedComponent->GetComponentLocation();
 
-	FRotator Delta = UKismetMathLibrary::NormalizedDeltaRotator(HomingDirection, PrevDirection);
-
-	if (UKismetMathLibrary::InRange_FloatFloat(Delta.Yaw, -HomingTrackingAngleYaw, HomingTrackingAngleYaw))
+	if (LimitAngle > 0.f)
 	{
-		PrevDirection.Yaw += Delta.Yaw;
+		FRotator NewRotation = NewDirection.Rotation();
+		FRotator CurrentRotation = InVelocity.Rotation();
+		FRotator Delta = UKismetMathLibrary::NormalizedDeltaRotator(NewRotation, CurrentRotation);
+
+		if (UKismetMathLibrary::InRange_FloatFloat(Delta.Yaw, -LimitAngle, LimitAngle))
+		{
+			CurrentRotation.Yaw += Delta.Yaw;
+		}
+
+		if (UKismetMathLibrary::InRange_FloatFloat(Delta.Pitch, -LimitAngle, LimitAngle))
+		{
+			CurrentRotation.Pitch += Delta.Pitch;
+		}
+
+		NewDirection = CurrentRotation.Vector();
 	}
 
-	if (UKismetMathLibrary::InRange_FloatFloat(Delta.Pitch, -HomingTrackingAnglePitch, HomingTrackingAnglePitch))
-	{
-		PrevDirection.Pitch += Delta.Pitch;
-	}
-
-	return PrevDirection.Vector().GetSafeNormal() * HomingAccelerationMagnitude;
+	return NewDirection.GetSafeNormal() * HomingAccelerationMagnitude;
 }

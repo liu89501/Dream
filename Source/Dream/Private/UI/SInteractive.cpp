@@ -22,6 +22,8 @@ void SInteractive::Construct(const FArguments& InArgs)
 
 	InitializeInputComponent();
 
+	SetCanTick(false);
+
 	FName KeyName = UDGameplayStatics::GetInputActionKeyName(InArgs._InPlayerOwner, "Interactive");
 
 	ChildSlot
@@ -39,7 +41,7 @@ void SInteractive::Construct(const FArguments& InArgs)
 				.Image(&InProgressBrush)
 			]
 			+ SOverlay::Slot()
-            .Padding(2.f)
+            .Padding(1.f)
             [
                 SNew(SImage)
                 .Image(&InteractiveStyle.KeyBackgroundBrush)
@@ -65,21 +67,33 @@ void SInteractive::Construct(const FArguments& InArgs)
 	];
 }
 
-void SInteractive::EnableInput() const
+void SInteractive::EnableInput()
 {
 	APlayerController* Controller = PlayerOwner.Get();
 	if (InputComponent && Controller != nullptr)
 	{
-		Controller->PushInputComponent(InputComponent);
+		if (!bIsBinding)
+		{
+			SetCanTick(true);
+			
+			bIsBinding = true;
+			Controller->PushInputComponent(InputComponent);
+		}
 	}
 }
 
-void SInteractive::DisableInput() const
+void SInteractive::DisableInput()
 {
 	APlayerController* Controller = PlayerOwner.Get();
 	if (InputComponent && Controller != nullptr)
 	{
-		Controller->PopInputComponent(InputComponent);
+		if (bIsBinding)
+		{
+			SetCanTick(false);
+			
+			bIsBinding = false;
+			Controller->PopInputComponent(InputComponent);
+		}
 	}
 }
 

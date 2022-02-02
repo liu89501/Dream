@@ -7,6 +7,11 @@
 #include "DreamType.h"
 #include "PlayerDataInterfaceType.generated.h"
 
+#define Query_Cond_Used (EQueryCondition::Weapon | EQueryCondition::Weapon_EquippedOnly | \
+                                        EQueryCondition::Module | EQueryCondition::Module_EquippedOnly | EQueryCondition::Skin)
+
+#define Query_Cond_All (EQueryCondition::Weapon | EQueryCondition::Module | EQueryCondition::Skin | EQueryCondition::Materials)
+
 enum class ETaskCondGUID : int32
 {
 	None,
@@ -54,14 +59,15 @@ namespace EQueryCondition
 {
 	enum Condition
 	{
-		Weapon = 0x1,
-        Weapon_Equipped = 0x2,
-        Module = 0x4,
-        Module_Equipped = 0x8,
+		Weapon = 0x1, // 是否查询武器
+        Weapon_EquippedOnly = 0x2, // 查询武器是已装备的
+        Module = 0x4,	
+        Module_EquippedOnly = 0x8,
         Materials = 0x10,
         Skin = 0x20
     };
 }
+
 
 
 struct FQuestActionBase
@@ -385,11 +391,12 @@ public:
 	{
 	}
 
-	FItemSimple(int32 InItemGuid)
-        : FItem(InItemGuid, IM_Equipment)
+	explicit FItemSimple(int32 InItemGuid)
+		: FItem(InItemGuid, IM_Equipment)
+		, ItemNum(0)
 	{
 	}
-	
+
 	FItemSimple(int32 ItemGuid, int32 Num)
 		: FItem(ItemGuid, IM_Simple)
 		, ItemNum(Num)
@@ -603,6 +610,20 @@ struct FTaskInProgressInfo
 	friend FArchive& operator<<(FArchive& Ar, FTaskInProgressInfo& R)
 	{
 		Ar << R.PtId;
+		Ar << R.Condition;
+		return Ar;
+	}
+};
+
+struct FQueryPlayerParam
+{
+	int32 PlayerId;
+
+	int32 Condition;
+
+	friend FArchive& operator<<(FArchive& Ar, FQueryPlayerParam& R)
+	{
+		Ar << R.PlayerId;
 		Ar << R.Condition;
 		return Ar;
 	}

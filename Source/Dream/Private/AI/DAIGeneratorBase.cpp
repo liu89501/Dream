@@ -24,7 +24,7 @@ void ADAIGeneratorBase::ActivateAIGenerator()
 {
 	if (GetNetMode() <= NM_DedicatedServer)
 	{
-		ProcessAIGenerate();
+		ReGenerate();
 	}
 }
 
@@ -44,7 +44,7 @@ void ADAIGeneratorBase::AIDeathCount()
 		{
 			CurrentRevivedCount++;
 			FTimerHandle Handle;
-			GetWorldTimerManager().SetTimer(Handle, this, &ADAIGeneratorBase::ProcessAIGenerate, ResetWaitTime);
+			GetWorldTimerManager().SetTimer(Handle, this, &ADAIGeneratorBase::ReGenerate, ResetWaitTime);
 		}
 		else
 		{
@@ -77,7 +77,13 @@ void ADAIGeneratorBase::BeginPlay()
 	}
 }
 
-void ADAIGeneratorBase::ProcessAIGenerate()
+int32 ADAIGeneratorBase::ProcessAIGenerate()
 {
+	return 0;
+}
+
+void ADAIGeneratorBase::ReGenerate()
+{
+	ActiveAICounter = ProcessAIGenerate();
 }
 

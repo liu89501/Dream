@@ -136,7 +136,7 @@ FEquipmentAttributes& FEquipmentAttributes::operator=(FEquipmentAttributes&& Oth
 	return *this;
 }
 
-FEquipmentAttributes& FEquipmentAttributes::CombineSkipPerks(const FEquipmentAttributes& Other)
+FEquipmentAttributes& FEquipmentAttributes::MergeAndSkipPerks(const FEquipmentAttributes& Other)
 {
 	AttackPower += Other.AttackPower;
 	Defense += Other.Defense;

@@ -39,7 +39,11 @@ public:
 	/** Constructs this widget with InArgs */
 	void Construct(const FArguments& InArgs);
 
-	void SetHealthPercent(float Percentage);
+	/** 减少生命值 */
+	void ReduceHealth(float Percentage);
+
+	/** 恢复生命值 */
+	void RecoveryHealth(float Percentage);
 
 	void SetCrosshairBrush(const FSlateBrush& NewCrosshairBrush) const;
 
@@ -58,6 +62,9 @@ public:
 	void RemoveStateIcon(const FGameplayTag& Tag);
 
 	void ActivateInteractiveButton(float InteractiveTime, const FText& InteractiveText, FOnInteractiveCompleted Delegate) const;
+
+	/** 仅仅只是显示交互按钮，并不绑定输入事件 */
+	void DisplayInteractiveButton(const FText& InteractiveText);
 
 	void DeactivateInteractiveButton() const;
 
@@ -92,8 +99,10 @@ private:
 	UMaterialInstanceDynamic* HurtDynamic;
 
 	FLinearAnimation HealthBackgroundAnim;
+	FLinearAnimation HealthRecoveryAnim;
 	TSharedPtr<SProgressBar> HealthBar;
-	TSharedPtr<SProgressBar> HealthBackground;
+	TSharedPtr<SProgressBar> HealthBackgroundBar;
+	float HealthBarPercent;
 	
 	TSharedPtr<SProgressBar> Magazine;
 
@@ -103,5 +112,6 @@ private:
 	
 	TMap<FGameplayTag, TSharedPtr<class SStateIcon>> StateIcons;
 };
+
 
 

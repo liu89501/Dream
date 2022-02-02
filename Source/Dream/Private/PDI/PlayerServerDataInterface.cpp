@@ -32,24 +32,26 @@
 
 FPlayerServerDataInterface::FPlayerServerDataInterface()
 {
-	CALLBACK_BINDING_RAW(TService_PlayerInfo::MarkId, this, &FPlayerServerDataInterface::OnReceivePlayerInformation);
-	CALLBACK_BINDING_RAW(TService_EquipWeapon::MarkId, this, &FPlayerServerDataInterface::OnReceiveEquipWeapon);
-	CALLBACK_BINDING_RAW(TService_EquipModule::MarkId, this, &FPlayerServerDataInterface::OnReceiveEquipModule);
-	CALLBACK_BINDING_RAW(TService_LearningTalents::MarkId, this, &FPlayerServerDataInterface::OnReceiveLearningTalents);
-	CALLBACK_BINDING_RAW(TService_GetStoreItems::MarkId, this, &FPlayerServerDataInterface::OnReceiveGetStoreItems);
-	CALLBACK_BINDING_RAW(TService_PayItem::MarkId, this, &FPlayerServerDataInterface::OnReceivePayItem);
-	CALLBACK_BINDING_RAW(TService_GetTalents::MarkId, this, &FPlayerServerDataInterface::OnReceiveGetTalents);
-	CALLBACK_BINDING_RAW(TService_GetTasks::MarkId, this, &FPlayerServerDataInterface::OnReceiveGetTasks);
-	CALLBACK_BINDING_RAW(TService_AcceptTask::MarkId, this, &FPlayerServerDataInterface::OnReceiveAcceptTask);
-	CALLBACK_BINDING_RAW(TService_DeliverTask::MarkId, this, &FPlayerServerDataInterface::OnReceiveDeliverTask);
-	CALLBACK_BINDING_RAW(TService_UpdatedTrackingTask::MarkId, this, &FPlayerServerDataInterface::OnReceiveUpdatedTrackingTaskState);
-	CALLBACK_BINDING_RAW(TService_ModifyTrackingState::MarkId, this, &FPlayerServerDataInterface::OnReceiveModifyTrackingState);
-	CALLBACK_BINDING_RAW(TService_Decompose::MarkId, this, &FPlayerServerDataInterface::OnReceiveDecomposeItem);
+	CALLBACK_BINDING_RAW(TService_PlayerInfo, this, &FPlayerServerDataInterface::OnReceivePlayerInformation);
+	CALLBACK_BINDING_RAW(TService_PlayerInfo_Server, this, &FPlayerServerDataInterface::OnReceivePlayerInformation);
+	
+	CALLBACK_BINDING_RAW(TService_EquipWeapon, this, &FPlayerServerDataInterface::OnReceiveEquipWeapon);
+	CALLBACK_BINDING_RAW(TService_EquipModule, this, &FPlayerServerDataInterface::OnReceiveEquipModule);
+	CALLBACK_BINDING_RAW(TService_LearningTalents, this, &FPlayerServerDataInterface::OnReceiveLearningTalents);
+	CALLBACK_BINDING_RAW(TService_GetStoreItems, this, &FPlayerServerDataInterface::OnReceiveGetStoreItems);
+	CALLBACK_BINDING_RAW(TService_PayItem, this, &FPlayerServerDataInterface::OnReceivePayItem);
+	CALLBACK_BINDING_RAW(TService_GetTalents, this, &FPlayerServerDataInterface::OnReceiveGetTalents);
+	CALLBACK_BINDING_RAW(TService_GetTasks, this, &FPlayerServerDataInterface::OnReceiveGetTasks);
+	CALLBACK_BINDING_RAW(TService_AcceptTask, this, &FPlayerServerDataInterface::OnReceiveAcceptTask);
+	CALLBACK_BINDING_RAW(TService_DeliverTask, this, &FPlayerServerDataInterface::OnReceiveDeliverTask);
+	CALLBACK_BINDING_RAW(TService_UpdatedTrackingTask, this, &FPlayerServerDataInterface::OnReceiveUpdatedTrackingTaskState);
+	CALLBACK_BINDING_RAW(TService_ModifyTrackingState, this, &FPlayerServerDataInterface::OnReceiveModifyTrackingState);
+	CALLBACK_BINDING_RAW(TService_Decompose, this, &FPlayerServerDataInterface::OnReceiveDecomposeItem);
 
 	
-	CALLBACK_BINDING_RAW(TReceive_PropertiesChange::MarkId, this, &FPlayerServerDataInterface::OnReceivePropertiesChange);
-	CALLBACK_BINDING_RAW(TReceive_Rewards::MarkId, this, &FPlayerServerDataInterface::OnReceiveReceiveRewards);
-	CALLBACK_BINDING_RAW(TReceive_MaterialsChange::MarkId, this, &FPlayerServerDataInterface::OnReceiveMaterialsChange);
+	CALLBACK_BINDING_RAW(TReceive_PropertiesChange, this, &FPlayerServerDataInterface::OnReceivePropertiesChange);
+	CALLBACK_BINDING_RAW(TReceive_Rewards, this, &FPlayerServerDataInterface::OnReceiveReceiveRewards);
+	CALLBACK_BINDING_RAW(TReceive_MaterialsChange, this, &FPlayerServerDataInterface::OnReceiveMaterialsChange);
 }
 
 void FPlayerServerDataInterface::Initialize()

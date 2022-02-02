@@ -31,6 +31,8 @@ DEFINED_SERVICE_INFO(23, void, TReceive_PropertiesChange);
 DEFINED_SERVICE_INFO(24, void, TReceive_Rewards);
 DEFINED_SERVICE_INFO(26, void, TReceive_MaterialsChange);
 
+DEFINED_SERVICE_INFO(27, FQueryPlayerParam, TService_PlayerInfo_Server);
+
 
 class FPlayerServerDataInterface : public FPlayerDataInterfaceBase
 {
@@ -55,7 +57,8 @@ public:
 	DEFAULT_SERVICE_IMPLEMENT(UpdateTaskState, TService_UpdateTaskState);
 	DEFAULT_SERVICE_IMPLEMENT(ModifyTrackingState, TService_ModifyTrackingState);
 	DEFAULT_SERVICE_IMPLEMENT(DecomposeItem, TService_Decompose);
-	
+	DEFAULT_SERVICE_IMPLEMENT(ServerGetPlayerInfo, TService_PlayerInfo_Server);
+
 	virtual const FPlayerProperties& GetCachedProperties() const override;
 
 	virtual const FMaterialsHandle& GetMaterialsHandle() const override;
@@ -84,5 +87,6 @@ private:
 	FPlayerProperties CachedProperties;
 	
 	FMaterialsHandle MaterialsHandle;
+	
 };
 

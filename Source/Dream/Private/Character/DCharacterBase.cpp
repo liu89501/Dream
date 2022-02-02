@@ -1,23 +1,18 @@
 ﻿#include "DCharacterBase.h"
-
+#include "DMAttributeSet.h"
 #include "DPlayerState.h"
 #include "DrawDebugHelpers.h"
 #include "Kismet/GameplayStatics.h"
-#include "Perception/AIPerceptionStimuliSourceComponent.h"
 #include "UnrealNetwork.h"
 #include "DreamType.h"
-#include "DreamAttributeSet.h"
 #include "DreamGameplayType.h"
 #include "Components/CapsuleComponent.h"
 
 ADCharacterBase::ADCharacterBase()
 {
-    //StimuliSource = CreateDefaultSubobject<UAIPerceptionStimuliSourceComponent>(TEXT("StimuliSource"));
-    AttributeSet = CreateDefaultSubobject<UDreamAttributeSet>(TEXT("DreamAttributeSet"));
     AbilitySystem = CreateDefaultSubobject<UAbilitySystemComponent>(TEXT("AbilitySystem"));
     IconComponent = CreateDefaultSubobject<UIconComponent>(TEXT("Icon"));
-
-    AbilitySystem->SetIsReplicated(true);
+    //AbilitySystem->SetIsReplicated(true);
 }
 
 float ADCharacterBase::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator,
@@ -39,17 +34,27 @@ void ADCharacterBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
 
 float ADCharacterBase::GetBaseHealth()
 {
-    return AbilitySystem->GetNumericAttribute(AttributeSet->GetHealthAttribute());
+    if (CharacterAttributes == nullptr)
+    {
+        return 0.f;
+    }
+    
+    return AbilitySystem->GetNumericAttributeBase(CharacterAttributes->GetHealthAttribute());
 }
 
 float ADCharacterBase::GetBaseMaxHealth()
 {
-    return AbilitySystem->GetNumericAttribute(AttributeSet->GetMaxHealthAttribute());
+    if (CharacterAttributes == nullptr)
+    {
+        return 0.f;
+    }
+    
+    return AbilitySystem->GetNumericAttributeBase(CharacterAttributes->GetMaxHealthAttribute());
 }
 
 bool ADCharacterBase::IsDeath() const
 {
-    return AttributeSet->GetHealth() == 0;
+    return CharacterAttributes == nullptr ? true : CharacterAttributes->GetHealth() == 0;
 }
 
 void ADCharacterBase::HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle)
@@ -112,7 +117,7 @@ void ADCharacterBase::BeginPlay()
 {
     Super::BeginPlay();
 
-    AbilitySystem->GetGameplayAttributeValueChangeDelegate(DreamAttrStatics().HealthProperty).AddUObject(this, &ADCharacterBase::HealthChanged);
+    AbilitySystem->GetGameplayAttributeValueChangeDelegate(DMAttrStatics().HealthProperty).AddUObject(this, &ADCharacterBase::HealthChanged);
 }
 
 void ADCharacterBase::SetGenericTeamId(const FGenericTeamId& NewTeamID)
@@ -123,6 +128,11 @@ void ADCharacterBase::SetGenericTeamId(const FGenericTeamId& NewTeamID)
 UIconComponent* ADCharacterBase::GetIconComponent() const
 {
     return IconComponent;
+}
+
+void ADCharacterBase::PostInitializeComponents()
+{
+    Super::PostInitializeComponents();
 }
 
 float ADCharacterBase::GetWeaknessIncreaseDamagePercentage(const FName& BoneName)
@@ -138,7 +148,11 @@ FGenericTeamId ADCharacterBase::GetGenericTeamId() const
 
 float ADCharacterBase::GetHealthPercent() const
 {
-    // 最大生命值直接获取永久更改的基值
-    float MaxHealth = AttributeSet->MaxHealth.GetBaseValue();
-    return MaxHealth > 0 ? AttributeSet->GetHealth() / MaxHealth : 0;
+    if (CharacterAttributes == nullptr)
+    {
+        return 0.f;
+    }
+    
+    float MaxHealth = CharacterAttributes->GetMaxHealth();
+    return MaxHealth > 0 ? CharacterAttributes->GetHealth() / MaxHealth : 0;
 }

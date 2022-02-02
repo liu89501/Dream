@@ -3,43 +3,32 @@
 #include "AbilitySystemGlobals.h"
 #include "DGameplayStatics.h"
 #include "DGE_WeaponBaseDamage.h"
-#include "DPlayerController.h"
-#include "DProjectSettings.h"
+#include "DMPlayerController.h"
+#include "DMProjectSettings.h"
 #include "Engine.h"
 #include "DreamType.h"
 #include "Kismet/GameplayStatics.h"
 #include "UnrealNetwork.h"
 #include "Character/DCharacterPlayer.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "Kismet/KismetMathLibrary.h"
 #include "DreamGameplayType.h"
+
+#define BulletHitInfo_ID_Bits 4
+
+uint8 FBulletHitInfo::GetStructID() const
+{
+	return 0;
+}
 
 bool FBulletHitInfo::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
 {
-	/*bool bValid = false;
-
-	if (Ar.IsSaving())
-	{
-	    if (!LocalMuzzleLocation.IsNearlyZero())
-	    {
-	        bValid = true;
-	    }
-	}
-
-	Ar.SerializeBits(&bValid, 1);
-
-	if (bValid)
-	{
-	    Ar << LocalMuzzleLocation;
-	}*/
-
 	bOutSuccess = true;
 	return true;
 }
 
 bool FBulletHitInfo_SingleBullet::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
 {
-	Super::NetSerialize(Ar, Map, bOutSuccess);
+	//Super::NetSerialize(Ar, Map, bOutSuccess);
 
 	uint8 Verify = 0;
 
@@ -53,16 +42,13 @@ bool FBulletHitInfo_SingleBullet::NetSerialize(FArchive& Ar, UPackageMap* Map, b
 
 	Ar.SerializeBits(&Verify, 1);
 
-	if (Verify)
+	if ((Verify & 1) == 1)
 	{
-		if (Ar.IsLoading())
+		if (!HitResult.IsValid())
 		{
-			if (!HitResult.IsValid())
-			{
-				HitResult = MakeShared<FHitResult>();
-			}
+			HitResult = MakeShared<FHitResult>();
 		}
-
+		
 		HitResult->NetSerialize(Ar, Map, bOutSuccess);
 	}
 
@@ -72,7 +58,7 @@ bool FBulletHitInfo_SingleBullet::NetSerialize(FArchive& Ar, UPackageMap* Map, b
 
 bool FBulletHitInfo_MultiBullet::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
 {
-	Super::NetSerialize(Ar, Map, bOutSuccess);
+	//Super::NetSerialize(Ar, Map, bOutSuccess);
 
 	uint8 Verify = 0;
 
@@ -88,51 +74,21 @@ bool FBulletHitInfo_MultiBullet::NetSerialize(FArchive& Ar, UPackageMap* Map, bo
 
 	if (Verify)
 	{
-		SafeNetSerializeTArray_WithNetSerialize<20>(Ar, Hits, Map);
+		SafeNetSerializeTArray_WithNetSerialize<16>(Ar, Hits, Map);
 	}
 
 	bOutSuccess = true;
 	return true;
 }
 
-bool FBulletHitInfoHandle::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
+TSharedPtr<FBulletHitInfo> GetBulletHitInfoFromStructID(uint8 StructID)
 {
-	bool ValidData = Data.IsValid();
-	Ar.SerializeBits(&ValidData, 1);
-
-	if (ValidData)
+	switch (StructID)
 	{
-		uint8 StructID = 0;
-		if (Ar.IsSaving())
-		{
-			StructID = Data->GetStructID();
-		}
-		Ar.SerializeBits(&StructID, 8);
-
-		UScriptStruct* ScriptStruct = FBulletHitInfoStructContainer::StructContainer().GetScriptStruct(StructID);
-
-		if (Ar.IsLoading())
-		{
-			if (!Data.IsValid())
-			{
-				FBulletHitInfo* Ptr = static_cast<FBulletHitInfo*>(FMemory::Malloc(ScriptStruct->GetStructureSize()));
-				ScriptStruct->InitializeStruct(Ptr);
-				Data = TSharedPtr<FBulletHitInfo>(Ptr);
-			}
-		}
-
-		if (ScriptStruct->StructFlags & STRUCT_NetSerializeNative)
-		{
-			ScriptStruct->GetCppStructOps()->NetSerialize(Ar, Map, bOutSuccess, Data.Get());
-		}
-		else
-		{
-			DREAM_NLOG(Error, TEXT("FBulletHitInfoHandle::NetSerialize Error"));
-		}
+		case 1: return MakeShared<FBulletHitInfo_SingleBullet>();
+		case 2: return MakeShared<FBulletHitInfo_MultiBullet>();
+		default: return nullptr;
 	}
-
-	bOutSuccess = true;
-	return true;
 }
 
 template <typename Type>
@@ -140,19 +96,47 @@ Type* FBulletHitInfoHandle::Get() const
 {
 	if (Data.IsValid())
 	{
-		if (Type::StaticStruct() == FBulletHitInfoStructContainer::StructContainer().GetScriptStruct(
-			Data->GetStructID()))
+		if (Data->StaticStruct() == Type::StaticStruct())
 		{
-			return static_cast<Type*>(Data.Get());
+			return (Type*)Data.Get();
 		}
 	}
+
 	return nullptr;
+}
+
+bool FBulletHitInfoHandle::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
+{
+	uint8 bValidData = Data.IsValid();
+	Ar.SerializeBits(&bValidData, 1);
+
+	if (bValidData == 1)
+	{
+		uint8 StructID = 0;
+		if (Ar.IsSaving())
+		{
+			StructID = Data->GetStructID();
+		}
+		
+		Ar.SerializeBits(&StructID, BulletHitInfo_ID_Bits);
+
+		if (Ar.IsLoading())
+		{
+			if (!Data.IsValid())
+			{
+				Data = GetBulletHitInfoFromStructID(StructID);
+			}
+		}
+
+		Data->NetSerialize(Ar, Map, bOutSuccess);
+	}
+
+	return bOutSuccess;
 }
 
 AShootWeapon::AShootWeapon():
 	ShellFragment(1),
 	RateOfFire(600),
-	AimSpeed(.1f),
 	AccuracyThreshold(300.f),
 	TraceDistance(20000.f),
 	TraceCenterOffset(2.f),
@@ -170,18 +154,10 @@ AShootWeapon::AShootWeapon():
 
 	WeaponMesh->SetCollisionResponseToChannel(Collision_ObjectType_Projectile, ECR_Ignore);
 
-	if (IsRunningDedicatedServer())
-	{
-		PrimaryActorTick.bCanEverTick = false;
-	}
-	else
-	{
-		PrimaryActorTick.bCanEverTick = true;
-		PrimaryActorTick.bStartWithTickEnabled = false;
-	}
+	PrimaryActorTick.bCanEverTick = true;
+	PrimaryActorTick.bStartWithTickEnabled = false;
 
 	bReplicates = true;
-	bNetUseOwnerRelevancy = true;
 
 	WeaponMesh->SetReceivesDecals(false);
 }
@@ -189,6 +165,10 @@ AShootWeapon::AShootWeapon():
 void AShootWeapon::BeginPlay()
 {
 	Super::BeginPlay();
+
+	OwningShooter = Cast<ADCharacterPlayer>(GetOwner());
+
+	ensureMsgf(OwningShooter, TEXT("OwningShooter Invalid"));
 
 	if (!IsLocalWeapon())
 	{
@@ -218,31 +198,22 @@ void AShootWeapon::BeginPlay()
 		RecoilTimeline.AddInterpFloat(CameraOffsetCurve, CameraRiseTickDelegate);
 	}
 
-	FRichCurve RichCurve;
-	FKeyHandle Handle1 = RichCurve.AddKey(0.f, 0.f);
-	FKeyHandle Handle2 = RichCurve.AddKey(AimSpeed * 0.5f, 0.1f);
-	FKeyHandle Handle3 = RichCurve.AddKey(AimSpeed * 0.8f, 0.5f);
-	FKeyHandle Handle4 = RichCurve.AddKey(AimSpeed, 1.f);
+	if (AimCurve)
+	{
+		FOnTimelineFloatStatic AimTickDelegate;
+		AimTickDelegate.BindUObject(this, &AShootWeapon::AimTimelineTick);
+		AimTimeline.AddInterpFloat(AimCurve, AimTickDelegate);
 
-	RichCurve.SetKeyTangentMode(Handle1, RCTM_Auto);
-	RichCurve.SetKeyTangentMode(Handle2, RCTM_Auto);
-	RichCurve.SetKeyTangentMode(Handle3, RCTM_Auto);
-	RichCurve.SetKeyTangentMode(Handle4, RCTM_Auto);
-
-	AimCurve = NewObject<UCurveFloat>();
-	AimCurve->FloatCurve = RichCurve;
-
-	FOnTimelineFloatStatic AimTickDelegate;
-	AimTickDelegate.BindUObject(this, &AShootWeapon::AimTimelineTick);
-	AimTimeline.AddInterpFloat(AimCurve, AimTickDelegate);
-
-	FOnTimelineEvent OnEnded;
-	OnEnded.BindUFunction(this, TEXT("OnAimEnded"));
-	AimTimeline.AddEvent(AimSpeed, OnEnded);
+		FOnTimelineEvent OnEnded;
+		OnEnded.BindUFunction(this, GET_FUNCTION_NAME_CHECKED(AShootWeapon, OnAimEnded));
+		AimTimeline.AddEvent(AimCurve->FloatCurve.GetLastKey().Time, OnEnded);
+	}
 
 	InitializeAmmunition();
 
-	if (ADPlayerController* OwningController = GetOwningController())
+	SetActorTickEnabled(true);
+
+	if (ADMPlayerController* OwningController = GetOwningController())
 	{
 		Handle_PlayerAmmunitionChange = OwningController->GetAmmunitionChangeDelegate().AddUObject(this, &AShootWeapon::OnPlayerAmmunitionChanged);
 	}
@@ -254,10 +225,9 @@ void AShootWeapon::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
 	if (Handle_PlayerAmmunitionChange.IsValid())
 	{
-		ADCharacterPlayer* OwningShooter = GetOwningShooter();
 		if (OwningShooter && !OwningShooter->IsPendingKillPending())
 		{
-			ADPlayerController* Controller = OwningShooter->GetPlayerController();
+			ADMPlayerController* Controller = OwningShooter->GetPlayerController();
 
 			if (Controller && !Controller->IsPendingKillPending())
 			{
@@ -273,6 +243,8 @@ void AShootWeapon::PostInitializeComponents()
 
 	InitAmmo = AmmoNum;
 	InitReserveAmmo = ReserveAmmo;
+
+	FireInterval = 1.f / (RateOfFire / 60.f);
 
 	TArray<USceneComponent*> ChildrenComps;
 	WeaponMesh->GetChildrenComponents(true, ChildrenComps);
@@ -327,9 +299,11 @@ void AShootWeapon::CameraOffsetTimelineTick(float Value) const
 
 void AShootWeapon::AimTimelineTick(float Value) const
 {
-	ADCharacterPlayer* Shooter = GetOwningShooter();
-	Shooter->SetCameraFieldOfView(FMath::LerpStable(90.f, AimFOV, Value));
-	Shooter->CameraAimTransformLerp(Value);
+	if (ADCharacterPlayer* Shooter = GetOwningShooter())
+	{
+		Shooter->SetCameraFieldOfView(FMath::LerpStable(90.f, AimFOV, Value));
+		Shooter->CameraAimTransformLerp(Value);
+	}
 }
 
 float AShootWeapon::GetCurrentRecoil() const
@@ -339,7 +313,10 @@ float AShootWeapon::GetCurrentRecoil() const
 
 void AShootWeapon::GetLineTracePoint(FVector& Point, FRotator& Direction) const
 {
-	GetOwningShooter()->Controller->GetPlayerViewPoint(Point, Direction);
+	if (OwningShooter && OwningShooter->Controller)
+	{
+		OwningShooter->Controller->GetPlayerViewPoint(Point, Direction);
+	}
 }
 
 void AShootWeapon::HandleFire()
@@ -358,28 +335,26 @@ void AShootWeapon::HandleFire()
 	FRotator ViewRot;
 	GetLineTracePoint(ViewLoc, ViewRot);
 
-	FBulletHitInfo* HitInfoPtr;
+	TSharedPtr<FBulletHitInfo> HitInfoPtr;
 
 	if (ShellFragment > 1)
 	{
 		TArray<FHitResult> Hits;
 		Hits.AddDefaulted(ShellFragment);
+		
 		for (int32 I = 0; I < ShellFragment; I++)
 		{
 			HandleLineTrace(ViewLoc, ViewRot, Hits[I]);
 		}
 
-		FBulletHitInfo_MultiBullet* Ptr = new FBulletHitInfo_MultiBullet;
-		Ptr->SetHits(Hits);
-		HitInfoPtr = Ptr;
+		HitInfoPtr = MakeShared<FBulletHitInfo_MultiBullet>(Hits);
 	}
 	else
 	{
 		FHitResult Hit;
 		HandleLineTrace(ViewLoc, ViewRot, Hit);
-		FBulletHitInfo_SingleBullet* Ptr = new FBulletHitInfo_SingleBullet;
-		Ptr->SetHitResult(Hit);
-		HitInfoPtr = Ptr;
+		
+		HitInfoPtr = MakeShared<FBulletHitInfo_SingleBullet>(Hit);
 	}
 
 	FBulletHitInfoHandle Handle(HitInfoPtr);
@@ -389,8 +364,7 @@ void AShootWeapon::HandleFire()
 
 	BP_OnFiring();
 
-	SpawnAmmo(Handle);
-	ServerSpawnAmmo(Handle);
+	SpawnAmmoAndFX(Handle);
 
 	AmmoNum--;
 }
@@ -398,6 +372,7 @@ void AShootWeapon::HandleFire()
 void AShootWeapon::HandleLineTrace(const FVector& ViewLoc, const FRotator& ViewRot, FHitResult& OutHit) const
 {
 	FRandomStream RandomStream(FMath::Rand());
+	
 	float AngleRadians = 0.f;
 
 	if (bAimed)
@@ -434,29 +409,63 @@ void AShootWeapon::HandleLineTrace(const FVector& ViewLoc, const FRotator& ViewR
 	}
 }
 
-void AShootWeapon::ApplyRadialDamage(const FRadialDamageProjectileInfo& Radial)
+void AShootWeapon::SpawnAmmoAndFX(const FBulletHitInfoHandle& HitInfo)
 {
-	if (GetLocalRole() != ROLE_Authority)
+	if (FBulletHitInfo_SingleBullet* SingleBullet = HitInfo.Get<FBulletHitInfo_SingleBullet>())
 	{
-		return;
+		if (FHitResult* HitResult = SingleBullet->GetHitResult())
+		{
+			HandleSpawnAmmo(*HitResult);
+		}
+	}
+	else if (FBulletHitInfo_MultiBullet* MultiBullet = HitInfo.Get<FBulletHitInfo_MultiBullet>())
+	{
+		const TArray<FHitResult>& HitResults = MultiBullet->GetHits();
+		for (const FHitResult& HitResult : HitResults)
+		{
+			HandleSpawnAmmo(HitResult);
+		}
 	}
 
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(GetOwner());
-	QueryParams.bReturnPhysicalMaterial = true;
-
-	TArray<FHitResult> Hits;
-	GetWorld()->SweepMultiByChannel(Hits, Radial.Origin, Radial.Origin, FQuat::Identity,
-	                                ECC_Visibility, FCollisionShape::MakeSphere(Radial.DamageRadius), QueryParams);
-
-
-	for (FArrayDistinctIterator<FHitResult, FHitResultKeyFuncs> It(Hits); It; ++It)
+	if (GetNetMode() == NM_DedicatedServer)
 	{
-		// 这里主要作用是触发引擎里默认的一些效果。 像是对击中的物体添加一个力
-		//(*It).Actor->TakeDamage(DNUMBER_ONE, DmgEvent, nullptr, GetOwner());
-
-		DoApplyDamageEffect(*It, Radial.Origin);
+		ServerSpawnAmmo(HitInfo);
 	}
+	else
+	{
+		if (OwningShooter)
+		{
+			OwningShooter->PlayMontage(CharacterAnim.ShootAnim);
+			PlayWeaponShootingAnim();
+		}
+
+		// 枪口的世界位置
+		FVector MuzzleLoc;
+		FRotator MuzzleRot;
+		GetMuzzlePoint(MuzzleLoc, MuzzleRot);
+
+		UGameplayStatics::SpawnSoundAtLocation(this, WeaponMuzzleFX.Sound,
+                                               WeaponMesh->GetSocketLocation(MuzzleSocketName));
+		
+		UGameplayStatics::SpawnEmitterAtLocation(this, WeaponMuzzleFX.Particles, MuzzleLoc, MuzzleRot,
+                                                 WeaponMuzzleFX.Size, true, EPSCPoolMethod::AutoRelease);
+	}
+}
+
+void AShootWeapon::ServerSpawnAmmo_Implementation(const FBulletHitInfoHandle& HitInfo)
+{
+	HitInfoHandle = HitInfo;
+}
+
+// [ROLE_Simulation]
+void AShootWeapon::OnRep_HitInfoHandle()
+{
+	SpawnAmmoAndFX(HitInfoHandle);
+}
+
+FTransform AShootWeapon::GetPreviewRelativeTransform() const
+{
+	return PreviewTransform;
 }
 
 void AShootWeapon::GetMuzzlePoint(FVector& Point, FRotator& Direction) const
@@ -470,52 +479,30 @@ void AShootWeapon::OnAimEnded()
 	BP_OnWeaponAimed();
 }
 
-void AShootWeapon::SpawnAmmo(const FBulletHitInfoHandle& HitInfo)
+void AShootWeapon::ApplyRadialDamage(const FRadialDamageProjectileInfo& Radial)
 {
-	if (FBulletHitInfo_SingleBullet* SingleBullet = HitInfo.Get<FBulletHitInfo_SingleBullet>())
+	if (GetLocalRole() != ROLE_Authority)
 	{
-		FHitResult* HitResult = SingleBullet->GetHitResult();
-		if (HitResult)
-		{
-			HandleSpawnAmmo(*HitResult);
-		}
-	}
-	else if (FBulletHitInfo_MultiBullet* MultiBullet = HitInfo.Get<FBulletHitInfo_MultiBullet>())
-	{
-		const TArray<FHitResult>& HitResults = MultiBullet->GetHits();
-		for (FHitResult HitResult : HitResults)
-		{
-			HandleSpawnAmmo(HitResult);
-		}
+		return;
 	}
 
-	if (GetNetMode() != NM_DedicatedServer)
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(GetOwner());
+	QueryParams.bReturnPhysicalMaterial = true;
+
+	TArray<FHitResult> Hits;
+	GetWorld()->SweepMultiByChannel(Hits, Radial.Origin, Radial.Origin, FQuat::Identity,
+                                    ECC_Visibility, FCollisionShape::MakeSphere(Radial.DamageRadius), QueryParams);
+
+
+	for (FArrayDistinctIterator<FHitResult, FHitResultKeyFuncs> It(Hits); It; ++It)
 	{
-		GetOwningShooter()->PlayMontage(CharacterAnim.ShootAnim, ShootAnim);
+		// 这里主要作用是触发引擎里默认的一些效果。 像是对击中的物体添加一个力
+		//(*It).Actor->TakeDamage(DNUMBER_ONE, DmgEvent, nullptr, GetOwner());
 
-		// 枪口的世界位置
-		FVector MuzzleLoc;
-		FRotator MuzzleRot;
-		GetMuzzlePoint(MuzzleLoc, MuzzleRot);
-
-		UGameplayStatics::SpawnSoundAtLocation(this, WeaponMuzzleFX.Sound,
-		                                       WeaponMesh->GetSocketLocation(MuzzleSocketName));
-		
-		UGameplayStatics::SpawnEmitterAtLocation(this, WeaponMuzzleFX.Particles, MuzzleLoc, MuzzleRot,
-		                                         WeaponMuzzleFX.Size, true, EPSCPoolMethod::AutoRelease);
+		DoApplyDamageEffect(*It, Radial.Origin);
 	}
 }
-
-void AShootWeapon::ServerSpawnAmmo_Implementation(const FBulletHitInfoHandle& HitInfo)
-{
-	NetMulticastSpawnAmmo(HitInfo);
-}
-
-FTransform AShootWeapon::GetPreviewRelativeTransform() const
-{
-	return PreviewTransform;
-}
-
 
 void AShootWeapon::ApplyPointDamage(const FHitResult& HitInfo)
 {
@@ -529,19 +516,9 @@ void AShootWeapon::ApplyPointDamage(const FHitResult& HitInfo)
 	DoApplyDamageEffect(HitInfo, GetOwner()->GetActorLocation());
 }
 
-void AShootWeapon::NetMulticastSpawnAmmo_Implementation(const FBulletHitInfoHandle& HitInfo)
-{
-	if (IsLocalWeapon())
-	{
-		return;
-	}
-
-	SpawnAmmo(HitInfo);
-}
-
 void AShootWeapon::InitializeAmmunition()
 {
-	if (ADPlayerController* OwningController = GetOwningController())
+	if (ADMPlayerController* OwningController = GetOwningController())
 	{
 		float AmmunitionPercentage = OwningController->GetWeaponAmmunition(AmmoType);
 
@@ -557,13 +534,67 @@ void AShootWeapon::OnPlayerAmmunitionChanged(float NewAmmunition)
 	ReserveAmmo = FMath::RoundHalfFromZero(InitReserveAmmo * NewAmmunition);
 }
 
-void AShootWeapon::ReloadingWeapon()
+void AShootWeapon::ServerSetWeaponState_Implementation(EWeaponState NewState)
+{
+	SetWeaponState(NewState);
+}
+
+void AShootWeapon::SetWeaponState(EWeaponState NewState)
+{
+	// [local/server]
+	
+	WeaponState = NewState;
+	
+	if (GetLocalRole() != ROLE_Authority)
+	{
+		ServerSetWeaponState(NewState);
+	}
+}
+
+void AShootWeapon::OnRep_WeaponState(EWeaponState LastState)
+{
+	if (LastState != EWeaponState::Idle)
+	{
+		if (WeaponMesh->AnimScriptInstance)
+		{
+			WeaponMesh->AnimScriptInstance->StopAllMontages(0.1f);
+		}
+	}
+	
+	if (WeaponState == EWeaponState::Reloading)
+	{
+		PlayWeaponReloadingAnim();
+		OwningShooter->PlayMontage(CharacterAnim.ReloadAnim);
+	}
+	else if (WeaponState == EWeaponState::Equipping)
+	{
+		OwningShooter->PlayMontage(CharacterAnim.EquipAnim);
+	}
+}
+
+void AShootWeapon::PlayWeaponShootingAnim()
+{
+	if (WeaponMesh->AnimScriptInstance)
+	{
+		WeaponMesh->AnimScriptInstance->Montage_Play(ReloadAnim);
+	}
+}
+
+void AShootWeapon::PlayWeaponReloadingAnim()
+{
+	if (WeaponMesh->AnimScriptInstance)
+	{
+		WeaponMesh->AnimScriptInstance->Montage_Play(ShootAnim);
+	}
+}
+
+void AShootWeapon::OnReloadFinished()
 {
 	int32 ReloadAmmo = FMath::Min(InitAmmo - AmmoNum, ReserveAmmo);
 	
 	AmmoNum += ReloadAmmo;
 
-	ADPlayerController* Controller = GetOwningShooter()->GetPlayerController();
+	ADMPlayerController* Controller = GetOwningShooter()->GetPlayerController();
 	Controller->SetWeaponAmmunition(AmmoType, static_cast<float>(ReserveAmmo - ReloadAmmo) / InitReserveAmmo);
 }
 
@@ -577,16 +608,13 @@ void AShootWeapon::DoApplyDamageEffect(const FHitResult& Hit, const FVector& Ori
 
 	if (IAbilitySystemInterface* TargetASI = Cast<IAbilitySystemInterface>(HitActor))
 	{
-		ADCharacterPlayer* OwningShooter = GetOwningShooter();
-
 		float DamageFalloff = 1.f;
 		if (DamageFalloffCurve)
 		{
 			DamageFalloff = DamageFalloffCurve->GetFloatValue(FVector::Distance(Origin, Hit.ImpactPoint));
 		}
 
-		FDreamGameplayEffectContext* EffectContext = UDGameplayStatics::MakeDreamEffectContext(
-			OwningShooter, DamageFalloff, Hit);
+		FDreamGameplayEffectContext* EffectContext = UDGameplayStatics::MakeDreamEffectContext(OwningShooter, DamageFalloff, Hit);
 		EffectContext->SetDamageType(static_cast<EDDamageType>(WeaponType));
 
 		FGameplayEffectSpec Spec(GetDefault<UDGE_WeaponBaseDamage>(), FGameplayEffectContextHandle(EffectContext));
@@ -598,12 +626,15 @@ void AShootWeapon::DoApplyDamageEffect(const FHitResult& Hit, const FVector& Ori
 
 void AShootWeapon::SetWeaponEnable(bool bEnable)
 {
-	BP_OnWeaponEnable(bEnable);
-	SetActorTickEnabled(bEnable);
-	if (!bEnable)
+	if (IsLocalWeapon())
 	{
-		RecoverTimelineTick(1.f);
-		AimTimelineTick(0.f);
+		BP_OnWeaponEnable(bEnable);
+		SetActorTickEnabled(bEnable);
+		if (!bEnable)
+		{
+			RecoverTimelineTick(1.f);
+			AimTimelineTick(0.f);
+		}
 	}
 }
 
@@ -621,6 +652,25 @@ void AShootWeapon::SetWeaponAim(bool NewAimed)
 	}
 }
 
+EWeaponState AShootWeapon::GetWeaponState() const
+{
+	return WeaponState;
+}
+
+bool AShootWeapon::IsState(EWeaponState State) const
+{
+	return WeaponState == State;
+}
+
+bool AShootWeapon::CanFire() const
+{
+	return GetWorld()->GetTimeSeconds() > (LastFireTime + FireInterval);
+}
+
+bool AShootWeapon::CanReload() const
+{
+	return AmmoNum < InitAmmo && ReserveAmmo > 0 && WeaponState < EWeaponState::Reloading;
+}
 
 const FSlateBrush& AShootWeapon::GetDynamicCrosshairBrush()
 {
@@ -655,16 +705,12 @@ void AShootWeapon::BP_GetLineTracePoint(FVector& Point, FRotator& Direction) con
 
 ADCharacterPlayer* AShootWeapon::GetOwningShooter() const
 {
-	return Cast<ADCharacterPlayer>(GetOwner());
+	return OwningShooter;
 }
 
-ADPlayerController* AShootWeapon::GetOwningController() const
+ADMPlayerController* AShootWeapon::GetOwningController() const
 {
-	if (ADCharacterPlayer* OwningShooter = GetOwningShooter())
-	{
-		return OwningShooter->GetPlayerController();
-	}
-	return nullptr;
+	return OwningShooter ? OwningShooter->GetPlayerController() : nullptr;
 }
 
 void AShootWeapon::SpreadRecovery()
@@ -679,14 +725,7 @@ bool AShootWeapon::IsLocalWeapon() const
 		return true;
 	}
 
-	// 对于客户端
-	if (GetNetMode() == NM_Client && GetOwningShooter()->GetLocalRole() == ROLE_AutonomousProxy)
-	{
-		return true;
-	}
-
-	// 对于监听服务器
-	if (GetNetMode() == NM_ListenServer && GetLocalRole() == ROLE_Authority)
+	if (OwningShooter && OwningShooter->GetLocalRole() == ROLE_AutonomousProxy)
 	{
 		return true;
 	}
@@ -696,7 +735,7 @@ bool AShootWeapon::IsLocalWeapon() const
 
 void AShootWeapon::AttachToCharacter(bool bActiveSocket, USkeletalMeshComponent* Mesh)
 {
-	UDProjectSettings* ProjectSettings = UDProjectSettings::GetProjectSettings();
+	UDMProjectSettings* ProjectSettings = UDMProjectSettings::GetProjectSettings();
 
 	AttachToComponent(Mesh, FAttachmentTransformRules::KeepRelativeTransform,
 	                  bActiveSocket
@@ -709,4 +748,7 @@ void AShootWeapon::AttachToCharacter(bool bActiveSocket, USkeletalMeshComponent*
 void AShootWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
+
+	DOREPLIFETIME_CONDITION(AShootWeapon, HitInfoHandle, COND_SkipOwner);
+	DOREPLIFETIME_CONDITION(AShootWeapon, WeaponState, COND_SkipOwner);
 }

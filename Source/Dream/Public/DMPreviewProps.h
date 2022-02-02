@@ -3,12 +3,12 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DItemPreview.h"
+#include "DMPreviewActor.h"
 #include "GameFramework/Actor.h"
-#include "DPropsPreview.generated.h"
+#include "DMPreviewProps.generated.h"
 
 UCLASS()
-class DREAM_API ADPropsPreview : public ADItemPreview
+class DREAM_API ADMPreviewProps : public ADMPreviewActor
 {
 	GENERATED_BODY()
 	

@@ -9,13 +9,12 @@
 #include "SubclassOf.h"
 #include "GameFramework/Actor.h"
 #include "JsonUtilities.h"
-#include "DreamGameInstance.h"
 #include "AIController.h"
 #include "DCharacterPlayer.h"
 #include "DGameplayEffectUIData.h"
 #include "DGameUserSettings.h"
-#include "DProjectSettings.h"
-#include "DreamAttributeSet.h"
+#include "DMAttributeSet.h"
+#include "DMProjectSettings.h"
 #include "DreamGameMode.h"
 #include "DreamGameplayType.h"
 #include "DreamGameplayAbility.h"
@@ -33,6 +32,7 @@
 #include "NiagaraDataInterfaceSpline.h"
 #include "NiagaraFunctionLibrary.h"
 #include "OnlineSubsystemUtils.h"
+#include "ShootWeapon.h"
 #include "Kismet/KismetMathLibrary.h"
 
 template<class GameMode>
@@ -153,6 +153,19 @@ FText UDGameplayStatics::ToTimeText(int32 TotalSeconds)
 	return FText::FromString(FString::Printf(TEXT("%02d:%02d"), Minute, Seconds));
 }
 
+FString UDGameplayStatics::GetLocalPlayerName()
+{
+	IOnlineSubsystem* OnlineSubsystem = IOnlineSubsystem::Get();
+
+	IOnlineIdentityPtr OnlineIdentityPtr = OnlineSubsystem->GetIdentityInterface();
+
+	if (OnlineIdentityPtr.IsValid())
+	{
+		return OnlineIdentityPtr->GetPlayerNickname(0);
+	}
+
+	return TEXT("LocalPlayer");
+}
 
 void UDGameplayStatics::CopyMeshComponents(UObject* WorldContextObject, UMeshComponent* Source, UMeshComponent* Target)
 {
@@ -473,7 +486,7 @@ void UDGameplayStatics::SpawnDamageWidgets(AActor* TargetActor, const FGameplayC
 
 	if (!bHealthSteal)
 	{
-		float Health = TargetAbilityComponent->GetNumericAttribute(DreamAttrStatics().HealthProperty);
+		float Health = TargetAbilityComponent->GetNumericAttribute(DMAttrStatics().HealthProperty);
 		PlayerShooter->ShowHitEnemyTips(Health == 0.f);
 	}
 }
@@ -558,48 +571,66 @@ void UDGameplayStatics::CalculateOrientation(const FVector& Velocity, const FRot
 	
 	if (!Velocity.IsNearlyZero())
 	{
-		FMatrix RotMatrix = FRotationMatrix(BaseRotation);
-		FVector ForwardVector = RotMatrix.GetScaledAxis(EAxis::X);
-		FVector RightVector = RotMatrix.GetScaledAxis(EAxis::Y);
-		FVector NormalizedVel = Velocity.GetSafeNormal2D();
+		FRotator DeltaRotation = Velocity.Rotation() - BaseRotation;
+		DeltaRotation.Normalize();
 
-		// get a cos(alpha) of forward vector vs velocity
-		float ForwardCosAngle = FVector::DotProduct(ForwardVector, NormalizedVel);
-		// now get the alpha and convert to degree
-		
-		// depending on where right vector is, flip it
-		float RightCosAngle = FVector::DotProduct(RightVector, NormalizedVel);
+		float Tolerance = 2.f;
 
-		float ForwardDegrees = FMath::RadiansToDegrees(FMath::Acos(ForwardCosAngle));
-		
-		if (ForwardDegrees < 45.1f)
+		bool bRight = DeltaRotation.Yaw > 0;
+
+		float YawAbs = FMath::Abs(DeltaRotation.Yaw);
+
+		if (YawAbs < 45.f + Tolerance)
 		{
 			Orientation = 0;
-			Angle = RightCosAngle > 0 ? ForwardDegrees : -ForwardDegrees;
+			Angle = DeltaRotation.Yaw;
 		}
-		else if (ForwardDegrees < 90.1f)
+		else if (YawAbs < 135.f - Tolerance)
 		{
-			float RightDegrees = FMath::RadiansToDegrees(FMath::Acos(RightCosAngle));
-
-			if (RightCosAngle > 0)
+			float Abs = FMath::Abs(YawAbs - 90.f);
+			if (bRight)
 			{
 				Orientation = 1;
-				Angle = RightDegrees;
+				
+				Angle = Abs;
 			}
 			else
 			{
 				Orientation = 3;
-				float LeftDegrees = 180.f - RightDegrees;
-				Angle = ForwardCosAngle > 0 ? -LeftDegrees : LeftDegrees;
+				Angle = -Abs;
 			}
 		}
 		else
 		{
 			Orientation = 2;
-			float BackwardDegrees = 180.f - ForwardDegrees;
-			Angle = RightCosAngle > 0 ? -BackwardDegrees : BackwardDegrees;
+			float BackwardDegrees = 180.f - YawAbs;
+			Angle = bRight ? -BackwardDegrees : BackwardDegrees;
 		}
+
+		//UE_LOG(LogDream, Error, TEXT("Orientation: %d, Angle: %f, YawAbs: %f"), Orientation, Angle, YawAbs);
 	}
+}
+
+float UDGameplayStatics::CalculateDir(const FVector& Velocity, const FRotator& BaseRotation)
+{
+	FMatrix RotMatrix = FRotationMatrix(BaseRotation);
+	FVector ForwardVector = RotMatrix.GetScaledAxis(EAxis::X);
+	FVector RightVector = RotMatrix.GetScaledAxis(EAxis::Y);
+	FVector NormalizedVel = Velocity.GetSafeNormal2D();
+
+	// get a cos(alpha) of forward vector vs velocity
+	float ForwardCosAngle = FVector::DotProduct(ForwardVector, NormalizedVel);
+	// now get the alpha and convert to degree
+	float ForwardDeltaDegree = FMath::RadiansToDegrees(FMath::Acos(ForwardCosAngle));
+
+	// depending on where right vector is, flip it
+	float RightCosAngle = FVector::DotProduct(RightVector, NormalizedVel);
+	if (RightCosAngle < 0)
+	{
+		ForwardDeltaDegree *= -1;
+	}
+
+	return ForwardDeltaDegree;
 }
 
 void UDGameplayStatics::SpawnWeaponTrailParticles(UObject* WorldContextObject, const FWeaponTrailVFX& TrailVfx,
@@ -625,13 +656,18 @@ void UDGameplayStatics::SpawnWeaponTrailParticles(UObject* WorldContextObject, c
 
 FName UDGameplayStatics::GetWeaponSocketName(bool bMasterSocket)
 {
-	UDProjectSettings* ProjectSettings = UDProjectSettings::GetProjectSettings();
+	UDMProjectSettings* ProjectSettings = UDMProjectSettings::GetProjectSettings();
 	return bMasterSocket ? ProjectSettings->GetWepActiveSockName() : ProjectSettings->GetWepHolsterSockName();
 }
 
 const FItemDef& UDGameplayStatics::GetItemDef(int32 ItemGuid)
 {
-	return UDProjectSettings::GetProjectSettings()->GetItemDefinition(ItemGuid);
+	return GSProject->GetItemDefinition(ItemGuid);
+}
+
+ULevelListAsset* UDGameplayStatics::GetLevelListAsset()
+{
+	return GSProject->GetLevelListAsset();
 }
 
 void UDGameplayStatics::ReturnToHomeWorld(UObject* WorldContextObject)
@@ -639,7 +675,7 @@ void UDGameplayStatics::ReturnToHomeWorld(UObject* WorldContextObject)
 	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull))
 	{
 		IDreamLoadingScreenModule::Get().StartInGameLoadingScreen();
-		const FSoftObjectPath& MainUILevel = UDProjectSettings::GetProjectSettings()->GetMainUILevel();
+		const FSoftObjectPath& MainUILevel = UDMProjectSettings::GetProjectSettings()->GetMainUILevel();
 		GEngine->SetClientTravel(World, *MainUILevel.GetLongPackageName(), ETravelType::TRAVEL_Absolute);
 	}
 }

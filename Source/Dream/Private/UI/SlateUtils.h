@@ -105,10 +105,16 @@ public:
 	{
 	}
 
-	FLinearAnimation& operator=(const float& Value)
+	FLinearAnimation& operator=(const float& InTargetValue)
 	{
-		TargetValue = Value;
+		TargetValue = InTargetValue;
 		return *this;
+	}
+
+	void Set(float InCurrent, float InTarget)
+	{
+		CurrentValue = InCurrent;
+		TargetValue = InTarget;
 	}
 
 	void Activate()
@@ -129,6 +135,16 @@ public:
 	FORCEINLINE void InterpConstantTo(float Delta, float InterpSpeed = 1.f)
 	{
 		CurrentValue = FMath::FInterpConstantTo(CurrentValue, TargetValue, Delta, InterpSpeed);
+	}
+
+	FORCEINLINE void ConstantToAndDeactivate(float Delta, float InterpSpeed = 1.f)
+	{
+		CurrentValue = FMath::FInterpConstantTo(CurrentValue, TargetValue, Delta, InterpSpeed);
+
+		if (FMath::IsNearlyEqual(TargetValue, CurrentValue))
+		{
+			bActivate = false;
+		}
 	}
 
 	FORCEINLINE void InterpTo(float Delta, float InterpSpeed = 1.f)

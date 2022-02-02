@@ -5,7 +5,6 @@
 #include "PDI/PlayerDataInterface.h"
 #include "PDI/PlayerDataInterfaceStatic.h"
 #include "TimerManager.h"
-#include "DreamGameInstance.h"
 #include "DreamGameMode.h"
 #include "DreamLoadingScreen.h"
 #include "GameMapsSettings.h"
@@ -187,7 +186,7 @@ void UMatchmakingCallProxy::CreateLobby()
 	SessionSettings.bShouldAdvertise = true;
 	SessionSettings.bAllowInvites = true;
 	SessionSettings.bAllowJoinViaPresence = true;
-	SessionSettings.NumPublicConnections = T_LevelInformation.GetGameModeMaxPlayers();
+	SessionSettings.NumPublicConnections = T_LevelInformation.MaxPlayers;
 
 	SessionSettings.Set(SETTING_MAPNAME, T_LevelInformation.Map.GetAssetName(), EOnlineDataAdvertisementType::ViaOnlineService);
 	SessionSettings.Set(SETTING_GAMEMODE, T_LevelInformation.GameModeClassAlias, EOnlineDataAdvertisementType::ViaOnlineService);

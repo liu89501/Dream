@@ -2,13 +2,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DreamType.h"
 #include "DPropsType.h"
-#include "SlateBrush.h"
 #include "GameFramework/Actor.h"
-#include "Sound/SoundCue.h"
 #include "Components/TimelineComponent.h"
-#include "Projectile/DProjectile.h"
 #include "GameplayTagContainer.h"
 #include "PreviewInterface.h"
 #include "ShootWeapon.generated.h"
@@ -21,18 +17,18 @@ struct FBulletHitInfo
 public:
 	virtual ~FBulletHitInfo() = default;
 
-	virtual uint8 GetStructID() const
-	{
-		return 0;	
-	}
+	virtual uint8 GetStructID() const;
 
 	virtual bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess);
+};
 
-/*public:
-
-	UPROPERTY(BlueprintReadWrite)
-	FVector_NetQuantize10 LocalMuzzleLocation;*/
-	
+UENUM()
+enum class EWeaponState : uint8
+{
+	Idle,
+    Shooting,
+    Reloading,
+    Equipping
 };
 
 template<>
@@ -51,9 +47,13 @@ struct FBulletHitInfo_SingleBullet : public FBulletHitInfo
 
 public:
 
-	void SetHitResult(const FHitResult& NewHitResult)
+	FBulletHitInfo_SingleBullet() : HitResult()
 	{
-		HitResult = TSharedPtr<FHitResult>(new FHitResult(NewHitResult));
+	}
+
+	FBulletHitInfo_SingleBullet(const FHitResult& InHitResult)
+		: HitResult(MakeShared<FHitResult>(InHitResult))
+	{
 	}
 
 	FHitResult* GetHitResult() const
@@ -89,6 +89,14 @@ struct FBulletHitInfo_MultiBullet : public FBulletHitInfo
 	GENERATED_BODY()
 
 public:
+
+	FBulletHitInfo_MultiBullet()
+	{
+	}
+
+	FBulletHitInfo_MultiBullet(const TArray<FHitResult>& InHits) : Hits(InHits)
+	{
+	}
 	
 	virtual uint8 GetStructID() const override
 	{
@@ -100,11 +108,6 @@ public:
 	const TArray<FHitResult>& GetHits() const
 	{
 		return Hits;
-	}
-
-	void SetHits(const TArray<FHitResult>& NewHits)
-	{
-		Hits = NewHits;
 	}
 
 private:
@@ -132,9 +135,8 @@ public:
 	{
 	}
 
-	FBulletHitInfoHandle(FBulletHitInfo* DataPtr)
+	FBulletHitInfoHandle(const TSharedPtr<FBulletHitInfo>& InData) : Data(InData)
 	{
-		Data = TSharedPtr<FBulletHitInfo>(DataPtr);
 	}
 
 	template<typename Type>
@@ -154,35 +156,6 @@ struct TStructOpsTypeTraits<FBulletHitInfoHandle> : public TStructOpsTypeTraitsB
 	{
 		WithNetSerializer = true
     };
-};
-
-struct FBulletHitInfoStructContainer
-{
-
-public:
-
-	FBulletHitInfoStructContainer()
-	{
-		ScriptStructCache.Add(0, FBulletHitInfo::StaticStruct());
-		ScriptStructCache.Add(1, FBulletHitInfo_SingleBullet::StaticStruct());
-		ScriptStructCache.Add(2, FBulletHitInfo_MultiBullet::StaticStruct());
-    }
-
-	UScriptStruct* GetScriptStruct(uint8 ID) const
-	{
-		UScriptStruct* const* ScriptStructPtr = ScriptStructCache.Find(ID);
-		return ScriptStructPtr ? *ScriptStructPtr : nullptr;
-	}
-
-	static const FBulletHitInfoStructContainer& StructContainer()
-	{
-		static FBulletHitInfoStructContainer StructContainer;
-		return StructContainer;
-	}
-
-private:
-
-	TMap<uint8, UScriptStruct*> ScriptStructCache;
 };
 
 
@@ -332,13 +305,10 @@ public:
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
 	EWeaponType WeaponType;
 
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
-	FPropsInfo WeaponInfo;
-
 	/**
 	 * 武器射击一次发射的弹片数量
 	 */
-	UPROPERTY(EditDefaultsOnly, Category=Weapon, meta = (ClampMin = 1, ClampMax = 20))
+	UPROPERTY(EditDefaultsOnly, Category=Weapon, meta = (ClampMin = 1, ClampMax = 16))
 	int32 ShellFragment;
 	
 	/**
@@ -373,10 +343,6 @@ public:
 	/** 瞄准时的摄像机FOV */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Weapon)
 	float AimFOV;
-
-	/** 武器的瞄准速度 */
-	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Weapon)
-	float AimSpeed;
 
 	/** 瞄准时的精准度阈值 数值越大越精准 为0时表示完全没有偏移 */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Weapon)
@@ -424,7 +390,8 @@ public:
 	UCurveFloat* CameraOffsetCurve;
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Weapon|Recoil")
 	UCurveFloat* RecoveryCurve;
-	UPROPERTY()
+	
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category="Weapon")
 	UCurveFloat* AimCurve;
 	
 	/**
@@ -475,7 +442,7 @@ public:
 	class ADCharacterPlayer* GetOwningShooter() const;
 
 	UFUNCTION(BlueprintCallable, Category = Weapon)
-	class ADPlayerController* GetOwningController() const;
+	class ADMPlayerController* GetOwningController() const;
 	
 	UFUNCTION(BlueprintCallable, Category = Weapon)
 	float GetCurrentRecoil() const;
@@ -508,9 +475,6 @@ public:
 
 	virtual FTransform GetPreviewRelativeTransform() const override;
 
-	/** @return Ammunition Percentage */
-	virtual void ReloadingWeapon();
-
 	// ServerOnly
 	virtual void ApplyPointDamage(const FHitResult& HitInfo);
 	virtual void ApplyRadialDamage(const FRadialDamageProjectileInfo& RadialDamage);
@@ -523,37 +487,39 @@ public:
 
 	float GetFireInterval() const
 	{
-		return 1.f / (RateOfFire / 60.f);
+		return FireInterval;
 	}
 
-	float GetLastFireTimeSeconds() const
-	{
-		return LastFireTime;
-	}
+	EWeaponState GetWeaponState() const;
+
+	bool IsState(EWeaponState State) const;
+
+	bool CanFire() const;
+
+	bool CanReload() const;
 
 	void AttachToCharacter(bool bActiveSocket, USkeletalMeshComponent* Mesh);
-
-	bool IsFullAmmo() const
-	{
-		return AmmoNum == InitAmmo;
-	}
-
-protected:
 
 	void HandleFire();
 	void HandleLineTrace(const FVector& ViewLoc, const FRotator& ViewRot, FHitResult& OutHit) const;
 
-	void SpawnAmmo(const FBulletHitInfoHandle& HitInfo);
-	UFUNCTION(Reliable, NetMulticast)
-	void NetMulticastSpawnAmmo(const FBulletHitInfoHandle& HitInfo);
+	void SpawnAmmoAndFX(const FBulletHitInfoHandle& HitInfo);
+	
 	UFUNCTION(Reliable, Server)
 	void ServerSpawnAmmo(const FBulletHitInfoHandle& HitInfo);
 
 	void InitializeAmmunition();
 
-	void OnPlayerAmmunitionChanged(float NewAmmunition);
-
 	virtual void HandleSpawnAmmo(const FHitResult& HitResult) {};
+
+	UFUNCTION(Server, Reliable)
+    void ServerSetWeaponState(EWeaponState NewState);
+	void SetWeaponState(EWeaponState NewState);
+
+	void PlayWeaponShootingAnim();
+	void PlayWeaponReloadingAnim();
+	
+	void OnReloadFinished();
 
 	void DoApplyDamageEffect(const FHitResult& Hit, const FVector& Origin) const;
 	//void DoApplyDamageEffectMulti(const TArray<FHitResult>& Hits);
@@ -571,7 +537,8 @@ protected:
 
 	virtual void GetMuzzlePoint(FVector& Point, FRotator& Direction) const;
 
-
+protected:
+	
 	UFUNCTION()
 	virtual void OnAimEnded();
 
@@ -580,7 +547,24 @@ protected:
 	virtual void CameraOffsetTimelineTick(float Value) const;
 	virtual void AimTimelineTick(float Value) const;
 
+	void OnPlayerAmmunitionChanged(float NewAmmunition);
+
+	UFUNCTION()	
+    void OnRep_WeaponState(EWeaponState LastState);
+
+	UFUNCTION()
+    virtual void OnRep_HitInfoHandle();
+
 protected:
+
+	UPROPERTY(BlueprintReadWrite, Category = Weapon)
+	bool bAimed;
+
+	UPROPERTY(ReplicatedUsing = OnRep_HitInfoHandle)
+	FBulletHitInfoHandle HitInfoHandle;
+
+	UPROPERTY(ReplicatedUsing = OnRep_WeaponState)
+	EWeaponState WeaponState;
 
 	float CurrentSpread;
 
@@ -588,22 +572,22 @@ protected:
 	FTimeline RecoilTimeline;
 	FTimeline AimTimeline;
 
-	UPROPERTY(BlueprintReadWrite, Category = Weapon)
-	bool bAimed;
-
 	int32 InitAmmo;
 	int32 InitReserveAmmo;
+
+	float FireInterval;
 
 private:
 
 	friend class ADCharacterPlayer;
 	friend class ADProjectile;
-	friend class ADPlayerShooter;
 
 	/** 最后一次开火时间点 */
 	float LastFireTime;
 
 	FTimerHandle Handle_ReSpread;
+	
+	FTimerHandle Handle_Reloading;
 
 	FDelegateHandle Handle_PlayerAmmunitionChange;
 
@@ -611,5 +595,10 @@ private:
 	UMaterialInstanceDynamic* CrosshairDynamic;
 	UPROPERTY()
 	UMaterialInstanceDynamic* MagazineDynamic;
+
+	UPROPERTY()
+	ADCharacterPlayer* OwningShooter;
 	
 };
+
+

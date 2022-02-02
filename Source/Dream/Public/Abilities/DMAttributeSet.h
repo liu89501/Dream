@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "AttributeSet.h"
 #include "AbilitySystemComponent.h"
-#include "DreamAttributeSet.generated.h"
+#include "DMAttributeSet.generated.h"
 
 
 #define ATTRIBUTE_ACCESSORS(ClassName, PropertyName) \
@@ -21,15 +21,16 @@ struct FEquipmentAttributes;
  * 
  */
 UCLASS()
-class DREAM_API UDreamAttributeSet : public UAttributeSet
+class DREAM_API UDMAttributeSet : public UAttributeSet
 {
 	GENERATED_BODY()
 
 public:
 	
-	UDreamAttributeSet();
+	UDMAttributeSet();
 
 	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
+
 	virtual bool PreGameplayEffectExecute(FGameplayEffectModCallbackData& Data) override;
 	virtual void PostGameplayEffectExecute(const FGameplayEffectModCallbackData& Data) override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -38,71 +39,77 @@ public:
 
 	void UpdateAttributesBase(const FEquipmentAttributes& Attributes);
 
+	void InitAttributes(const FEquipmentAttributes& Attributes);
+
 public:
 	
 	/** Current Health, when 0 we expect owner to die. Capped by MaxHealth */
 	UPROPERTY(BlueprintReadOnly, Category = "Health", ReplicatedUsing=OnRep_Health)
 	FGameplayAttributeData Health;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, Health)
+	ATTRIBUTE_ACCESSORS(UDMAttributeSet, Health)
 
 	/** MaxHealth is its own attribute, since GameplayEffects may modify it */
 	UPROPERTY(BlueprintReadOnly, Category = "Health", ReplicatedUsing=OnRep_MaxHealth)
 	FGameplayAttributeData MaxHealth;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, MaxHealth)
+	ATTRIBUTE_ACCESSORS(UDMAttributeSet, MaxHealth)
+
+	UPROPERTY(BlueprintReadOnly, Category = "Health", ReplicatedUsing=OnRep_Recovery)
+	FGameplayAttributeData Recovery;
+	ATTRIBUTE_ACCESSORS(UDMAttributeSet, Recovery)
 
 	/** AttackPower of the attacker is multiplied by the base Damage to reduce health, so 1.0 means no bonus */
 	UPROPERTY(BlueprintReadOnly, Category = "Damage", ReplicatedUsing = OnRep_AttackPower)
 	FGameplayAttributeData AttackPower;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, AttackPower)
+	ATTRIBUTE_ACCESSORS(UDMAttributeSet, AttackPower)
 
 	/** Base Damage is divided by DefensePower to get actual damage done, so 1.0 means no bonus */
 	UPROPERTY(BlueprintReadOnly, Category = "Damage", ReplicatedUsing = OnRep_DefensePower)
 	FGameplayAttributeData DefensePower;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, DefensePower)
+	ATTRIBUTE_ACCESSORS(UDMAttributeSet, DefensePower)
 
 	/** 暴击率 */
 	UPROPERTY(BlueprintReadOnly, Category = "Damage", ReplicatedUsing = OnRep_CriticalRate)
 	FGameplayAttributeData CriticalRate;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, CriticalRate)
+	ATTRIBUTE_ACCESSORS(UDMAttributeSet, CriticalRate)
 	
 	/** 暴击伤害 */
 	UPROPERTY(BlueprintReadOnly, Category = "Damage", ReplicatedUsing = OnRep_CriticalDamage)
 	FGameplayAttributeData CriticalDamage;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, CriticalDamage)
+	ATTRIBUTE_ACCESSORS(UDMAttributeSet, CriticalDamage)
 
 	/** Damage is a 'temporary' attribute used by the DamageExecution to calculate final damage, which then turns into -Health */
 	UPROPERTY(BlueprintReadOnly, Category = "Damage")
 	FGameplayAttributeData Damage;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, Damage)
+	ATTRIBUTE_ACCESSORS(UDMAttributeSet, Damage)
 
 	/**
 	 * 生命偷取
 	 */
 	UPROPERTY(BlueprintReadOnly, Category = "Damage")
 	FGameplayAttributeData HealthSteal;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, HealthSteal)
+	ATTRIBUTE_ACCESSORS(UDMAttributeSet, HealthSteal)
 
 
 	/* --------------------------------- 武器类型增伤 ------------------------------- */
 	UPROPERTY(BlueprintReadOnly, Category = "Damage")
 	FGameplayAttributeData WeaponDamageAssaultRifle;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, WeaponDamageAssaultRifle)
+	ATTRIBUTE_ACCESSORS(UDMAttributeSet, WeaponDamageAssaultRifle)
 	
 	UPROPERTY(BlueprintReadOnly, Category = "Damage")
 	FGameplayAttributeData WeaponDamageGrenadeLaunch;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, WeaponDamageGrenadeLaunch)
+	ATTRIBUTE_ACCESSORS(UDMAttributeSet, WeaponDamageGrenadeLaunch)
 	
 	UPROPERTY(BlueprintReadOnly, Category = "Damage")
 	FGameplayAttributeData WeaponDamageShotgun;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, WeaponDamageShotgun)
+	ATTRIBUTE_ACCESSORS(UDMAttributeSet, WeaponDamageShotgun)
 	
 	UPROPERTY(BlueprintReadOnly, Category = "Damage")
 	FGameplayAttributeData WeaponDamageSniperRifle;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, WeaponDamageSniperRifle)
+	ATTRIBUTE_ACCESSORS(UDMAttributeSet, WeaponDamageSniperRifle)
 	
 	UPROPERTY(BlueprintReadOnly, Category = "Damage")
 	FGameplayAttributeData WeaponDamagePrecisionRifle;
-	ATTRIBUTE_ACCESSORS(UDreamAttributeSet, WeaponDamagePrecisionRifle)
+	ATTRIBUTE_ACCESSORS(UDMAttributeSet, WeaponDamagePrecisionRifle)
 
 protected:
 	/** Helper function to proportionally adjust the value of an attribute when it's associated max attribute changes. (i.e. When MaxHealth increases, Health increases by an amount that maintains the same percentage as before) */
@@ -113,6 +120,9 @@ protected:
 
 	UFUNCTION()
 	virtual void OnRep_MaxHealth(const FGameplayAttributeData& OldValue);
+	
+	UFUNCTION()
+	virtual void OnRep_Recovery(const FGameplayAttributeData& OldValue);
 
 	UFUNCTION()
 	virtual void OnRep_AttackPower(const FGameplayAttributeData& OldValue);
@@ -157,33 +167,33 @@ struct DreamAttributeStatics
 	DreamAttributeStatics()
 	{
 		// Capture the Target's DefensePower attribute. Do not snapshot it, because we want to use the health value at the moment we apply the execution.
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, DefensePower, Target, false);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDMAttributeSet, DefensePower, Target, false);
 
 		// Capture the Source's AttackPower. We do want to snapshot this at the moment we create the GameplayEffectSpec that will execute the damage.
 		// (imagine we fire a projectile: we create the GE Spec when the projectile is fired. When it hits the target, we want to use the AttackPower at the moment
 		// the projectile was launched, not when it hits).
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, AttackPower, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDMAttributeSet, AttackPower, Source, true);
 
 		// Also capture the source's raw Damage, which is normally passed in directly via the execution
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, Damage, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDMAttributeSet, Damage, Source, true);
         
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, CriticalRate, Source, true);
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, CriticalDamage, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDMAttributeSet, CriticalRate, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDMAttributeSet, CriticalDamage, Source, true);
 		
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, MaxHealth, Source, false);
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, Health, Source, false);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDMAttributeSet, MaxHealth, Source, false);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDMAttributeSet, Health, Source, false);
 		
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, HealthSteal, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDMAttributeSet, HealthSteal, Source, true);
 		
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, WeaponDamageAssaultRifle, Source, true);
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, WeaponDamageGrenadeLaunch, Source, true);
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, WeaponDamageShotgun, Source, true);
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, WeaponDamageSniperRifle, Source, true);
-		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDreamAttributeSet, WeaponDamagePrecisionRifle, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDMAttributeSet, WeaponDamageAssaultRifle, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDMAttributeSet, WeaponDamageGrenadeLaunch, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDMAttributeSet, WeaponDamageShotgun, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDMAttributeSet, WeaponDamageSniperRifle, Source, true);
+		D_DEFINE_ATTRIBUTE_CAPTUREDEF(UDMAttributeSet, WeaponDamagePrecisionRifle, Source, true);
 	}
 };
 
-static const DreamAttributeStatics& DreamAttrStatics()
+static const DreamAttributeStatics& DMAttrStatics()
 {
 	static DreamAttributeStatics AttrStatics;
 	return AttrStatics;

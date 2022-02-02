@@ -3,11 +3,10 @@
 #include "DreamWidgetStatics.h"
 #include "DGameplayStatics.h"
 #include "DModuleBase.h"
-#include "DPlayerController.h"
+#include "DMViewportClient.h"
+#include "DMPlayerController.h"
 #include "DPlayerState.h"
-#include "DProjectSettings.h"
-#include "DreamGameInstance.h"
-#include "DreamGameMode.h"
+#include "DMProjectSettings.h"
 #include "GameMapsSettings.h"
 #include "PanelWidget.h"
 #include "SViewport.h"
@@ -15,7 +14,6 @@
 #include "GameFramework/GameStateBase.h"
 #include "Kismet/KismetTextLibrary.h"
 #include "UI/SDialog.h"
-#include "UI/SSubtitle.h"
 
 struct FPlayerStatisticsSort
 {
@@ -27,8 +25,6 @@ struct FPlayerStatisticsSort
 		return CastA && (!CastB || (CastA->GetTotalDamage() < CastB->GetTotalDamage()));
 	}
 };
-
-FTimerHandle UDreamWidgetStatics::DialogHandle;
 
 UWItemEquipment* UDreamWidgetStatics::MakeWEquipmentFromPW(UObject* WorldContextObject, const FPlayerWeapon& PW)
 {
@@ -119,60 +115,31 @@ FVector2D UDreamWidgetStatics::CalculationPopupPosition(UObject* WorldContextObj
 	return Result;
 }
 
-void UDreamWidgetStatics::PopupDialog(UObject* WorldContextObject, EDialogType DialogType, FText Content, float DisplayTime)
+void UDreamWidgetStatics::PopupDialog(EDialogType DialogType, FText Content, float DisplayTime)
 {
-	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
+	if (UDMViewportClient* ViewportClient = Cast<UDMViewportClient>(GEngine->GameViewport))
 	{
-		UGameViewportClient* GameViewport = World->GetGameViewport();
-
-		if (SDialog::SINGLETON->GetVisibility().IsVisible())
-		{
-			if (DialogHandle.IsValid())
-			{
-				World->GetTimerManager().ClearTimer(DialogHandle);
-			}
-			
-			GameViewport->RemoveViewportWidgetContent(SDialog::SINGLETON.ToSharedRef());
-		}
-
-		FVector2D ViewportSize;
-		GameViewport->GetViewportSize(ViewportSize);
-		
-		SDialog::SINGLETON->UpdateDialog(DialogType, Content);
-		SDialog::SINGLETON->SetRenderTransform(FTransform2D(FVector2D(-ViewportSize.X, 0)));
-
-		// +10 是因为UserWidget的ZOrder都加了10 不加得话就一定会被UMG覆盖
-		int32 ZOrder = EWidgetOrder::PlayerCtrlOuter + 10;
-		
-		GameViewport->AddViewportWidgetContent(SDialog::SINGLETON.ToSharedRef(), ZOrder);
-
-		SDialog::SINGLETON->PlayFadeInAnim(ViewportSize.X);
-		
-		if (DisplayTime > 0)
-		{
-			World->GetTimerManager().SetTimer(DialogHandle,
-				FTimerDelegate::CreateStatic(&UDreamWidgetStatics::DismissDialog, WorldContextObject), DisplayTime, false);
-		}
+		ViewportClient->PopupDialog(Content, DialogType, DisplayTime);
 	}
 }
 
-void UDreamWidgetStatics::DismissDialog(UObject* WorldContextObject)
+void UDreamWidgetStatics::DismissDialog()
 {
-	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
+	if (UDMViewportClient* ViewportClient = Cast<UDMViewportClient>(GEngine->GameViewport))
 	{
-		World->GetGameViewport()->RemoveViewportWidgetContent(SDialog::SINGLETON.ToSharedRef());
+		ViewportClient->DismissDialog();
 	}
 }
 
 const FPropsInfo& UDreamWidgetStatics::GetPropsInfoByItemGuid(int32 ItemGuid)
 {
-	const FItemDef& ItemDef = UDProjectSettings::GetProjectSettings()->GetItemDefinition(ItemGuid);
+	const FItemDef& ItemDef = GSProject->GetItemDefinition(ItemGuid);
 	return ItemDef.ItemBaseInfo;
 }
 
 UClass* UDreamWidgetStatics::GetItemClassByGuid(int32 ItemGuid)
 {
-	return UDProjectSettings::GetProjectSettings()->GetItemClassFromGuid(ItemGuid);
+	return GSProject->GetItemClassFromGuid(ItemGuid);
 }
 
 FModuleExtraData UDreamWidgetStatics::GetModuleExtraData(UClass* ModuleClass)
@@ -235,7 +202,7 @@ void UDreamWidgetStatics::AddGuideActorToLocalPlayer(AActor* GuideActor)
 {
 	if (GuideActor != nullptr)
 	{
-		if (ADPlayerController* Controller = Cast<ADPlayerController>(GEngine->GetFirstLocalPlayerController(GuideActor->GetWorld())))
+		if (ADMPlayerController* Controller = Cast<ADMPlayerController>(GEngine->GetFirstLocalPlayerController(GuideActor->GetWorld())))
 		{
 			Controller->AddGuideActor(GuideActor);
 		}
@@ -246,32 +213,40 @@ void UDreamWidgetStatics::RemoveGuideActorFromLocalPlayer(AActor* GuideActor)
 {
 	if (GuideActor != nullptr)
 	{
-		if (ADPlayerController* Controller = Cast<ADPlayerController>(GEngine->GetFirstLocalPlayerController(GuideActor->GetWorld())))
+		if (ADMPlayerController* Controller = Cast<ADMPlayerController>(GEngine->GetFirstLocalPlayerController(GuideActor->GetWorld())))
 		{
 			Controller->RemoveGuideActor(GuideActor);
 		}
 	}
 }
 
-void UDreamWidgetStatics::DisplaySubtitle(UObject* WorldContextObject, FText Text)
+void UDreamWidgetStatics::DisplaySubtitle(FText Text)
 {
-	if (UDreamGameInstance* Instance = GetGameInstance<UDreamGameInstance>(WorldContextObject))
+	if (UDMViewportClient* ViewportClient = Cast<UDMViewportClient>(GEngine->GameViewport))
 	{
-		Instance->GetSubtitleWidget()->DisplaySubtitle(Text);
+		ViewportClient->DisplaySubtitle(Text);
 	}
 }
 
-void UDreamWidgetStatics::HiddenSubtitle(UObject* WorldContextObject)
+void UDreamWidgetStatics::AddWidgetToViewport(UUserWidget* Widget, TEnumAsByte<EWidgetOrder::Type> ZOrder)
 {
-	if (UDreamGameInstance* Instance = GetGameInstance<UDreamGameInstance>(WorldContextObject))
+	if (Widget && !Widget->IsInViewport())
 	{
-		Instance->GetSubtitleWidget()->HiddenSubtitle();
+		Widget->AddToViewport(ZOrder.GetValue());
 	}
+}
+
+FText UDreamWidgetStatics::WeightToPercentageText(float Weight)
+{
+	FString Percentage;
+	Percentage.AppendInt(FMath::RoundFromZero(Weight * 100));
+	Percentage.AppendChar(TEXT('%'));
+	return FText::FromString(Percentage);
 }
 
 FText UDreamWidgetStatics::GetWeaponTypeName(EWeaponType WeaponType)
 {
-	return UDProjectSettings::GetProjectSettings()->GetWeaponTypeName(WeaponType);
+	return UDMProjectSettings::GetProjectSettings()->GetWeaponTypeName(WeaponType);
 }
 
 const FPropsInfo& UDreamWidgetStatics::GetPropsInfo(const FItemHandle& ItemHandle)
@@ -286,7 +261,7 @@ const FPropsInfo& UDreamWidgetStatics::GetPropsInfo(const FItemHandle& ItemHandl
 
 const FQualityInfo& UDreamWidgetStatics::GetQualityInfo(EPropsQuality Quality)
 {
-	return UDProjectSettings::GetProjectSettings()->GetQualityInfo(Quality);
+	return UDMProjectSettings::GetProjectSettings()->GetQualityInfo(Quality);
 }
 
 template <class Class>
@@ -297,14 +272,4 @@ Class* UDreamWidgetStatics::GetGameInstance(UObject* WorldContextObject)
 		return World->GetGameInstance<Class>();
 	}
 	return nullptr;
-}
-
-int32 FLevelInformation::GetGameModeMaxPlayers() const
-{
-	if (UClass* GameModeClass = LoadClass<ADreamGameMode>(nullptr, *UGameMapsSettings::GetGameModeForName(GameModeClassAlias)))
-	{
-		return GameModeClass->GetDefaultObject<ADreamGameMode>()->GetGameModeMaxPlayers();
-	}
-	
-	return ADreamGameMode::DEFAULT_MAX_PLAYERS;
 }

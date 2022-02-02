@@ -10,6 +10,8 @@
 #include "DreamType.h"
 #include "DCharacterBase.generated.h"
 
+class UDMAttributeSet;
+class UIconComponent;
 
 USTRUCT()
 struct FDamageTargetInfo
@@ -47,16 +49,16 @@ public:
     ADCharacterBase();
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-    class UAbilitySystemComponent* AbilitySystem;
+    UAbilitySystemComponent* AbilitySystem;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
-    class UIconComponent* IconComponent;
+    UIconComponent* IconComponent;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = CharacterBase)
     FGenericTeamId TeamID;
 
     UPROPERTY(BlueprintReadOnly, Category = CharacterBase)
-    class UDreamAttributeSet* AttributeSet;
+    UDMAttributeSet* CharacterAttributes;
 
     UPROPERTY(EditAnywhere, Category = CharacterBase)
     TMap<FName, float> WeakPoint;
@@ -115,6 +117,8 @@ protected:
     virtual void SetGenericTeamId(const FGenericTeamId& NewTeamID) override;
 
     virtual UIconComponent* GetIconComponent() const override;
+
+    virtual void PostInitializeComponents() override;
 
     virtual float GetWeaknessIncreaseDamagePercentage(const FName& BoneName) override;
 

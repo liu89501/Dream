@@ -174,6 +174,8 @@ public:
 
 	virtual void GetPlayerInfo(const int32& Condition) = 0;
 	
+	virtual void ServerGetPlayerInfo(const FQueryPlayerParam& Param) = 0;
+	
 	virtual void GetTalents(const ETalentCategory& TalentCategory) = 0;
 
 	virtual void GetTasks(const FSearchTaskParam& Param) = 0;

@@ -27,8 +27,8 @@ public:
 	/** Constructs this widget with InArgs */
 	void Construct(const FArguments& InArgs);
 
-	void EnableInput() const;
-	void DisableInput() const;
+	void EnableInput();
+	void DisableInput();
 
 	void SetOnCompleted(FOnInteractiveCompleted Delegate);
 	void SetInteractiveTime(float InInteractiveTime);
@@ -72,5 +72,7 @@ private:
 	FOnInteractiveCompleted OnCompleted;
 
 	FInteractiveStyle InteractiveStyle;
+
+	bool bIsBinding;
 
 };

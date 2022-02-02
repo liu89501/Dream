@@ -7,7 +7,7 @@
 #include "IconComponent.generated.h"
 
 
-UCLASS( ClassGroup=(Custom) )
+UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
 class DREAM_API UIconComponent : public UActorComponent
 {
 	GENERATED_BODY()

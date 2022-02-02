@@ -6,10 +6,9 @@
 #include "AIController.h"
 #include "DGameplayStatics.h"
 #include "UnrealNetwork.h"
-#include "BehaviorTree/BlackboardComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Perception/AIPerceptionComponent.h"
-#include "Perception/AISense_Sight.h"
+#include "Sound/SoundCue.h"
 
 void ADEnemyShooter::NetMulticastOpenFire_Implementation(const FVector_NetQuantize& TargetLocation)
 {
@@ -66,11 +65,6 @@ void ADEnemyShooter::HealthChanged(const FOnAttributeChangeData& AttrData)
 		WeaponMesh->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
 		WeaponMesh->SetSimulatePhysics(true);
 	}
-}
-
-void ADEnemyShooter::PostInitializeComponents()
-{
-	Super::PostInitializeComponents();
 }
 
 void ADEnemyShooter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const

@@ -165,7 +165,7 @@ struct FEquipmentAttributes
 
 	FEquipmentAttributes& operator=(FEquipmentAttributes&& Other) noexcept;
 
-	FEquipmentAttributes& CombineSkipPerks(const FEquipmentAttributes& Other);
+	FEquipmentAttributes& MergeAndSkipPerks(const FEquipmentAttributes& Other);
 
 	/**
 	* 攻击力

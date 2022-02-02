@@ -149,6 +149,9 @@ public:
 	UFUNCTION(BlueprintPure, Category = DreamStatics)
 	static void CalculateOrientation(const FVector& Velocity, const FRotator& BaseRotation, float& Angle, int32& Orientation);
 
+	/** Copy From UAnimInstance */
+	static float CalculateDir(const FVector& Velocity, const FRotator& BaseRotation);
+
 	
 	static void SpawnWeaponTrailParticles(UObject* WorldContextObject, const struct FWeaponTrailVFX& TrailVfx,
 	                                      const FVector& StartLocation, const FVector& EndLocation);
@@ -173,6 +176,9 @@ public:
 	/* DATE 转换为 文本 */
 	UFUNCTION(BlueprintPure, Category = "DreamStatics|Misc")
     static FText ToTimeText(int32 TotalSeconds);
+    
+	UFUNCTION(BlueprintPure, Category = "DreamStatics|Misc")
+    static FString GetLocalPlayerName();
 
 	/* 将Target的所有子组件复制到Source中 */
 	UFUNCTION(BlueprintCallable, Meta = (WorldContext="WorldContextObject"), Category = "DreamStatics|Misc")
@@ -183,5 +189,8 @@ public:
 	
 	UFUNCTION(BlueprintPure, Category = "DreamStatics|Settings")
 	static const FItemDef& GetItemDef(int32 ItemGuid);
+	
+	UFUNCTION(BlueprintPure, Category = "DreamStatics|Settings")
+	static ULevelListAsset* GetLevelListAsset();
 	
 };

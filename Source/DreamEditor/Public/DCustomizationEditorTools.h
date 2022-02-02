@@ -58,4 +58,5 @@ public:
 
 	void OnExecuteAction() const;
 	bool OnCanExecuteAction() const;
+	void OnExecuteAction2() const;
 };

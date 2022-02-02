@@ -3,14 +3,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DPropsType.h"
-#include "DEnemyBase.h"
-#include "DreamType.h"
-#include "EnumAsByte.h"
 #include "Engine/GameInstance.h"
 #include "DreamGameInstance.generated.h"
 
-class SSubtitle;
 
 /**
  *
@@ -23,10 +18,6 @@ class DREAM_API UDreamGameInstance : public UGameInstance
 public:
 
 	UDreamGameInstance();
-	
-public:
-	
-	SSubtitle* GetSubtitleWidget() const;
 
 protected:
 
@@ -35,9 +26,5 @@ protected:
 	virtual void OnStart() override;
 
 	virtual void Shutdown() override;
-
-private:
-
-	TSharedPtr<SSubtitle> Subtitle;
 
 };

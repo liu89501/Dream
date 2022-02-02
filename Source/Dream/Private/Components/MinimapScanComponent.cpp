@@ -48,6 +48,34 @@ void UMinimapScanComponent::BeginPlay()
 	IgnoredTraceOwner.Add(GetOwner());
 }
 
+UIconComponent* UMinimapScanComponent::GetIconComponent(AActor* Actor) const
+{
+	if (Actor && !Actor->IsPendingKillPending())
+	{
+		if (IIconInterface* IconInterface = Cast<IIconInterface>(Actor))
+		{
+			return IconInterface->GetIconComponent();
+		}
+
+		if (Actor->GetClass()->ImplementsInterface(IIconInterface::UClassType::StaticClass()))
+		{
+			return IIconInterface::Execute_BP_GetIconComponent(Actor);
+		}
+	}
+
+	return nullptr;
+}
+
+bool UMinimapScanComponent::IsHaveValidIconComponent(AActor* Actor) const
+{
+	if (UIconComponent* IconComponent = GetIconComponent(Actor))
+	{
+		return IconComponent->IsActive();
+	}
+
+	return false;
+}
+
 void UMinimapScanComponent::AddInfiniteActors(const TArray<AActor*>& TargetActors)
 {
 	for (AActor* Actor : TargetActors)
@@ -127,14 +155,9 @@ void UMinimapScanComponent::TickComponent(float DeltaTime, ELevelTick TickType, 
 		{
 			ActorWithinRadius.Add(Actor);
 		}
-		else if (IIconInterface* IconInterface = Cast<IIconInterface>(Actor))
+		else if (IsHaveValidIconComponent(Actor))
 		{
-			UIconComponent* IconComponent = IconInterface->GetIconComponent();
-
-			if (IconComponent && IconComponent->IsActive())
-			{
-				ActorWithinRadius.Add(Actor);
-			}
+			ActorWithinRadius.Add(Actor);
 		}
 	}
 }
@@ -184,20 +207,8 @@ TSharedPtr<FMinimapDataBase> FMinimapDataIterator::Get() const
 		return Result;
 	}
 
-	UIconComponent* IconComponent = nullptr;
-	
-	if (IIconInterface* IconInterface = Cast<IIconInterface>(ScannedActor))
+	if (ScannedActor->IsA<ADCharacterBase>())
 	{
-		IconComponent = IconInterface->GetIconComponent();
-	}
-
-	if (IconComponent == nullptr || !IconComponent->IsActive())
-	{
-		if (!ScannedActor->IsA<ADCharacterBase>())
-		{
-			return Result;
-		}
-
 		if (FGenericTeamId::GetAttitude(Character, ScannedActor) == ETeamAttitude::Hostile)
 		{
 			FRotator Rot;
@@ -210,14 +221,17 @@ TSharedPtr<FMinimapDataBase> FMinimapDataIterator::Get() const
 	}
 	else
 	{
-		FRotator Rot;
-		float Distance;
-		CalcDistanceAndDirection(Character, ScannedActor, ScanComponent->RadarScanRadius, Rot, Distance);
+		if (UIconComponent* IconComponent = ScanComponent->GetIconComponent(ScannedActor))
+		{
+			FRotator Rot;
+			float Distance;
+			CalcDistanceAndDirection(Character, ScannedActor, ScanComponent->RadarScanRadius, Rot, Distance);
 
-		FVector2D Position = FVector2D(Rot.Vector().GetSafeNormal());
-		float Direction = IconComponent->bFixedDirection ? 0.f : Rot.Yaw;
+			FVector2D Position = FVector2D(Rot.Vector().GetSafeNormal());
+			float Direction = IconComponent->bFixedDirection ? 0.f : Rot.Yaw;
 	
-		Result = MakeShared<FMiniMapIcon>(Position, Direction, Distance, &IconComponent->Icon);
+			Result = MakeShared<FMiniMapIcon>(Position, Direction, Distance, &IconComponent->Icon);
+		}
 	}
 
 	return Result;

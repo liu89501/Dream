@@ -59,8 +59,6 @@ protected:
 
 	virtual void HealthChanged(const FOnAttributeChangeData& AttrData) override;
 
-	virtual void PostInitializeComponents() override;
-
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
 	UFUNCTION(NetMulticast, reliable)

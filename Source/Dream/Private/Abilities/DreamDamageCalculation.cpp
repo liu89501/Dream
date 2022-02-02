@@ -1,28 +1,34 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
-#include "Abilities/DreamDamageCalculation.h"
+#include "DreamDamageCalculation.h"
 #include "DCharacterBase.h"
 #include "DGameplayTags.h"
+#include "DreamGameplayType.h"
 #include "DGE_DamageHealthSteal.h"
+#include "DMAbilitiesStatics.h"
 #include "GenericTeamAgentInterface.h"
-#include "Abilities/DreamAttributeSet.h"
+#include "DMAttributeSet.h"
 #include "Kismet/KismetMathLibrary.h"
 
 UDreamDamageCalculation::UDreamDamageCalculation()
 {
-    RelevantAttributesToCapture.Add(DreamAttrStatics().DefensePowerDef);
-    RelevantAttributesToCapture.Add(DreamAttrStatics().AttackPowerDef);
-    RelevantAttributesToCapture.Add(DreamAttrStatics().CriticalRateDef);
-    RelevantAttributesToCapture.Add(DreamAttrStatics().CriticalDamageDef);
-    RelevantAttributesToCapture.Add(DreamAttrStatics().HealthStealDef);
-    RelevantAttributesToCapture.Add(DreamAttrStatics().WeaponDamageAssaultRifleDef);
-    RelevantAttributesToCapture.Add(DreamAttrStatics().WeaponDamageGrenadeLaunchDef);
-    RelevantAttributesToCapture.Add(DreamAttrStatics().WeaponDamageShotgunDef);
-    RelevantAttributesToCapture.Add(DreamAttrStatics().WeaponDamageSniperRifleDef);
-    RelevantAttributesToCapture.Add(DreamAttrStatics().WeaponDamagePrecisionRifleDef);
+    RelevantAttributesToCapture.Add(DMAttrStatics().DefensePowerDef);
+    RelevantAttributesToCapture.Add(DMAttrStatics().AttackPowerDef);
+    RelevantAttributesToCapture.Add(DMAttrStatics().CriticalRateDef);
+    RelevantAttributesToCapture.Add(DMAttrStatics().CriticalDamageDef);
+    RelevantAttributesToCapture.Add(DMAttrStatics().HealthStealDef);
+    RelevantAttributesToCapture.Add(DMAttrStatics().WeaponDamageAssaultRifleDef);
+    RelevantAttributesToCapture.Add(DMAttrStatics().WeaponDamageGrenadeLaunchDef);
+    RelevantAttributesToCapture.Add(DMAttrStatics().WeaponDamageShotgunDef);
+    RelevantAttributesToCapture.Add(DMAttrStatics().WeaponDamageSniperRifleDef);
+    RelevantAttributesToCapture.Add(DMAttrStatics().WeaponDamagePrecisionRifleDef);
 
+#if WITH_EDITORONLY_DATA
+
+    InvalidScopedModifierAttributes.Add(DMAttrStatics().DamageDef);
     ValidTransientAggregatorIdentifiers.AddTag(CustomizeTags().Exec_Temporary_PercentageDmgInc);
+
+#endif
 }
 
 void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustomExecutionParameters& ExecutionParams,
@@ -36,10 +42,15 @@ void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustom
         return;
     }
 
-    AActor* SourceActor = SourceAbilitySystem ? SourceAbilitySystem->GetAvatarActor() : nullptr;
-    AActor* TargetActor = TargetAbilitySystem ? TargetAbilitySystem->GetAvatarActor() : nullptr;
+    ADCharacterBase* SourceCharacter = SourceAbilitySystem ? Cast<ADCharacterBase>(SourceAbilitySystem->GetAvatarActor()) : nullptr;
+    ADCharacterBase* TargetCharacter = TargetAbilitySystem ? Cast<ADCharacterBase>(TargetAbilitySystem->GetAvatarActor()) : nullptr;
 
-    if (FGenericTeamId::GetAttitude(SourceActor, TargetActor) != ETeamAttitude::Hostile)
+    if (SourceCharacter == nullptr || TargetCharacter == nullptr)
+    {
+        return;
+    }
+
+    if (FGenericTeamId::GetAttitude(SourceCharacter, TargetCharacter) != ETeamAttitude::Hostile)
     {
         return;
     }
@@ -60,10 +71,10 @@ void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustom
     // --------------------------------------
 
     float DefensePower = 0.f;
-    ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DreamAttrStatics().DefensePowerDef, EvaluationParameters, DefensePower);
+    ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DMAttrStatics().DefensePowerDef, EvaluationParameters, DefensePower);
 
     float AttackPower = 0.f;
-    ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DreamAttrStatics().AttackPowerDef, EvaluationParameters, AttackPower);
+    ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DMAttrStatics().AttackPowerDef, EvaluationParameters, AttackPower);
 
     float PercentageDmgInc = 0.f;
     ExecutionParams.AttemptCalculateTransientAggregatorMagnitude(CustomizeTags().Exec_Temporary_PercentageDmgInc, EvaluationParameters, PercentageDmgInc);
@@ -87,12 +98,12 @@ void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustom
     {
         // 暴击相关计算
         float CriticalRate = 0.f;
-        ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DreamAttrStatics().CriticalRateDef, EvaluationParameters, CriticalRate);
+        ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DMAttrStatics().CriticalRateDef, EvaluationParameters, CriticalRate);
 
         if (UKismetMathLibrary::RandomBoolWithWeight(CriticalRate))
         {
             DreamEffectContext->SetDamageCritical(true);
-            ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DreamAttrStatics().CriticalDamageDef, EvaluationParameters, CriticalDamageAddition);
+            ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DMAttrStatics().CriticalDamageDef, EvaluationParameters, CriticalDamageAddition);
         }
         
         // 距离伤害衰减
@@ -112,16 +123,17 @@ void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustom
         //DamageDone *= DreamEffectContext->GetHitPoints().Num();
     }
 
-    int32 CharacterLevel = 1;
-    if (ADCharacterBase* TargetCharacter = Cast<ADCharacterBase>(TargetActor))
-    {
-        CharacterLevel = TargetCharacter->GetCharacterLevel();
-    }
+    // 等级差的伤害减免
+    int32 LevelDiff = FMath::Max(0, TargetCharacter->GetCharacterLevel() - SourceCharacter->GetCharacterLevel());
+    float LevelDiffDamageResist = UDMAbilitiesStatics::GetDamageResistFromLevelDiff(LevelDiff);
+
+    // 防御力的伤害减免
+    float DefenseDamageResist = UDMAbilitiesStatics::GetDamageResist(DefensePower);
 
     float DamageDone = AttackPower
         * (1 + PercentageDmgInc + IncreaseDamagePercentage + CriticalDamageAddition)
         * (1 + DamageTypeIncPercentage)
-        * (1 - DamageFalloffPercentage - DefensePower / (DefensePower + 1500 - 20 * CharacterLevel));
+        * (1 - DamageFalloffPercentage - DefenseDamageResist - LevelDiffDamageResist);
     
     DamageDone = FMath::Max(DamageDone, 1.f);
 
@@ -130,7 +142,7 @@ void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustom
 
     // 生命偷取计算
     float HealthStealPercentage = 0.f;
-    ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DreamAttrStatics().HealthStealDef, EvaluationParameters, HealthStealPercentage);
+    ExecutionParams.AttemptCalculateCapturedAttributeMagnitude(DMAttrStatics().HealthStealDef, EvaluationParameters, HealthStealPercentage);
     
     // 对源应用回血效果
     float TreatmentAmount = HealthStealPercentage * DamageDone;
@@ -141,7 +153,7 @@ void UDreamDamageCalculation::Execute_Implementation(const FGameplayEffectCustom
         SourceAbilitySystem->ApplyGameplayEffectSpecToSelf(TreatmentEffectSpec);
     }
 
-    OutExecutionOutput.AddOutputModifier(FGameplayModifierEvaluatedData(DreamAttrStatics().DamageProperty, EGameplayModOp::Additive, DamageDone));
+    OutExecutionOutput.AddOutputModifier(FGameplayModifierEvaluatedData(DMAttrStatics().DamageProperty, EGameplayModOp::Additive, DamageDone));
 }
 
 bool UDreamDamageCalculation::GetAttributeCaptureFromDamageType(EDDamageType DamageType, FGameplayEffectAttributeCaptureDefinition& OutDef) const
@@ -152,27 +164,27 @@ bool UDreamDamageCalculation::GetAttributeCaptureFromDamageType(EDDamageType Dam
     {
     case EDDamageType::Weapon_Shotgun:
 
-        OutDef = DreamAttrStatics().WeaponDamageShotgunDef;
+        OutDef = DMAttrStatics().WeaponDamageShotgunDef;
         break;
 
     case EDDamageType::Weapon_AssaultRifle:
             
-        OutDef = DreamAttrStatics().WeaponDamageAssaultRifleDef;
+        OutDef = DMAttrStatics().WeaponDamageAssaultRifleDef;
         break;
 
     case EDDamageType::Weapon_GrenadeLaunch:
 
-        OutDef = DreamAttrStatics().WeaponDamageGrenadeLaunchDef;
+        OutDef = DMAttrStatics().WeaponDamageGrenadeLaunchDef;
         break;
         
     case EDDamageType::Weapon_PrecisionRifle:
 
-        OutDef = DreamAttrStatics().WeaponDamagePrecisionRifleDef;
+        OutDef = DMAttrStatics().WeaponDamagePrecisionRifleDef;
         break;
         
     case EDDamageType::Weapon_SniperRifle:
 
-        OutDef = DreamAttrStatics().WeaponDamageSniperRifleDef;
+        OutDef = DMAttrStatics().WeaponDamageSniperRifleDef;
         break;
         
     default:

@@ -7,7 +7,7 @@
 #include "PSceneCapture.generated.h"
 
 
-class ADItemPreview;
+class ADMPreviewActor;
 class FPreviewWorld;
 class ADPreviewScene;
 
@@ -70,7 +70,7 @@ class UPSceneCapture : public UUserWidget
 public:
 
 	UPROPERTY(EditAnywhere, Category = ScenePreview)
-	TSubclassOf<ADItemPreview> PreviewActorClass;
+	TSubclassOf<ADMPreviewActor> PreviewActorClass;
 
 	UPROPERTY(EditAnywhere, Category = ScenePreview)
 	FPostProcessSettings PostProcessSettings;
@@ -102,7 +102,7 @@ public:
 public:
 
 	UFUNCTION(BlueprintCallable, Category = ScenePreview)
-	ADItemPreview* GetPreviewActor() const;
+	ADMPreviewActor* GetPreviewActor() const;
 
 	UFUNCTION(BlueprintCallable, Category = ScenePreview)
 	ADPreviewScene* GetPreviewSceneActor() const;
@@ -146,7 +146,7 @@ private:
 	class UCanvasRenderTarget2D* TextureTarget;
 
 	UPROPERTY()
-	ADItemPreview* PreviewActor;
+	ADMPreviewActor* PreviewActor;
 
 	FSceneViewStateReference ViewState;
 

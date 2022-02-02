@@ -100,11 +100,11 @@ public:
 	UFUNCTION(BlueprintPure, Category = "DreamWidget", meta=( WorldContext="WorldContextObject" ))
 	static FVector2D CalculationPopupPosition(UObject* WorldContextObject, const FVector2D& WidgetSize, const FVector2D& PointerSize);
 
-	UFUNCTION(BlueprintCallable, Category = "DreamWidget", meta=( WorldContext="WorldContextObject" ))
-	static void PopupDialog(UObject* WorldContextObject, EDialogType DialogType, FText Content, float DisplayTime = 2.f);
+	UFUNCTION(BlueprintCallable, Category = "DreamWidget")
+	static void PopupDialog(EDialogType DialogType, FText Content, float DisplayTime = 2.f);
 
-	UFUNCTION(BlueprintCallable, Category = "DreamWidget", meta=( WorldContext="WorldContextObject" ))
-	static void DismissDialog(UObject* WorldContextObject);
+	UFUNCTION(BlueprintCallable, Category = "DreamWidget")
+	static void DismissDialog();
     	
     UFUNCTION(BlueprintPure, Category = "DreamWidget")
     static const FPropsInfo& GetPropsInfoByItemGuid(int32 ItemGuid);
@@ -127,11 +127,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "DreamWidget")
 	static void RemoveGuideActorFromLocalPlayer(AActor* GuideActor);
 
-	UFUNCTION(BlueprintCallable, meta=( WorldContext="WorldContextObject" ), Category = "DreamWidget")
-	static void DisplaySubtitle(UObject* WorldContextObject, FText Text);
-	
-	UFUNCTION(BlueprintCallable, meta=( WorldContext="WorldContextObject" ), Category = "DreamWidget")
-	static void HiddenSubtitle(UObject* WorldContextObject);
+	UFUNCTION(BlueprintCallable, Category = "DreamWidget")
+	static void DisplaySubtitle(FText Text);
+
+	UFUNCTION(BlueprintCallable, Category = "DreamWidget")
+	static void AddWidgetToViewport(UUserWidget* Widget, TEnumAsByte<EWidgetOrder::Type> ZOrder);
+
+	/** 将 Weight (0 ~ 1) 转换成百分比的文本 */
+	UFUNCTION(BlueprintPure, meta=(CompactNodeTitle = "Percentage", BlueprintAutocast), Category = "DreamWidget")
+	static FText WeightToPercentageText(float Weight);
 
 
 	UFUNCTION(BlueprintPure, Category = "DreamWidget|Settings")
@@ -151,9 +155,5 @@ private:
 	
 	template<class Class>
 	static Class* GetGameInstance(UObject* WorldContextObject);
-
-private:
-
-	static FTimerHandle DialogHandle;
 };
 

@@ -39,6 +39,7 @@ public class Dream : ModuleRules
             "JsonUtilities",
             "Json",
             "HTTP",
+            "NetCore",
             "Slate",
             "SlateCore",
             "PhysicsCore",

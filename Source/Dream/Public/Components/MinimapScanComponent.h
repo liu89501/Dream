@@ -85,11 +85,6 @@ public:
 	// Sets default values for this component's properties
 	UMinimapScanComponent();
 
-protected:
-
-	// Called when the game starts
-	virtual void BeginPlay() override;
-
 public:
 
 	void AddInfiniteActors(const TArray<AActor*>& TargetActors);
@@ -103,8 +98,16 @@ public:
 	FMinimapDataIterator GetScannedItemsIterator();
 
 	// Called every frame
-	virtual void TickComponent(float DeltaTime, ELevelTick TickType,
-	                           FActorComponentTickFunction* ThisTickFunction) override;
+	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+	
+protected:
+
+	// Called when the game starts
+	virtual void BeginPlay() override;
+
+	class UIconComponent* GetIconComponent(AActor* Actor) const;
+
+	bool IsHaveValidIconComponent(AActor* Actor) const;
 
 protected:
 

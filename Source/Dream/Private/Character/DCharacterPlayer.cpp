@@ -13,25 +13,28 @@
 #include "GameFramework/PlayerController.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Components/AudioComponent.h"
-#include "DreamGameMode.h"
 #include "Engine.h"
 #include "DGameplayStatics.h"
 #include "DEnemyBase.h"
 #include "DGameplayEffectUIData.h"
 #include "DGameplayTags.h"
 #include "DGameUserSettings.h"
+#include "DMAbilitiesStatics.h"
+#include "DMAttributeSet.h"
+#include "DMMantleAsset.h"
 #include "DModuleBase.h"
 #include "DreamGameplayAbility.h"
-#include "DreamAttributeSet.h"
 #include "DreamGameplayType.h"
 #include "Components/DamageWidgetComponent.h"
 #include "GameplayEffectTypes.h"
 #include "PlayerDataInterfaceStatic.h"
-#include "DPlayerController.h"
-#include "DProjectSettings.h"
+#include "DMPlayerController.h"
+#include "DmProjectSettings.h"
 #include "DreamWidgetStatics.h"
 #include "MinimapScanComponent.h"
 #include "UI/SPlayerHUD.h"
+
+#define LOCTEXT_NAMESPACE "PlayerCharacter"
 
 #define MAX_MOUSE_SENSITIVITY 135
 
@@ -43,15 +46,101 @@
         AbilitySystem->HandleGameplayEvent(CUSTOMIZE_TAG(Tag), &Payload); \
     }
 
-UDProjectSettings* ADCharacterPlayer::CDOProjectSettings = nullptr;
+FRootMotionSource_Mantling::FRootMotionSource_Mantling()
+    : StartingPosition(0.f)
+    , PositionCorrectionCurve(nullptr)
+    , PathOffsetCurve(nullptr)
+{
+}
+
+FRootMotionSource* FRootMotionSource_Mantling::Clone() const
+{
+    FRootMotionSource_Mantling* CopyPtr = new FRootMotionSource_Mantling(*this);
+    return CopyPtr;
+}
+
+bool FRootMotionSource_Mantling::Matches(const FRootMotionSource* Other) const
+{
+    if (!FRootMotionSource::Matches(Other))
+    {
+        return false;
+    }
+
+    const FRootMotionSource_Mantling* Source_Mantling = static_cast<const FRootMotionSource_Mantling*>(Other);
+
+    return FMath::IsNearlyEqual(StartingPosition, Source_Mantling->StartingPosition) &&
+            PositionCorrectionCurve == Source_Mantling->PositionCorrectionCurve &&
+            FVector::PointsAreNear(MantlingTarget, Source_Mantling->MantlingTarget, 0.1f) &&
+            FVector::PointsAreNear(MantlingActualStartOffset, Source_Mantling->MantlingActualStartOffset, 0.1f) &&
+            FVector::PointsAreNear(MantlingAnimatedStartOffset, Source_Mantling->MantlingAnimatedStartOffset, 0.1f);
+}
+
+void FRootMotionSource_Mantling::PrepareRootMotion(float SimulationTime, float MovementTickTime,
+    const ACharacter& Character, const UCharacterMovementComponent& MoveComponent)
+{
+    RootMotionParams.Clear();
+
+    if (Duration > SMALL_NUMBER && MovementTickTime > SMALL_NUMBER)
+    {
+    }
+
+    SetTime(GetTime() + SimulationTime);
+}
+
+bool FRootMotionSource_Mantling::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
+{
+    if (!FRootMotionSource::NetSerialize(Ar, Map, bOutSuccess))
+    {
+        return false;
+    }
+
+    if (Ar.IsSaving())
+    {
+        WriteFixedCompressedFloat<255, 16>(StartingPosition, Ar);
+    }
+    else
+    {
+        ReadFixedCompressedFloat<255, 16>(StartingPosition, Ar);
+    }
+    
+    Ar << PositionCorrectionCurve;
+    Ar << PathOffsetCurve;
+    Ar << MantlingTarget;
+    Ar << FaceRotation;
+    Ar << MantlingActualStartOffset;
+    Ar << MantlingAnimatedStartOffset;
+
+    bOutSuccess = true;
+    return true;
+}
+
+UScriptStruct* FRootMotionSource_Mantling::GetScriptStruct() const
+{
+    return FRootMotionSource_Mantling::StaticStruct();
+}
+
+FString FRootMotionSource_Mantling::ToSimpleString() const
+{
+    return FString::Printf(TEXT("[ID:%u]FRootMotionSource_Mantling %s"), LocalID, *InstanceName.GetPlainNameString());
+}
+
+void FRootMotionSource_Mantling::AddReferencedObjects(FReferenceCollector& Collector)
+{
+    Super::AddReferencedObjects(Collector);
+    Collector.AddReferencedObject(PositionCorrectionCurve);
+}
 
 // Sets default values
 ADCharacterPlayer::ADCharacterPlayer()
     : SprintSpeed(1000.f)
-    , AimMoveSpeed(200.f)
-    , NormalSpeed(600.f)
     , CombatStatusCount(0)
+    , DefaultGait(EMovementGait::Running)
+    , MovementState(EMovementState::Grounded)
+    , OverlayState(EOverlayState::Rifle)
     , ActiveWeaponIndex(0)
+    , HealthUpdateFrequency(0.1f)
+    , MantleLimit(0.1f)
+    , ToggleOverlayLimit(0.1f)
 {
 
     BaseTurnRate = 45.f;
@@ -61,7 +150,7 @@ ADCharacterPlayer::ADCharacterPlayer()
     MaxRotateLimit = 60.f;
     
     PrimaryActorTick.bCanEverTick = true;
-    PrimaryActorTick.bStartWithTickEnabled = false;
+    //PrimaryActorTick.bStartWithTickEnabled = false;
 
     AudioComponent = CreateDefaultSubobject<UAudioComponent>(TEXT("AudioComponent"));
     AudioComponent->SetupAttachment(RootComponent);
@@ -91,6 +180,7 @@ ADCharacterPlayer::ADCharacterPlayer()
     GetMesh()->SetCollisionResponseToChannel(Collision_ObjectType_Projectile, ECollisionResponse::ECR_Block);
 
     GetCapsuleComponent()->SetCollisionResponseToChannel(Collision_ObjectType_Projectile, ECollisionResponse::ECR_Ignore);
+    GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
 
     GetCharacterMovement()->bOrientRotationToMovement = false;
 
@@ -99,91 +189,253 @@ ADCharacterPlayer::ADCharacterPlayer()
     WeaponInventory.SetNumZeroed(2);
     EquippedModules.SetNumZeroed(static_cast<uint8>(EModuleCategory::Max));
     
-    CDOProjectSettings = UDProjectSettings::GetProjectSettings();
+    CharacterAttributes = CreateDefaultSubobject<UDMAttributeSet>(TEXT("AttributeSet"));
 }
 
 void ADCharacterPlayer::PossessedBy(AController* InController)
 {
-    // 网络模式下  本地客户端不执行此函数  只有服务器会执行此函数
+    // [Server]
     Super::PossessedBy(InController);
+
+    InitializePlayerGears();
+
+    //UE_LOG(LogDream, Error, TEXT("Role: %s, PossessedBy"), *UEnum::GetValueAsString(GetLocalRole()));
+}
+
+void ADCharacterPlayer::PostInitializeComponents()
+{
+    Super::PostInitializeComponents();
+
+    GetCharacterMovement()->MaxWalkSpeed = RunSpeed;
+    Gait = DefaultGait;
+
+    MantlingTimeline.SetTimelineLengthMode(ETimelineLengthMode::TL_TimelineLength);
+
+    FOnTimelineFloatStatic TimelineTick;
+    TimelineTick.BindUObject(this, &ADCharacterPlayer::MantlingUpdate);
+    MantlingTimeline.AddInterpFloat(GSProject->GetMantlePositionCurve(), TimelineTick);
+
+    FOnTimelineEventStatic OnFinished;
+    OnFinished.BindUObject(this, &ADCharacterPlayer::OnMantleFinished);
+    MantlingTimeline.SetTimelineFinishedFunc(OnFinished);
+
+    // 这里无法判断isLocalController 可能是此时本地的Role还没有设置好
+}
+
+void ADCharacterPlayer::PreReplication(IRepChangedPropertyTracker& ChangedPropertyTracker)
+{
+    Super::PreReplication(ChangedPropertyTracker);
+
+    if (GetLocalRole() == ROLE_Authority && Controller)
+    {
+        ControllerRotation = GetControlRotation().Vector();
+    }
 }
 
 void ADCharacterPlayer::BeginPlay()
 {
-    NormalSpeed = GetCharacterMovement()->MaxWalkSpeed;
+    Super::BeginPlay();
 
-    if (IsLocallyControlled())
+    GetMesh()->AddTickPrerequisiteActor(this);
+
+    FRotator ActorRotation = GetActorRotation();
+    TargetRotation = ActorRotation;
+    LastVelocityRotation = ActorRotation;
+
+    // [Local]
+    if (IsLocalCharacter())
     {
-        if (APlayerController* PC = GetPlayerController())
-        {
-            PC->SetInputMode(FInputModeGameOnly());
-        }
+        InitializePlayerHUD();
         
         DefaultCameraRotation = TPCamera->GetRelativeRotation();
         DefaultArmSocketOffset = TPCameraArm->SocketOffset;
 
-        PlayerHUD = SNew(SPlayerHUD)
-                .InOwnerPlayer(this)
-                .MinimapDataIterator_UObject(this, &ADCharacterPlayer::GetMinimapDataIterator);
-            
-        GEngine->GameViewport->AddViewportWidgetContent(PlayerHUD.ToSharedRef(), EWidgetOrder::Player);
-            
         AbilitySystem->OnActiveGameplayEffectAddedDelegateToSelf.AddUObject(this, &ADCharacterPlayer::OnActiveGameplayEffectAdded);
         AbilitySystem->OnAnyGameplayEffectRemovedDelegate().AddUObject(this, &ADCharacterPlayer::OnActiveGameplayEffectRemoved);
 
-        FPlayerDataInterface* PDS = FPDIStatic::Get();
-        Handle_PlayerInfo = PDS->AddOnGetPlayerInfo(FOnGetPlayerInfo::FDelegate::CreateUObject(this, &ADCharacterPlayer::OnInitPlayer));
-        Handle_Properties = PDS->GetPlayerDataDelegate().OnPropertiesChange.AddUObject(this, &ADCharacterPlayer::OnPlayerPropertiesChanged);
-        
-        PDS->GetPlayerInfo(EQueryCondition::Weapon | EQueryCondition::Weapon_Equipped |
-            EQueryCondition::Module | EQueryCondition::Module_Equipped | EQueryCondition::Skin);
+        Handle_Properties = FPDIStatic::Get()->GetPlayerDataDelegate().OnPropertiesChange.AddUObject(this, &ADCharacterPlayer::OnPlayerPropertiesChanged);
     }
-
-    Super::BeginPlay();
-
-    // 服务器和本地角色才需要tick
-    SetActorTickEnabled(GetLocalRole() == ROLE_Authority || IsLocallyControlled());
 
     AbilitySystem->InitAbilityActorInfo(this, this);
 }
 
-void ADCharacterPlayer::Tick(float DeltaSeconds)
+void ADCharacterPlayer::InitializePlayerHUD()
 {
-    Super::Tick(DeltaSeconds);
+    PlayerHUD = SNew(SPlayerHUD)
+                .InOwnerPlayer(this)
+                .MinimapDataIterator_UObject(this, &ADCharacterPlayer::GetMinimapDataIterator);
+            
+    GEngine->GameViewport->AddViewportWidgetContent(PlayerHUD.ToSharedRef(), EWidgetOrder::Player);
 
-    if (!GetVelocity().IsNearlyZero() || bCombatStatus)
-    {
-        SetActorRotation(FMath::RInterpTo(GetActorRotation(), FRotator(0, GetControlRotation().Yaw, 0), DeltaSeconds, 18.f));
-    }
-
-    if (IsLocallyControlled())
-    {
-        ReplicationServerMoveDirection();
-    }
+    UpdateWeaponHUD();
 }
 
 void ADCharacterPlayer::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     Super::EndPlay(EndPlayReason);
 
-    if (IsLocallyControlled())
+    if (Handle_Properties.IsValid())
     {
         FPDIStatic::Get()->GetPlayerDataDelegate().OnPropertiesChange.Remove(Handle_Properties);
     }
 }
 
-void ADCharacterPlayer::PostInitializeComponents()
+void ADCharacterPlayer::Tick(float DeltaSeconds)
 {
-    Super::PostInitializeComponents();
+    Super::Tick(DeltaSeconds);
+
+    UpdateEssentialValues(DeltaSeconds);
+
+    MantlingTimeline.TickTimeline(DeltaSeconds);
+
+    if (GetLocalRole() >= ROLE_AutonomousProxy)
+    {
+        UpdateGroundedRotation(DeltaSeconds);
+    }
     
-    // 这里无法判断isLocalController 可能是此时本地的Role还没有设置好
+    if (GetLocalRole() == ROLE_Authority)
+    {
+        if (IsUnhealthy())
+        {
+            if (RecoveryTimer.IsCompleted())
+            {
+                float Delta = 0;
+                if (HealthUpdateFrequency.Tick(DeltaSeconds, Delta))
+                {
+                    // 应用血量回复
+                    float DeltaHealth = Delta * CharacterAttributes->GetMaxHealth();
+                    AbilitySystem->ApplyModToAttribute(DMAttrStatics().HealthProperty, EGameplayModOp::Additive, DeltaHealth);
+                }
+            }
+            else
+            {
+                RecoveryTimer.Tick(DeltaSeconds);
+            }
+        }
+    }
 }
 
-float ADCharacterPlayer::PlayMontage(UAnimMontage* PawnAnim, UAnimMontage* WeaponAnim)
+/*void ADCharacterPlayer::TickRootMotionSource()
+{
+    if (MantlingRMS.IsValid())
+    {
+        if (MantlingRMS->Status.HasFlag(ERootMotionSourceStatusFlags::Finished))
+        {
+            OnMantleRootMotionFinished();
+            MantlingRMS.Reset();
+        }
+    }
+}*/
+
+void ADCharacterPlayer::SmoothUpdateRotation(float DeltaSeconds, float RotRate, float RotRateConst, const FRotator& Target)
+{
+    // [Server/Client]
+    TargetRotation = FMath::RInterpConstantTo(TargetRotation, Target, DeltaSeconds, RotRateConst);
+    SetActorRotation(FMath::RInterpTo(GetActorRotation(), FRotator(0, TargetRotation.Yaw, 0), DeltaSeconds, RotRate));
+}
+
+void ADCharacterPlayer::LimitRotation(float DeltaSeconds, float YawMin, float YawMax, float InterpSpeed)
+{
+    FRotator ControlRotation = GetRepControllerRotation();
+    FRotator Delta = (ControlRotation - GetActorRotation()).GetNormalized();
+
+    if (!UKismetMathLibrary::InRange_FloatFloat(Delta.Yaw, YawMin, YawMax))
+    {
+        SmoothUpdateRotation(DeltaSeconds, InterpSpeed, 0.f, FRotator(0, ControlRotation.Yaw + (Delta.Yaw > 0.f ? YawMin : YawMax), 0));
+    }
+}
+
+void ADCharacterPlayer::UpdateEssentialValues(float DeltaSeconds)
+{
+    FVector CurrentVelocity = GetVelocity();
+
+    Speed = CurrentVelocity.Size2D();
+    bIsMoving = Speed > 1.f;
+
+    if (bIsMoving)
+    {
+        LastVelocityRotation = CurrentVelocity.Rotation();
+    }
+
+    Acceleration = (CurrentVelocity - PrevVelocity) / DeltaSeconds;
+    PrevVelocity = CurrentVelocity;
+
+    MovementInputAmount = GetCharacterMovement()->GetCurrentAcceleration().Size() / GetCharacterMovement()->GetMaxAcceleration();
+    bHasMovementInput = MovementInputAmount > 0.f;
+
+    FRotator RepControllerRotation = GetRepControllerRotation();
+    AimYawRate = FMath::Abs((RepControllerRotation.Yaw - PrevAimYaw) / DeltaSeconds);
+    PrevAimYaw = RepControllerRotation.Yaw;
+    
+}
+
+void ADCharacterPlayer::UpdateGroundedRotation(float DeltaSeconds)
+{
+    if (MovementState != EMovementState::Grounded)
+    {
+        return;
+    }
+
+    if ((bIsMoving && bHasMovementInput || Speed > 150.f) && !HasAnyRootMotion())
+    {
+        if (bCombatStatus)
+        {
+            SmoothUpdateRotation(DeltaSeconds, 20.f, 1000.f, GetRepControllerRotation());
+        }
+        else
+        {
+            float CurveValue = GSProject->GetRotationRateCurve()->GetFloatValue(GetMappedSpeed());
+            float RotationRate = FMath::GetMappedRangeValueClamped(FVector2D(0.f, 300.f), FVector2D(1.f, 3.f), AimYawRate) * CurveValue;
+            SmoothUpdateRotation(DeltaSeconds, RotationRate, 800.f, FRotator(0,LastVelocityRotation.Yaw,0));
+
+            //UE_LOG(LogDream, Error, TEXT("Role: %s, SmoothUpdateRotation"), *UEnum::GetValueAsString(GetLocalRole()));
+        }
+    }
+    else
+    {
+        if (bCombatStatus)
+        {
+            LimitRotation(DeltaSeconds, -60.f, 60.f, 20.f);
+        }
+
+        // 不适用于网络复制
+        float RotationAmount = 0.f;
+        if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+        {
+            AnimInstance->GetCurveValue("RotationAmount", RotationAmount);
+        }
+
+        if (FMath::Abs(RotationAmount) > KINDA_SMALL_NUMBER)
+        {
+            //UE_LOG(LogDream, Error, TEXT("RotationAmount %f"), RotationAmount);
+            
+            AddActorWorldRotation(FRotator(0, RotationAmount * (DeltaSeconds / 0.033334f), 0));
+            TargetRotation = GetActorRotation();
+        }
+    }
+}
+
+float ADCharacterPlayer::GetMappedSpeed()
+{
+    if (Speed < WalkSpeed)
+    {
+        return FMath::GetMappedRangeValueClamped(FVector2D(0.f, WalkSpeed), FVector2D(0.f, 1.f), Speed);
+    }
+
+    if (Speed < RunSpeed)
+    {
+        return FMath::GetMappedRangeValueClamped(FVector2D(WalkSpeed, RunSpeed), FVector2D(1.f, 2.f), Speed);
+    }
+
+    return FMath::GetMappedRangeValueClamped(FVector2D(RunSpeed, SprintSpeed), FVector2D(2.f, 3.f), Speed);
+}
+
+
+float ADCharacterPlayer::PlayMontage(UAnimMontage* PawnAnim)
 {
     float Duration = .1f;
 
-    if (IsRunningDedicatedServer())
+    if (GetNetMode() == NM_DedicatedServer)
     {
         if (PawnAnim)
         {
@@ -197,28 +449,54 @@ float ADCharacterPlayer::PlayMontage(UAnimMontage* PawnAnim, UAnimMontage* Weapo
         {
             Duration = GetMesh()->AnimScriptInstance->Montage_Play(PawnAnim, 1.f, EMontagePlayReturnType::Duration);
         }
-
-        if (WeaponAnim)
-        {
-            ActiveWeapon->WeaponMesh->AnimScriptInstance->Montage_Play(WeaponAnim);
-        }
     }
 
     return Duration;
 }
 
-ADPlayerController* ADCharacterPlayer::GetPlayerController() const
+float ADCharacterPlayer::PlayReloadingMontage()
 {
-    return Cast<ADPlayerController>(Controller);
+    if (ActiveWeapon)
+    {
+        ActiveWeapon->PlayWeaponReloadingAnim();
+        return PlayMontage(ActiveWeapon->CharacterAnim.ReloadAnim);
+    }
+    
+    return 0;
+}
+
+void ADCharacterPlayer::StopReloadingMontage()
+{
+    if (ActiveWeapon)
+    {
+        StopAnimMontage(ActiveWeapon->CharacterAnim.ReloadAnim);
+        if (UAnimInstance* AnimInstance = ActiveWeapon->WeaponMesh->GetAnimInstance())
+        {
+            AnimInstance->Montage_Stop(0.1f, ActiveWeapon->ReloadAnim);
+        }
+    }
+}
+
+float ADCharacterPlayer::PlayEquippingMontage()
+{
+    if (ActiveWeapon)
+    {
+        return PlayMontage(ActiveWeapon->CharacterAnim.EquipAnim);
+    }
+    
+    return 0;
+}
+
+
+ADMPlayerController* ADCharacterPlayer::GetPlayerController() const
+{
+    return Cast<ADMPlayerController>(Controller);
 }
 
 // Called to bind functionality to input
 void ADCharacterPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
 {
     Super::SetupPlayerInputComponent(PlayerInputComponent);
-
-    /*AbilitySystem->BindAbilityActivationToInputComponent(PlayerInputComponent,
-        FGameplayAbilityInputBinds(TEXT("Confirm"), TEXT("Cancel"), TEXT("AbilityBind")));*/
 
     if (UDGameUserSettings* Settings = Cast<UDGameUserSettings>(GEngine->GetGameUserSettings()))
     {
@@ -230,13 +508,7 @@ void ADCharacterPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
     PlayerInputComponent->BindAxis("Turn", this, &ADCharacterPlayer::TurnAtRate);
     PlayerInputComponent->BindAxis("LookUp", this, &ADCharacterPlayer::LookUpAtRate);
 
-
-    PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ADCharacterPlayer::StartJump);
-    PlayerInputComponent->BindAction("Jump", IE_Released, this, &ADCharacterPlayer::StopJump);
-
-    /*PlayerInputComponent->BindAction("Crouch", IE_Pressed, this, &ADCharacterPlayer::StartCrouch);
-    PlayerInputComponent->BindAction("Crouch", IE_Released, this, &ADCharacterPlayer::StopCrouch);*/
-    PlayerInputComponent->BindAction("Crouch", IE_Released, this, &ADCharacterPlayer::SwitchCrouch);
+    PlayerInputComponent->BindAction("Jump", IE_Pressed, this, &ADCharacterPlayer::MantleStart);
 
     PlayerInputComponent->BindAction("OpenFire", IE_Pressed, this, &ADCharacterPlayer::StartFire);
     PlayerInputComponent->BindAction("OpenFire", IE_Released, this, &ADCharacterPlayer::StopFire);
@@ -246,10 +518,12 @@ void ADCharacterPlayer::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
     PlayerInputComponent->BindAction("Aim", IE_Pressed, this, &ADCharacterPlayer::StartAim);
     PlayerInputComponent->BindAction("Aim", IE_Released, this, &ADCharacterPlayer::StopAim);
-    //PlayerInputComponent->BindAction("SwitchCombat", IE_Released, this, &ADCharacterPlayer::SwitchCombat);
 
     PlayerInputComponent->BindAction("Sprint", IE_Pressed, this, &ADCharacterPlayer::ToggleSprint);
-    //PlayerInputComponent->BindAction("Sprint", IE_Released, this, &ADCharacterPlayer::StopSprint);
+    
+    PlayerInputComponent->BindAction("Roll", IE_Pressed, this, &ADCharacterPlayer::Rolling);
+    
+    PlayerInputComponent->BindAction("ToggleOverlay", IE_Pressed, this, &ADCharacterPlayer::ToggleOverlay);
 
     PlayerInputComponent->BindAction("Weapon1", IE_Pressed, this, &ADCharacterPlayer::SwitchWeaponToFirst);
     PlayerInputComponent->BindAction("Weapon2", IE_Pressed, this, &ADCharacterPlayer::SwitchWeaponToSecond);
@@ -262,32 +536,34 @@ void ADCharacterPlayer::StartFire()
         return;
     }
 
+    bDesiredShoot = true;
+
     if (ActiveWeapon->FireMode != EFireMode::Accumulation)
     {
-        if (GetWorld()->GetTimeSeconds() <= (ActiveWeapon->GetLastFireTimeSeconds() + ActiveWeapon->GetFireInterval()))
+        if (!ActiveWeapon->CanFire())
         {
             return;
         }
     }
 
-    bFiring = true;
-
-    if (WeaponStatus > EWeaponStatus::Firing)
+    if (ActiveWeapon->GetWeaponState() > EWeaponState::Shooting)
     {
         return;
     }
 
+    ActiveWeapon->SetWeaponState(EWeaponState::Shooting);
+
     ActiveWeapon->BP_OnStartFire();
 
-    bool PrevCombatStatus = bCombatStatus;
+    bool bDelayFire = !bCombatStatus;
 
     StopSprint();
     StateSwitchToCombat();
-    WeaponStatus = EWeaponStatus::Firing;
 
-    if (!PrevCombatStatus)
+    if (bDelayFire)
     {
-        GetWorldTimerManager().SetTimer(Handle_Shoot, this, &ADCharacterPlayer::ConfirmFire, 0.1f, false);
+        FTimerHandle Temporary;
+        GetWorldTimerManager().SetTimer(Temporary, this, &ADCharacterPlayer::ConfirmFire, 0.15f);
     }
     else
     {
@@ -300,53 +576,64 @@ void ADCharacterPlayer::ConfirmFire()
     switch (ActiveWeapon->FireMode)
     {
     case EFireMode::SemiAutomatic:
-        {
-            HandleFire();
-        }
-        break;
     case EFireMode::FullyAutomatic:
-        {
-            GetWorldTimerManager().SetTimer(Handle_Shoot, this,
-                &ADCharacterPlayer::HandleFire, ActiveWeapon->GetFireInterval(), true, 0.f);
-        }
+        
+        HandleFire();
+        
         break;
+        
     case EFireMode::Accumulation:
-        {
-            GetWorldTimerManager().SetTimer(Handle_Shoot, this,
-                &ADCharacterPlayer::HandleFire, ActiveWeapon->GetFireInterval(), false);
-        }
+
+        // 蓄力一定时间后开火
+        GetWorldTimerManager().SetTimer(Handle_Shoot, this,
+                &ADCharacterPlayer::HandleFire, ActiveWeapon->GetFireInterval());
+        
         break;
     }
 }
 
 void ADCharacterPlayer::HandleFire()
 {
-    if (WeaponStatus > EWeaponStatus::Firing || ActiveWeapon->AmmoNum == 0)
+    if (!(ActiveWeapon->IsState(EWeaponState::Shooting) && ActiveWeapon->AmmoNum > 0))
     {
         return;
     }
 
     ActiveWeapon->HandleFire();
-    UpdateAmmoUI();
+    
+    UpdateMagazineUI();
 
     if (ActiveWeapon->FireCameraShake)
     {
-        GetPlayerController()->ClientStartCameraShake(ActiveWeapon->FireCameraShake);
+        if (ADMPlayerController* PlayerController = GetPlayerController())
+        {
+            PlayerController->ClientStartCameraShake(ActiveWeapon->FireCameraShake);
+        }
     }
 
-    if (ActiveWeapon->FireMode == EFireMode::SemiAutomatic)
+    bool bNoAmmo = ActiveWeapon->AmmoNum == 0;
+
+    switch (ActiveWeapon->FireMode)
     {
-        ActiveWeapon->BP_OnStopFire();
-    }
-    else if (ActiveWeapon->FireMode == EFireMode::Accumulation)
-    {
-        ActiveWeapon->BP_OnStopFire();
-        GetWorldTimerManager().ClearTimer(Handle_Shoot);
+    case EFireMode::SemiAutomatic:
+    case EFireMode::Accumulation:
+        StopFire(); // 半自动和蓄力 在这里直接调用StopFire
+        break;
+        
+    case EFireMode::FullyAutomatic:
+        if (!bNoAmmo)
+        {
+            GetWorldTimerManager().SetTimer(Handle_Shoot, this,
+                &ADCharacterPlayer::HandleFire, ActiveWeapon->GetFireInterval());
+        }
+        break;
     }
 
-    if (ActiveWeapon->AmmoNum == 0)
+    // 检测到没有弹药时自动换弹
+    if (bNoAmmo)
     {
-        ReloadMagazine();
+        FTimerHandle Temporary;
+        GetWorldTimerManager().SetTimer(Temporary, this, &ADCharacterPlayer::ReloadMagazine, 0.2f);
     }
 }
 
@@ -356,25 +643,17 @@ void ADCharacterPlayer::StopFire()
     {
         return;
     }
-    
-    if (bFiring)
+
+    bDesiredShoot = false;
+
+    if (ActiveWeapon->IsState(EWeaponState::Shooting))
     {
+        ActiveWeapon->SetWeaponState(EWeaponState::Idle);
+        
         StateSwitchToRelax();
 
-        if (WeaponStatus == EWeaponStatus::Firing)
-        {
-            WeaponStatus = EWeaponStatus::Idle;
-
-            ActiveWeapon->BP_OnStopFire();
-        }
-
-        if (Handle_Shoot.IsValid())
-        {
-            GetWorldTimerManager().ClearTimer(Handle_Shoot);
-        }
+        ActiveWeapon->BP_OnStopFire();
     }
-
-    bFiring = false;
 }
 
 void ADCharacterPlayer::SwitchWeapon()
@@ -388,14 +667,7 @@ void ADCharacterPlayer::HandleSwitchWeapon(int32 WeaponIndex)
     {
         return;
     }
-
-    if (GetLocalRole() != ROLE_Authority)
-    {
-        ServerSwitchWeapon();
-    }
-
-    WeaponStatus = EWeaponStatus::Equipping;
-
+    
     if (bCombatStatus)
     {
         StopFire();
@@ -403,26 +675,12 @@ void ADCharacterPlayer::HandleSwitchWeapon(int32 WeaponIndex)
         StopReloadMagazine();
     }
 
-    ActiveWeapon->SetWeaponEnable(false);
-    float Duration = PlayMontage(GetCurrentActionMontage()->EquipAnim, nullptr);
-    GetWorldTimerManager().SetTimer(Handle_Equip, FTimerDelegate::CreateUObject(this, &ADCharacterPlayer::SwitchFinished, WeaponIndex), Duration, false);
-}
-
-void ADCharacterPlayer::MulticastSwitchWeapon_Implementation()
-{
-    if (GetLocalRole() != ROLE_SimulatedProxy)
-    {
-        return;
-    }
-
-    PlayMontage(GetCurrentActionMontage()->EquipAnim, nullptr);
-}
-
-void ADCharacterPlayer::ServerSwitchWeapon_Implementation()
-{
-    MulticastSwitchWeapon();
-    float Duration = PlayMontage(GetCurrentActionMontage()->EquipAnim, nullptr);
-    GetWorldTimerManager().SetTimer(Handle_Equip, FTimerDelegate::CreateUObject(this, &ADCharacterPlayer::SwitchFinished, -1), Duration, false);
+    ActiveWeapon->SetWeaponState(EWeaponState::Equipping);
+    
+    float Duration = PlayEquippingMontage();
+    
+    GetWorldTimerManager().SetTimer(Handle_Equip, FTimerDelegate::CreateUObject(
+                                    this, &ADCharacterPlayer::SwitchFinished, WeaponIndex), Duration, false);
 }
 
 void ADCharacterPlayer::SwitchFinished(int32 WeaponIndex)
@@ -430,8 +688,9 @@ void ADCharacterPlayer::SwitchFinished(int32 WeaponIndex)
     //ActiveWeapon->SetActorHiddenInGame(true);
     if (IsLocallyControlled())
     {
+        ActiveWeapon->SetWeaponEnable(false);
+        ActiveWeapon->SetWeaponState(EWeaponState::Idle);
         //ActiveWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, TEXT("root"));
-        WeaponStatus = EWeaponStatus::Idle;
     }
 
     if (GetLocalRole() == ROLE_Authority)
@@ -467,74 +726,54 @@ void ADCharacterPlayer::ReloadMagazine()
 {
     if (CanReload())
     {
-        StopFire();
-        
-        WeaponStatus = EWeaponStatus::Reloading;
+        if (bDesiredShoot)
+        {
+            StopFire();
+            // 换弹之后继续射击
+            bDesiredShoot = true;
+        }
 
-        StateSwitchToCombat();
+        ActiveWeapon->SetWeaponState(EWeaponState::Reloading);
 
-        ServerReloadMagazine();
+        TRIGGER_ABILITY(Condition_Reloading, this);
 
-        float Duration = PlayMontage(GetCurrentActionMontage()->ReloadAnim, ActiveWeapon->ReloadAnim);
+        float Duration = PlayReloadingMontage();
         GetWorldTimerManager().SetTimer(Handle_Reload, this, &ADCharacterPlayer::ReloadFinished, Duration);
+        StateSwitchToCombat();
     }
 }
 
 void ADCharacterPlayer::StopReloadMagazine()
 {
-    if (WeaponStatus == EWeaponStatus::Reloading)
+    if (ActiveWeapon && ActiveWeapon->IsState(EWeaponState::Reloading))
     {
-        WeaponStatus = EWeaponStatus::Idle;
-        GetWorldTimerManager().ClearTimer(Handle_Reload);
-
         StateSwitchToRelax();
-        StopAnimMontage(GetCurrentActionMontage()->ReloadAnim);
+        ActiveWeapon->SetWeaponState(EWeaponState::Idle);
+        GetWorldTimerManager().ClearTimer(Handle_Reload);
+        StopReloadingMontage();
     }
 }
 
 void ADCharacterPlayer::ReloadFinished()
 {
-    WeaponStatus = EWeaponStatus::Idle;
-    
-    ActiveWeapon->ReloadingWeapon();
-    
-    UpdateAmmoUI();
+    UpdateMagazineUI();
+
+    ActiveWeapon->OnReloadFinished();
+    ActiveWeapon->SetWeaponState(EWeaponState::Idle);
 
     StateSwitchToRelax();
 
-    if (bFiring)
+    if (bDesiredShoot)
     {
         StartFire();   
     }
-}
-
-void ADCharacterPlayer::ServerReloadMagazine_Implementation()
-{
-    TRIGGER_ABILITY(Condition_Reloading, this);
-    MulticastReloadMagazine();
-}
-
-void ADCharacterPlayer::MulticastReloadMagazine_Implementation()
-{
-    if (GetLocalRole() == ROLE_Authority || IsLocallyControlled())
-    {
-        return;
-    }
-
-    PlayMontage(GetCurrentActionMontage()->ReloadAnim, ActiveWeapon->ReloadAnim);
-}
-
-void ADCharacterPlayer::OnRep_ActiveWeapon()
-{
-    SetActiveWeapon(ActiveWeapon);
 }
 
 void ADCharacterPlayer::EquipWeapon(int32 Index, const FEquipmentAttributes& Attrs, TSubclassOf<AShootWeapon> WeaponClass)
 {
     if (GetLocalRole() < ROLE_Authority)
     {
-        checkf(Index >= 0 && Index < WeaponInventory.Num(), TEXT("SetInventoryWeapon Fatal Error"));
-        
+        Index = FMath::Clamp(Index, 0, WeaponInventory.Num() - 1);
         ServerEquipWeapon(Index, Attrs, WeaponClass);
     }
     else
@@ -566,8 +805,8 @@ void ADCharacterPlayer::DoServerEquipWeapon(int32 Index, const FEquipmentAttribu
             FEquipmentAttributes Attributes = MoveTemp(ActiveWeapon->WeaponAttribute);
             PrevWeaponAttr = &Attributes;
         }
-        
-        NewWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, CDOProjectSettings->GetWepActiveSockName());
+
+        NewWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, UDMProjectSettings::Get()->GetWepActiveSockName());
         NewWeapon->SetActorRelativeTransform(NewWeapon->WeaponSocketOffset);
         SetActiveWeapon(NewWeapon);
 
@@ -579,7 +818,7 @@ void ADCharacterPlayer::DoServerEquipWeapon(int32 Index, const FEquipmentAttribu
     }
     else
     {
-        NewWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, CDOProjectSettings->GetWepHolsterSockName());
+        NewWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, UDMProjectSettings::Get()->GetWepHolsterSockName());
         NewWeapon->SetActorRelativeTransform(NewWeapon->WeaponHolsterSocketOffset);
     }
 }
@@ -616,17 +855,32 @@ void ADCharacterPlayer::ServerEquipModule_Implementation(TSubclassOf<UDModuleBas
     EquipModule(ModuleClass, Attrs);
 }
 
-void ADCharacterPlayer::LearningTalents(const TArray<TSubclassOf<UDreamGameplayAbility>>& TalentClasses)
+void ADCharacterPlayer::LearningTalents(int64 Talents)
 {
     if (GetLocalRole() == ROLE_Authority)
     {
-        LearnedTalents = TalentClasses;
+        // todo 待完善
+        TArray<FTalentInfo> TalentInfos;
+        GSProject->GetLearnedTalents(ETalentCategory::Warrior, Talents, TalentInfos);
+
+        LearnedTalents.SetNum(TalentInfos.Num());
+
+        for (int32 Idx = 0; Idx < LearnedTalents.Num(); Idx++)
+        {
+            LearnedTalents[Idx] = TalentInfos[Idx].TalentClass;
+        }
+        
         RefreshAttributeBaseValue();
     }
     else
     {
-        ServerLearningTalent(TalentClasses);
+        ServerLearningTalent(Talents);
     }
+}
+
+void ADCharacterPlayer::ServerLearningTalent_Implementation(int64 Talents)
+{
+    LearningTalents(Talents);
 }
 
 void ADCharacterPlayer::SwitchWeapon(int32 NewWeaponIndex)
@@ -642,11 +896,11 @@ void ADCharacterPlayer::SwitchWeapon(int32 NewWeaponIndex)
 
     if (ActiveWeapon)
     {
-        ActiveWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, CDOProjectSettings->GetWepHolsterSockName());
+        ActiveWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, UDMProjectSettings::Get()->GetWepHolsterSockName());
         ActiveWeapon->SetActorRelativeTransform(ActiveWeapon->WeaponHolsterSocketOffset);
     }
 
-    NewWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, CDOProjectSettings->GetWepActiveSockName());
+    NewWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform, UDMProjectSettings::Get()->GetWepActiveSockName());
     NewWeapon->SetActorRelativeTransform(NewWeapon->WeaponSocketOffset);
         
     SetActiveWeapon(NewWeapon);
@@ -676,7 +930,7 @@ void ADCharacterPlayer::ClearInfiniteActors()
 
 void ADCharacterPlayer::SpawnDamageWidget(const FVector& Location, float DamageValue, bool bCritical, bool bIsHealthSteal)
 {
-    UClass* DamageComponentClass = CDOProjectSettings->GetDamageComponentClass();
+    UClass* DamageComponentClass = GSProject->GetDamageComponentClass();
 
     if (DamageComponentClass)
     {
@@ -698,49 +952,77 @@ void ADCharacterPlayer::ShowHitEnemyTips(bool bEnemyDeath)
     }
 }
 
-float ADCharacterPlayer::GetCtrlYawDeltaCount() const
-{
-    return CtrlYawDeltaCount;
-}
-
 void ADCharacterPlayer::RefreshAttributeBaseValue()
 {
-    FEquipmentAttributes FinalValue;
+    FEquipmentAttributes GatherAttributes;
 
-    FinalValue.CombineSkipPerks(ActiveWeapon->WeaponAttribute);
+    GatherGearsAttributes(GatherAttributes);
+    ApplyGearsAbilitiesToSelf(GatherAttributes.Perks);
+    CharacterAttributes->UpdateAttributesBase(GatherAttributes);
+}
 
-    for (UDModuleBase* Module : EquippedModules)
-    {
-        FinalValue += Module->ModuleAttributes;
-    }
-    
-    float BaseAttrDeltaScale = GetCharacterLevel() * BaseAttributesSettings->IncrementPerLevel;
-    FinalValue += BaseAttributesSettings->BaseAttributes * BaseAttrDeltaScale;
+void ADCharacterPlayer::InitializeAttributes()
+{
+    FEquipmentAttributes GatherAttributes;
 
-    AttributeSet->UpdateAttributesBase(FinalValue);
+    GatherGearsAttributes(GatherAttributes);
+    ApplyGearsAbilitiesToSelf(GatherAttributes.Perks);
+    CharacterAttributes->InitAttributes(GatherAttributes);
+}
 
+void ADCharacterPlayer::ApplyGearsAbilitiesToSelf(const TArray<int32>& GearPerks)
+{
     AbilitySystem->ClearAllAbilities();
-    
-    for (UClass* AbilityClass : LearnedTalents)
+
+#if WITH_EDITORONLY_DATA
+
+    for (TSubclassOf<UGameplayAbility> TestAbility : TestAbilities)
     {
-        AbilitySystem->GiveAbility(FGameplayAbilitySpec(AbilityClass));
+        AbilitySystem->GiveAbility(FGameplayAbilitySpec(TestAbility));
     }
 
-    for (int32 AbilityGuid : FinalValue.Perks)
+#endif
+    
+    for (UClass* TalentClass : LearnedTalents)
     {
-        UClass* PerkClass = CDOProjectSettings->GetItemClassFromGuid(AbilityGuid);
+        AbilitySystem->GiveAbility(FGameplayAbilitySpec(TalentClass));
+    }
+
+    for (int32 AbilityGuid : GearPerks)
+    {
+        UClass* PerkClass = GSProject->GetItemClassFromGuid(AbilityGuid);
         AbilitySystem->GiveAbility(FGameplayAbilitySpec(PerkClass));
     }
-    
-    for (int32 AbilityGuid : ActiveWeapon->WeaponAttribute.Perks)
+
+    if (ActiveWeapon)
     {
-        UClass* PerkClass = CDOProjectSettings->GetItemClassFromGuid(AbilityGuid);
-        CacheWeaponPerkHandles.Add(AbilitySystem->GiveAbility(FGameplayAbilitySpec(PerkClass)));
+        for (int32 AbilityGuid : ActiveWeapon->WeaponAttribute.Perks)
+        {
+            UClass* PerkClass = GSProject->GetItemClassFromGuid(AbilityGuid);
+            CacheWeaponPerkHandles.Add(AbilitySystem->GiveAbility(FGameplayAbilitySpec(PerkClass)));
+        }
     }
 
     AbilitySystem->RemoveActiveEffectsWithTags(FGameplayTagContainer(CUSTOMIZE_TAG(GE_Buff_All)));
     
     TRIGGER_ABILITY(Condition_Immediately, this);
+}
+
+void ADCharacterPlayer::GatherGearsAttributes(FEquipmentAttributes& GearsAttributes)
+{
+    if (ActiveWeapon)
+    {
+        GearsAttributes.MergeAndSkipPerks(ActiveWeapon->WeaponAttribute);
+    }
+
+    for (UDModuleBase* Module : EquippedModules)
+    {
+        GearsAttributes += Module->ModuleAttributes;
+    }
+
+    // Level Base Attrs
+    FBaseAttributes BaseAttributes = GSProject->GetBaseAttributes(GetCharacterLevel());
+    GearsAttributes += BaseAttributes;
 }
 
 void ADCharacterPlayer::FastRefreshWeaponAttribute(const FEquipmentAttributes& PrevWeaponAttrs)
@@ -756,11 +1038,11 @@ void ADCharacterPlayer::FastRefreshWeaponAttribute(const FEquipmentAttributes& P
     
     for (int32 N = 0; N < ActiveWeapon->WeaponAttribute.Perks.Num(); N++)
     {
-        UClass* AbilityClass = CDOProjectSettings->GetItemClassFromGuid(ActiveWeapon->WeaponAttribute.Perks[N]);
+        UClass* AbilityClass = GSProject->GetItemClassFromGuid(ActiveWeapon->WeaponAttribute.Perks[N]);
         CacheWeaponPerkHandles.Add(AbilitySystem->GiveAbility(FGameplayAbilitySpec(AbilityClass)));
     }
 
-    AttributeSet->IncrementAttributes(ActiveWeapon->WeaponAttribute - PrevWeaponAttrs);
+    CharacterAttributes->IncrementAttributes(ActiveWeapon->WeaponAttribute - PrevWeaponAttrs);
 
     TRIGGER_ABILITY(Condition_Immediately, this);
 }
@@ -777,108 +1059,85 @@ void ADCharacterPlayer::RemovePlayerHUD()
 {
     if (PlayerHUD.IsValid())
     {
-        GEngine->GameViewport->RemoveViewportWidgetContent(PlayerHUD.ToSharedRef());
+        if (GEngine->GameViewport)
+        {
+            GEngine->GameViewport->RemoveViewportWidgetContent(PlayerHUD.ToSharedRef());
+        }
         PlayerHUD.Reset();
     }
-}
-
-EMovingDirection ADCharacterPlayer::GetMovingDirection() const
-{
-    if (MovingInput.Y > 0.f)
-    {
-        if (MovingInput.X != 0.f)
-        {
-            return MovingInput.X > 0 ? EMovingDirection::FR : EMovingDirection::FL;
-        }
-    }
-    else if (MovingInput.Y < 0.f)
-    {
-        if (MovingInput.X != 0.f)
-        {
-            return MovingInput.X > 0 ? EMovingDirection::BR : EMovingDirection::BL;
-        }
-    
-        return EMovingDirection::B;
-    }
-    else
-    {
-        if (MovingInput.X != 0.f)
-        {
-            return MovingInput.X > 0 ? EMovingDirection::R : EMovingDirection::L;
-        }
-    }
-
-    return EMovingDirection::F;
 }
 
 void ADCharacterPlayer::SetActiveWeapon(AShootWeapon* NewWeapon)
 {
     ActiveWeapon = NewWeapon;
-    
-    if (IsLocallyControlled())
+
+    if (IsLocalCharacter())
     {
         ActiveWeapon->SetWeaponEnable(true);
 
-        if (PlayerHUD.IsValid())
-        {
-            PlayerHUD->SetCrosshairBrush(ActiveWeapon->GetDynamicCrosshairBrush());
-        }
-        
-        UpdateAmmoUI();
+        UpdateWeaponHUD();
+    }
+
+    if (GetLocalRole() == ROLE_Authority)
+    {
+        MARK_PROPERTY_DIRTY_FROM_NAME(ADCharacterPlayer, ActiveWeapon, this);
     }
 }
 
-void ADCharacterPlayer::OnInitPlayer(const FPlayerInfo& PlayerInfo, bool bSuccess)
+void ADCharacterPlayer::OnRep_ActiveWeapon()
 {
-    FPDIStatic::Get()->RemoveOnGetPlayerInfo(Handle_PlayerInfo);
-    
-    if (!bSuccess)
+    SetActiveWeapon(ActiveWeapon);
+}
+
+void ADCharacterPlayer::InitializePlayerGears()
+{
+    if (ADMPlayerController* PlayerController = GetPlayerController())
     {
-        DREAM_NLOG(Error, TEXT("InitPlayer Failure"));
-        UDreamWidgetStatics::PopupDialog(this, EDialogType::ERROR, FText::FromString(TEXT("初始化玩家数据失败")));
-        UDGameplayStatics::ReturnToHomeWorld(this);
+        PlayerController->GetPlayerInformation(FPlayerInfoSignature::CreateUObject(this, &ADCharacterPlayer::OnInitializePlayerGears));
+    }
+}
+
+void ADCharacterPlayer::OnInitializePlayerGears(bool bValidResult, const FTemporaryPlayerInfo& PlayerInfo)
+{
+    if (!bValidResult)
+    {
+        if (ADMPlayerController* PlayerController = GetPlayerController())
+        {
+            PlayerController->ClientReturnToMainMenuWithTextReason(LOCTEXT("QueryPlayer", "获取玩家数据失败"));
+        }
+
         return;
     }
-
-    ServerInitializePlayer(PlayerInfo);
-}
-
-void ADCharacterPlayer::ServerInitializePlayer_Implementation(const FPlayerInfo& PlayerInfo)
-{
-    UCharacterMesh* CharacterMesh = Cast<UCharacterMesh>(PlayerInfo.CharacterMesh.TryLoad());
-    checkf(CharacterMesh, TEXT("CharacterMesh Invalid, %s"), *PlayerInfo.CharacterMesh.ToString());
-
-    CurrentCharacterMesh = CharacterMesh;
     
-    if (!IsRunningDedicatedServer())
+    CurrentCharacterMesh = PlayerInfo.Skin;
+    
+    if (GetNetMode() == NM_Standalone)
     {
         UpdateCharacterMesh();
     }
 
-    for (const FPlayerWeapon& PW : PlayerInfo.Weapons)
+    for (const FTemporaryGearInfo& PW : PlayerInfo.Weapons)
     {
-        UClass* Class = CDOProjectSettings->GetItemClassFromGuid(PW.ItemGuid);
-        DoServerEquipWeapon(PW.Index, PW.Attributes, Class);
+        DoServerEquipWeapon(PW.EquippedIdx, PW.Attributes, PW.GearClass);
     }
 
-    for (const FPlayerModule& PM : PlayerInfo.Modules)
+    for (const FTemporaryGearInfo& PM : PlayerInfo.Modules)
     {
-        UClass* Class = CDOProjectSettings->GetItemClassFromGuid(PM.ItemGuid);
-        DoServerEquipModule(Class, PM.Attributes);
+        DoServerEquipModule(PM.GearClass, PM.Attributes);
     }
 
     // todo 天赋分支功能待完善
-    TArray<FTalentInfo> Talents = CDOProjectSettings->GetLearnedTalents(ETalentCategory::Warrior, PlayerInfo.LearnedTalents);
+    TArray<FTalentInfo> Talents;
+    GSProject->GetLearnedTalents(ETalentCategory::Warrior, PlayerInfo.LearnedTalents, Talents);
     
-    LearnedTalents.Reset();
     for (const FTalentInfo& Talent : Talents)
     {
         LearnedTalents.Add(Talent.TalentClass);
     }
 
-    Level = PlayerInfo.CharacterLevel;
+    Level = PlayerInfo.Level;
     
-    RefreshAttributeBaseValue();
+    InitializeAttributes();
 }
 
 void ADCharacterPlayer::OnPlayerPropertiesChanged(const FPlayerProperties& Properties)
@@ -902,28 +1161,32 @@ void ADCharacterPlayer::ServerSetCharacterLevel_Implementation(int32 NewLevel)
     RefreshAttributeBaseValue();
 }
 
-bool ADCharacterPlayer::CanShoot() const
-{
-    return ActiveWeapon && WeaponStatus < EWeaponStatus::Reloading && ActiveWeapon->AmmoNum > 0;
-}
-
 bool ADCharacterPlayer::CanReload() const
 {
-    return ActiveWeapon && WeaponStatus < EWeaponStatus::Reloading &&
-        GetPlayerController()->GetWeaponAmmunition(ActiveWeapon->AmmoType) > 0 && !ActiveWeapon->IsFullAmmo();
+    return ActiveWeapon && ActiveWeapon->CanReload();
 }
 
 bool ADCharacterPlayer::CanEquip() const
 {
-    return ActiveWeapon && WeaponStatus < EWeaponStatus::Equipping;
+    return ActiveWeapon && ActiveWeapon->GetWeaponState() < EWeaponState::Equipping;
 }
 
 bool ADCharacterPlayer::CanAim() const
 {
-    return ActiveWeapon && WeaponStatus <= EWeaponStatus::Reloading;
+    return ActiveWeapon && ActiveWeapon->GetWeaponState() <= EWeaponState::Reloading;
 }
 
-void ADCharacterPlayer::UpdateAmmoUI() const
+void ADCharacterPlayer::UpdateWeaponHUD() const
+{
+    if (PlayerHUD.IsValid() && ActiveWeapon)
+    {
+        PlayerHUD->SetCrosshairBrush(ActiveWeapon->GetDynamicCrosshairBrush());
+    }
+    
+    UpdateMagazineUI();
+}
+
+void ADCharacterPlayer::UpdateMagazineUI() const
 {
     if (PlayerHUD.IsValid() && ActiveWeapon)
     {
@@ -946,48 +1209,50 @@ void ADCharacterPlayer::LookUpAtRate(float Rate)
 
 void ADCharacterPlayer::MoveForward(float Value)
 {
-    if ((Controller != nullptr) && (Value != 0.0f))
+    if (Controller != nullptr)
     {
-        // find out which way is forward
-        const FRotator Rotation = Controller->GetControlRotation();
-        const FRotator YawRotation(0, Rotation.Yaw, 0);
-        // get forward vector
-        const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-        AddMovementInput(Direction, Value);
-    }
-    if (Value == 0.f && bSprinted)
-    {
-        StopSprint();
+        if (Value != 0.0f)
+        {
+            // find out which way is forward
+            const FRotator Rotation = Controller->GetControlRotation();
+            const FRotator YawRotation(0, Rotation.Yaw, 0);
+            // get forward vector
+            const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
+            AddMovementInput(Direction, Value);
+        }
+        else if (Gait == EMovementGait::Sprinting)
+        {
+            StopSprint();
+        }
     }
 
-    MovingInput.Y = Value;
+    AxisInput.X = Value;
 }
 
 void ADCharacterPlayer::MoveRight(float Value)
 {
-    if ((Controller != nullptr) && (Value != 0.0f) && !bSprinted)
+    if (Controller != nullptr && Value != 0.0f)
     {
-        // find out which way is right
         const FRotator Rotation = Controller->GetControlRotation();
         const FRotator YawRotation(0, Rotation.Yaw, 0);
-        // get right vector
         const FVector Direction = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
         //AddControllerYawInput(Value * GetWorld()->GetDeltaSeconds());
+
+        if (Gait == EMovementGait::Sprinting)
+        {
+            Value *= 0.1f;
+        }
+        
         AddMovementInput(Direction, Value);
     }
 
-    MovingInput.X = Value;
+    AxisInput.Y = Value;
 }
 
-void ADCharacterPlayer::ReplicationServerMoveDirection()
+bool ADCharacterPlayer::CanMove() const
 {
-    if (!MovingInput.Equals(PrevMovingInput))
-    {
-        ServerUpdateMovingInput(MovingInput);
-    }
-
-    MovingInput.Assign(PrevMovingInput);
+    return MovementState == EMovementState::Grounded || MovementState == EMovementState::InAir;
 }
 
 AShootWeapon* ADCharacterPlayer::GetActiveWeapon() const
@@ -1000,80 +1265,69 @@ int32 ADCharacterPlayer::GetActiveWeaponIndex() const
     return ActiveWeaponIndex;
 }
 
-void ADCharacterPlayer::ServerLearningTalent_Implementation(const TArray<TSubclassOf<UDreamGameplayAbility>>& TalentClasses)
-{
-    LearningTalents(TalentClasses);
-}
 
 void ADCharacterPlayer::StartAim()
 {
-    if (CanAim())
+    if (!CanAim())
     {
-        StopSprint();
-
-        bAimed = true;
-        ToggleCrosshairVisible(true);
-
-        StateSwitchToCombat();
-        ActiveWeapon->SetWeaponAim(true);
-        BP_OnToggleWeaponAim(true);
-
-        AimedMoveSpeedChange(true);
-
-        ServerStartAim();
+        return;
     }
-}
 
+    StopSprint();
 
-void ADCharacterPlayer::ServerStartAim_Implementation()
-{
-    AimedMoveSpeedChange(true);
+    bAimed = true;
+    ToggleCrosshairVisible(true);
+
+    StateSwitchToCombat();
+    ActiveWeapon->SetWeaponAim(true);
+    BP_OnToggleWeaponAim(true);
+        
+    SetDesiredGait(EMovementGait::Walking);
 }
 
 void ADCharacterPlayer::StopAim()
 {
-    if (!ActiveWeapon)
+    if (!(ActiveWeapon && bAimed))
     {
         return;
     }
+
+    bAimed = false;
+
+    SetDesiredGait(DefaultGait);
     
-    if (bAimed)
-    {
-        ServerStopAim();
+    ToggleCrosshairVisible(false);
 
-        bAimed = false;
-        ToggleCrosshairVisible(false);
-
-        ActiveWeapon->SetWeaponAim(false);
-        BP_OnToggleWeaponAim(false);
-        AimedMoveSpeedChange(false);
-        
-        StateSwitchToRelax();
-    }
+    ActiveWeapon->SetWeaponAim(false);
+    BP_OnToggleWeaponAim(false);
+    StateSwitchToRelax();
 }
 
-
-void ADCharacterPlayer::ServerStopAim_Implementation()
+void ADCharacterPlayer::ServerSetDesiredGait_Implementation(EMovementGait NewGait)
 {
-    AimedMoveSpeedChange(false);
+    SetDesiredGait(NewGait);
 }
 
-void ADCharacterPlayer::AimedMoveSpeedChange(bool bNewAim) const
+void ADCharacterPlayer::SetDesiredGait(EMovementGait NewGait)
 {
-    if (bNewAim)
+    if (GetLocalRole() != ROLE_Authority)
     {
-        GetCharacterMovement()->MaxWalkSpeed = AimMoveSpeed;
+        ServerSetDesiredGait(NewGait);
     }
-    else
+
+    Gait = NewGait;
+
+    switch (Gait)
     {
-        float DefaultSpeed = Cast<ADCharacterPlayer>(GetClass()->ClassDefaultObject)->GetCharacterMovement()-> MaxWalkSpeed;
-        GetCharacterMovement()->MaxWalkSpeed = DefaultSpeed;
+        case EMovementGait::Walking: GetCharacterMovement()->MaxWalkSpeed = WalkSpeed;       break;
+        case EMovementGait::Running: GetCharacterMovement()->MaxWalkSpeed = RunSpeed;        break;
+        case EMovementGait::Sprinting: GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;   break;
     }
 }
 
 void ADCharacterPlayer::ToggleSprint()
 {
-    if (bSprinted)
+    if (Gait == EMovementGait::Sprinting)
     {
         StopSprint();
     }
@@ -1094,94 +1348,343 @@ void ADCharacterPlayer::StartSprint()
         CombatStatusCount = 0;
         StateSwitchToRelaxImmediately();
         
-        WeaponStatus = EWeaponStatus::Idle;
-        
         StopFire();
         StopAim();
         StopReloadMagazine();
 
-        bSprinted = true;
-        SprintMoveSpeedChange(bSprinted);
-        ServerStartSprint();
+        SetDesiredGait(EMovementGait::Sprinting);
     }
 }
 
 void ADCharacterPlayer::StopSprint()
 {
-    if (bSprinted)
+    if (Gait == EMovementGait::Sprinting)
     {
-        bSprinted = false;
-        SprintMoveSpeedChange(bSprinted);
-        ServerStopSprint();
+        SetDesiredGait(DefaultGait);
     }
 }
 
-void ADCharacterPlayer::SprintMoveSpeedChange(bool bNewSprint) const
+void ADCharacterPlayer::MantleStart()
 {
-    if (bNewSprint)
+    if (!MantleLimit.IsArrive(GetWorld()->GetTimeSeconds()))
     {
-        GetCharacterMovement()->MaxWalkSpeed = SprintSpeed;
+        return;
+    }
+
+    if (MovementState == EMovementState::Mantling)
+    {
+        return;
+    }
+
+    HandleMantleStart();
+}
+
+void ADCharacterPlayer::HandleMantleStart()
+{
+    float ZOffset = 2.f;
+
+    FVector CapsuleLocation = GetCapsuleComponent()->GetComponentLocation();
+    float CapsuleHalfHeight = GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+
+    FVector Offset = CapsuleLocation - GetCapsuleComponent()->GetUpVector() * (CapsuleHalfHeight + ZOffset);
+    FRotationMatrix ControlMatrix(FRotator(0.f, GetControlRotation().Yaw, 0.f));
+
+    FVector InputVector = AxisInput.X * ControlMatrix.GetUnitAxis(EAxis::X) +
+                            AxisInput.Y * ControlMatrix.GetUnitAxis(EAxis::Y);
+    
+    InputVector.Normalize();
+
+    const FMantleTraceSettings& TraceSettings = UDMProjectSettings::Get()->GetMantleTraceSettings();
+
+    FVector TraceStart = InputVector * -30.f + Offset + FVector(0, 0, (TraceSettings.MaxLedgeHeight + TraceSettings.MinLedgeHeight) / 2);
+    FVector TraceEnd = TraceStart + InputVector * TraceSettings.ReachDistance;
+
+    TArray<AActor*> EmptyArray;
+
+    FHitResult HitResult;
+
+    UKismetSystemLibrary::CapsuleTraceSingle(this, TraceStart, TraceEnd,
+                                            TraceSettings.ForwardTraceRadius,
+                                            (TraceSettings.MaxLedgeHeight - TraceSettings.MinLedgeHeight) / 2,
+                                            Collision_TraceType_Climbable,
+                                            false,
+                                            EmptyArray,
+                                            EDrawDebugTrace::None,
+                                            HitResult,
+                                            true);
+
+    if (!HitResult.bBlockingHit || HitResult.bStartPenetrating || GetCharacterMovement()->IsWalkable(HitResult))
+    {
+        return;
+    }
+
+    FVector InitTraceNormal = HitResult.ImpactNormal;
+
+    FVector WalkableTraceEnd = InitTraceNormal * -15.f + FVector(HitResult.ImpactPoint.X, HitResult.ImpactPoint.Y, Offset.Z);
+    FVector WalkableTraceStart = WalkableTraceEnd + FVector(0, 0, TraceSettings.MaxLedgeHeight + TraceSettings.DownwardTraceRadius + 1.f);
+
+    UKismetSystemLibrary::SphereTraceSingle(this, WalkableTraceStart, WalkableTraceEnd,
+                                            TraceSettings.DownwardTraceRadius,
+                                            Collision_TraceType_Climbable,
+                                            false,
+                                            EmptyArray,
+                                            EDrawDebugTrace::None,
+                                            HitResult,
+                                            true);
+
+
+    if (!HitResult.bBlockingHit || !GetCharacterMovement()->IsWalkable(HitResult))
+    {
+        return;
+    }
+
+    FVector DownTraceLocation = FVector(HitResult.Location.X, HitResult.Location.Y,
+                                        HitResult.ImpactPoint.Z + GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + ZOffset);
+
+    float HalfHeight_WithoutHemisphere = GetCapsuleComponent()->GetScaledCapsuleHalfHeight_WithoutHemisphere();
+
+    TArray<TEnumAsByte<EObjectTypeQuery>> ObjectTypes;
+    ObjectTypes.Add(Collision_ObjectTrace_Player);
+
+    UKismetSystemLibrary::SphereTraceSingleForObjects(this,
+                                            DownTraceLocation + FVector(0,0,HalfHeight_WithoutHemisphere),
+                                            DownTraceLocation - FVector(0,0,HalfHeight_WithoutHemisphere),
+                                            GetCapsuleComponent()->GetUnscaledCapsuleRadius(),
+                                            ObjectTypes,
+                                            false,
+                                            EmptyArray,
+                                            EDrawDebugTrace::None,
+                                            HitResult,
+                                            true);
+
+    if (HitResult.bBlockingHit || HitResult.bStartPenetrating)
+    {
+        return;
+    }
+
+    // =================== start =====================
+
+    float MantleHeight = (DownTraceLocation - GetActorLocation()).Z;
+    
+    EMantleType MantleType;
+
+    if (MovementState == EMovementState::InAir)
+    {
+        MantleType = EMantleType::FallingCatch;
     }
     else
     {
-        GetCharacterMovement()->MaxWalkSpeed = NormalSpeed;
+        MantleType = MantleHeight > 125.f ? EMantleType::HighMantle : EMantleType::LowMantle;
+    }
+
+    //UKismetSystemLibrary::DrawDebugLine(this, InitTracePoint, InitTracePoint + InitTraceNormal * 100.f, FColor::Red, 10.f, 2);
+
+    const FMantleInformation& MantleInfo = GSProject->GetMantleInfo(MantleType, OverlayState);
+
+    FVector AnimatedOffset = InitTraceNormal * MantleInfo.StartingOffset.Y;
+
+    // 动画开始的偏移位置 (相对于目标位置， 后续会平滑的Lerp这个偏移以修正角色的位置，【为了看起来像是扒在物体的边缘】)
+    FVector AnimatedStartOffset = FVector(AnimatedOffset.X, AnimatedOffset.Y, -MantleInfo.StartingOffset.Z);
+
+    
+    float StartingPosition = FMath::GetMappedRangeValueClamped(
+                                FVector2D(MantleInfo.LowHeight, MantleInfo.HighHeight),
+                                FVector2D(MantleInfo.LowStartPosition, MantleInfo.HeightStartPosition), MantleHeight);
+    
+    float PlayRate = FMath::GetMappedRangeValueClamped(
+                                FVector2D(MantleInfo.LowHeight, MantleInfo.HighHeight),
+                                FVector2D(MantleInfo.LowPlayRate, MantleInfo.HeightPlayRate), MantleHeight);
+
+    FMantleSpec MantleSpec;
+    MantleSpec.MantleType = MantleType;
+    MantleSpec.StartingPosition = StartingPosition;
+    MantleSpec.PlayRate = PlayRate;
+    MantleSpec.MantlingTarget = DownTraceLocation;
+    MantleSpec.AnimatedStartOffset = AnimatedStartOffset;
+    
+    SetMantlingSpec(MantleSpec);
+}
+
+
+void ADCharacterPlayer::MantlingUpdate(float Alpha)
+{
+    FVector PCC = MantlingCorrectionCurve->GetVectorValue(MantlingSpec.StartingPosition + MantlingTimeline.GetPlaybackPosition());
+
+    float PositionAlpha = PCC.X;
+    float XYCorrectionAlpha = PCC.Y;
+    float ZCorrectionAlpha = PCC.Z;
+
+    FVector XYLerp = FMath::Lerp(TemporaryActualStartOffset,
+                                 FVector(TemporaryAnimatedStartOffset.X,
+                                         TemporaryAnimatedStartOffset.Y,
+                                         TemporaryActualStartOffset.Z), XYCorrectionAlpha);
+
+    // 修正高度, TemporaryAnimatedStartOffset.Z 是配置中的 -StartingOffset.Z
+    float ZLerp = FMath::Lerp(TemporaryActualStartOffset.Z, TemporaryAnimatedStartOffset.Z, ZCorrectionAlpha);
+
+
+    // 这个是要同时往反方向修正Actor的位置，不然的话一开始就直接跳到目标位置去了
+    FVector BlendTarget = FMath::Lerp(TemporaryMantlingTarget + FVector(XYLerp.X, XYLerp.Y, ZLerp), TemporaryMantlingTarget, PositionAlpha);
+
+    // (TemporaryMantlingTarget + TemporaryActualStartOffset) 这个就是当前Actor的位置
+    FVector LerpedTargetLocation = FMath::Lerp(TemporaryMantlingTarget + TemporaryActualStartOffset, BlendTarget, Alpha);
+
+    float YawCurveValue = GSProject->GetMantlingRotationCurve()->GetFloatValue(Alpha);
+
+    FRotator LerpedFaceRotation = FMath::Lerp(GetActorRotation(), FaceRotation, YawCurveValue);
+
+    UE_VLOG(this, LogDream, Log, TEXT("PCC: %s"), *PCC.ToString());
+    UE_VLOG_LOCATION(this, LogDream, Log, GetActorLocation(), 30.f, FColor::Red, TEXT("FRootMotionSource_Mantling_CurrentLocation"));
+
+    SetActorLocationAndRotation(LerpedTargetLocation, LerpedFaceRotation);
+}
+
+void ADCharacterPlayer::OnMantleFinished()
+{
+    if (IsLocallyControlled())
+    {
+        GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_Walking);
     }
 }
 
-void ADCharacterPlayer::ServerStartSprint_Implementation()
+void ADCharacterPlayer::PlayMantleAnim()
 {
-    bSprinted = true;
-    SprintMoveSpeedChange(bSprinted);
-}
-
-void ADCharacterPlayer::ServerStopSprint_Implementation()
-{
-    bSprinted = false;
-    SprintMoveSpeedChange(bSprinted);
-}
-
-void ADCharacterPlayer::StartJump()
-{
-    Jump();
-}
-
-void ADCharacterPlayer::StopJump()
-{
-    StopJumping();
-}
-
-void ADCharacterPlayer::SwitchCrouch()
-{
-    if (bIsCrouched)
+    if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
     {
-        StopCrouch();
+        const FMantleInformation& MantleInfo = GSProject->GetMantleInfo(MantlingSpec.MantleType, OverlayState);
+        AnimInstance->Montage_Play(MantleInfo.AnimMontage, MantlingSpec.PlayRate,
+                                   EMontagePlayReturnType::Duration, MantlingSpec.StartingPosition);
+    }
+}
+
+void ADCharacterPlayer::OnRep_MantlingSpec()
+{
+    const FMantleInformation& MantleInfo = GSProject->GetMantleInfo(MantlingSpec.MantleType, OverlayState);
+
+    FVector CurrentLocation = GetActorLocation();
+
+    MantlingCorrectionCurve = MantleInfo.PositionCurve;
+    TemporaryMantlingTarget = MantlingSpec.MantlingTarget;
+    TemporaryActualStartOffset =  CurrentLocation - MantlingSpec.MantlingTarget;
+    TemporaryAnimatedStartOffset = MantlingSpec.AnimatedStartOffset;
+    FaceRotation = (MantlingSpec.MantlingTarget - CurrentLocation).Rotation();
+    FaceRotation.Pitch = 0;
+    FaceRotation.Roll = 0;
+    
+    float MinTime;
+    float MaxTime;
+    MantleInfo.PositionCurve->GetTimeRange(MinTime, MaxTime);
+    
+    MantlingTimeline.SetTimelineLength(MaxTime - MantlingSpec.StartingPosition);
+    MantlingTimeline.SetPlayRate(MantlingSpec.PlayRate);
+    MantlingTimeline.PlayFromStart();
+
+    if (IsLocallyControlled())
+    {
+        GetCharacterMovement()->SetMovementMode(EMovementMode::MOVE_None);
+    }
+    
+    if (GetNetMode() != NM_DedicatedServer)
+    {
+        //UE_LOG(LogDream, Error, TEXT("OnRep_MantlingSpec"));
+        
+        PlayMantleAnim();
+    }
+}
+
+void ADCharacterPlayer::SetMantlingSpec(const FMantleSpec& NewMantleSpec)
+{
+    MantlingSpec = NewMantleSpec;
+
+    if (GetLocalRole() == ROLE_Authority)
+    {
+        MARK_PROPERTY_DIRTY_FROM_NAME(ADCharacterPlayer, MantlingSpec, this);
     }
     else
     {
-        StartCrouch();
+        ServerSetMantlingSpec(NewMantleSpec);
+    }
+
+    // SkipOwner 所以本地客户端不会触发, 这里手动调用一下
+    OnRep_MantlingSpec();
+}
+
+void ADCharacterPlayer::ServerSetMantlingSpec_Implementation(const FMantleSpec& NewMantleSpec)
+{
+    SetMantlingSpec(NewMantleSpec);
+}
+
+/*void ADCharacterPlayer::ApplyMantleRootMotion(const FMantleTrace& MantleTrace)
+{
+    const FMantleInformation& MantleInfo = GSProject->GetMantleInfo(MantlingSpec.MantleType, OverlayState);
+    
+    /*MantlingRMS->Duration = Duration;
+    MantlingRMS->AccumulateMode = ERootMotionAccumulateMode::Override;
+    MantlingRMS->Settings.SetFlag(ERootMotionSourceSettingsFlags::DisablePartialEndTick);
+    MantlingRMS->StartLocation = GetActorLocation();
+    MantlingRMS->PathOffsetCurve = MantleInfo.ForceCorrectionCurve;
+    MantlingRMS->TargetLocation = MantleTrace.MantlingTarget;
+    MantlingRMS->FinishVelocityParams.Mode = ERootMotionFinishVelocityMode::SetVelocity;
+    MantlingRMS->FinishVelocityParams.SetVelocity = FVector::ZeroVector;#1#
+
+    FVector Location = GetActorLocation();
+    
+    MantlingRMS = MakeShared<FRootMotionSource_Mantling>();
+    MantlingRMS->Duration = Duration;
+    MantlingRMS->FaceRotation = (MantleTrace.MantlingTarget - Location).GetSafeNormal();
+    MantlingRMS->AccumulateMode = ERootMotionAccumulateMode::Override;
+    MantlingRMS->Settings.SetFlag(ERootMotionSourceSettingsFlags::DisablePartialEndTick);
+    MantlingRMS->StartingPosition = MantlingSpec.StartingPosition;
+    MantlingRMS->MantlingTarget = MantleTrace.MantlingTarget;
+    MantlingRMS->MantlingActualStartOffset = Location - MantleTrace.MantlingTarget;
+    MantlingRMS->MantlingAnimatedStartOffset = MantleTrace.AnimatedStartOffset;
+    MantlingRMS->PositionCorrectionCurve = MantleInfo.PositionCurve;
+    MantlingRMS->PathOffsetCurve = MantleInfo.PathOffsetCurve;
+    MantlingRMS->FinishVelocityParams.Mode = ERootMotionFinishVelocityMode::SetVelocity;
+    MantlingRMS->FinishVelocityParams.SetVelocity = FVector::ZeroVector;
+
+    MantleRootMotionID = GetCharacterMovement()->ApplyRootMotionSource(MantlingRMS);
+}
+
+void ADCharacterPlayer::OnMantleRootMotionFinished()
+{
+    GetCharacterMovement()->RemoveRootMotionSourceByID(MantleRootMotionID);
+}*/
+
+void ADCharacterPlayer::Rolling()
+{
+    
+}
+
+void ADCharacterPlayer::ToggleOverlay()
+{
+    if (ToggleOverlayLimit.IsArrive(GetWorld()->GetTimeSeconds()))
+    {
+        OverlayState = OverlayState == EOverlayState::Default ? EOverlayState::Rifle : EOverlayState::Default;
+        ServerSetOverlayState(OverlayState);
     }
 }
 
-void ADCharacterPlayer::StartCrouch()
+void ADCharacterPlayer::ServerSetOverlayState_Implementation(EOverlayState NewOverlay)
 {
-    StopSprint();
-    Crouch();
-}
-
-void ADCharacterPlayer::StopCrouch()
-{
-    UnCrouch();
+    OverlayState = NewOverlay;
 }
 
 void ADCharacterPlayer::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-    DOREPLIFETIME(ADCharacterPlayer, ActiveWeapon);
-    DOREPLIFETIME(ADCharacterPlayer, bSprinted);
+   
     DOREPLIFETIME(ADCharacterPlayer, CurrentCharacterMesh);
+    
+    DOREPLIFETIME_CONDITION(ADCharacterPlayer, Gait, COND_SkipOwner);
+    DOREPLIFETIME_CONDITION(ADCharacterPlayer, OverlayState, COND_SkipOwner);
+
+    DOREPLIFETIME_WITH_PARAMS_FAST_PUSH_MODEL(ADCharacterPlayer, MantlingSpec, COND_SkipOwner);
+    DOREPLIFETIME_WITH_PARAMS_FAST_PUSH_MODEL(ADCharacterPlayer, ActiveWeapon, COND_OwnerOnly);
+
     DOREPLIFETIME_CONDITION(ADCharacterPlayer, bCombatStatus, COND_SkipOwner);
     DOREPLIFETIME_CONDITION(ADCharacterPlayer, ActiveWeaponIndex, COND_OwnerOnly);
-    DOREPLIFETIME_CONDITION(ADCharacterPlayer, MovingInput, COND_SkipOwner);
+    DOREPLIFETIME_CONDITION(ADCharacterPlayer, ControllerRotation, COND_SkipOwner);
 }
 
 void ADCharacterPlayer::Destroyed()
@@ -1190,7 +1693,7 @@ void ADCharacterPlayer::Destroyed()
 
     for (AShootWeapon* Weapon : WeaponInventory)
     {
-        if (Weapon && !Weapon->IsPendingKill())
+        if (Weapon)
         {
             Weapon->Destroy();
         }
@@ -1204,47 +1707,61 @@ void ADCharacterPlayer::OnDeath(const AActor* Causer)
     BP_OnServerDeath(Causer);
 
     SetReplicatingMovement(false);
-    //TearOff(); 断开网络同步
 
-    ADreamGameMode* DGameMode = GetWorld()->GetAuthGameMode<ADreamGameMode>();
-    DGameMode->ReSpawnCharacter(this);
+    if (ADMPlayerController* PlayerController = GetPlayerController())
+    {
+        PlayerController->HandlePlayerCharacterDie();
+    }
+
+    //TearOff(); // 断开网络同步
 }
 
 void ADCharacterPlayer::HealthChanged(const FOnAttributeChangeData& AttrData)
 {
     if (PlayerHUD.IsValid())
     {
-        PlayerHUD->SetHealthPercent(GetHealthPercent());
+        if (!FMath::IsNearlyEqual(AttrData.NewValue, CharacterAttributes->GetMaxHealth()))
+        {
+            if (AttrData.NewValue > AttrData.OldValue)
+            {
+                PlayerHUD->RecoveryHealth(GetHealthPercent());
+            }
+            else
+            {
+                PlayerHUD->ReduceHealth(GetHealthPercent());
+            }
+        }
     }
-    
+
     if (IsDeath())
     {
-        if (IsLocallyControlled())
+        SetActorTickEnabled(false);
+        
+        // IsLocallyControlled 不用这个判断  
+        if (PlayerHUD.IsValid())
         {
-            StopFire();
-            StopAim();
-            GetWorldTimerManager().ClearTimer(Handle_Reload);
-            GetWorldTimerManager().ClearTimer(Handle_Equip);
+            GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+            
+            RemovePlayerHUD();
+            StopAllActions();
 
-            DisableInput(GetPlayerController());
+            if (ADMPlayerController* PC = GetPlayerController())
+            {
+                DisableInput(PC);
+            }
 
             TPCamera->bUsePawnControlRotation = false;
             TPCameraArm->bUsePawnControlRotation = false;
-            TPCamera->FieldOfView = 120.f;
-            TPCamera->SetRelativeRotation(FRotator(-60.f, 0, 0));
-            TPCamera->SetRelativeLocation(FVector(0, 0, 240.f));
+            TPCamera->FieldOfView = 90.f;
+            TPCamera->SetRelativeRotation(FRotator(-70.f, 0, 0));
+            TPCamera->SetRelativeLocation(FVector(0, 0, 400.f));
             TPCameraArm->SocketOffset = FVector::ZeroVector;
 
-            if (GEngine->GameViewport)
+            if (ActiveWeapon)
             {
-                GEngine->GameViewport->RemoveViewportWidgetContent(PlayerHUD.ToSharedRef());
+                ActiveWeapon->WeaponMesh->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
+                ActiveWeapon->WeaponMesh->SetSimulatePhysics(true);
             }
-        }
-
-        if (ActiveWeapon)
-        {
-            ActiveWeapon->WeaponMesh->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
-            ActiveWeapon->WeaponMesh->SetSimulatePhysics(true);
         }
     }
 
@@ -1254,7 +1771,10 @@ void ADCharacterPlayer::HealthChanged(const FOnAttributeChangeData& AttrData)
 void ADCharacterPlayer::HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle)
 {
     Super::HandleDamage(DamageDone, Handle);
+    
     TRIGGER_ABILITY(Condition_Injured, Handle.GetInstigator());
+
+    RecoveryTimer.Reset(UDMAbilitiesStatics::GetHealthRecoveryTime(CharacterAttributes->GetRecovery()));
     
     ClientReceiveDamage(Handle.GetInstigator());
 }
@@ -1266,11 +1786,6 @@ void ADCharacterPlayer::ClientReceiveDamage_Implementation(AActor* Causer)
         FRotator DeltaRotation = (Causer->GetActorLocation() - GetActorLocation()).Rotation() - GetControlRotation();
         PlayerHUD->ShowHurtMark(FRotator::ClampAxis(DeltaRotation.Yaw) / 360.f);
     }
-}
-
-void ADCharacterPlayer::ServerUpdateMovingInput_Implementation(const FMoveInput& NewMovingInput)
-{
-    MovingInput = NewMovingInput;
 }
 
 void ADCharacterPlayer::ServerUpdateCharacterMesh_Implementation(UCharacterMesh* CharacterMesh)
@@ -1285,15 +1800,23 @@ void ADCharacterPlayer::OnRep_CharacterMesh()
 
 void ADCharacterPlayer::UpdateCharacterMesh()
 {
-    GetMesh()->SetSkeletalMesh(CurrentCharacterMesh->MasterMesh);
-
-    for (auto Iterator = GetMesh()->GetAttachChildren().CreateConstIterator(); Iterator; ++Iterator)
+    if (CurrentCharacterMesh == nullptr)
     {
-        USceneComponent* const Child = *Iterator;
+        return;
+    }
+    
+    GetMesh()->SetSkeletalMesh(CurrentCharacterMesh->MasterMesh);
+    GetMesh()->SetAnimClass(GSProject->GetMasterAnimClass());
 
-        if (Child && Child->GetOwner() == this)
+    const TArray<USceneComponent*>& AttachChildren = GetMesh()->GetAttachChildren();
+    for (int16 Idx = AttachChildren.Num() - 1; Idx > 0; Idx--)
+    {
+        if (USkeletalMeshComponent* SkMesh = Cast<USkeletalMeshComponent>(AttachChildren[Idx]))
         {
-            Child->DestroyComponent();
+            if (SkMesh->GetOwner() == this)
+            {
+                SkMesh->DestroyComponent();
+            }
         }
     }
         
@@ -1303,7 +1826,7 @@ void ADCharacterPlayer::UpdateCharacterMesh()
         SKComponent->RegisterComponent();
         SKComponent->SetSkeletalMesh(SKMesh);
         SKComponent->SetIsReplicated(false);
-        SKComponent->SetAnimClass(CDOProjectSettings->GetSlaveAnimClass());
+        SKComponent->SetAnimClass(GSProject->GetSlaveAnimClass());
         SKComponent->SetAnimationMode(EAnimationMode::AnimationBlueprint);
         SKComponent->SetCollisionEnabled(ECollisionEnabled::NoCollision);
         SKComponent->AttachToComponent(GetMesh(), FAttachmentTransformRules::KeepRelativeTransform);
@@ -1319,10 +1842,18 @@ void ADCharacterPlayer::EnableInteractiveButton(float InteractiveTime, FText Des
 {
     if (PlayerHUD.IsValid())
     {
-        PlayerHUD->ActivateInteractiveButton(InteractiveTime, Desc, FOnInteractiveCompleted::CreateLambda([Event, this]
+        PlayerHUD->ActivateInteractiveButton(InteractiveTime, Desc, FOnInteractiveCompleted::CreateLambda([Event]
         {
-            Event.ExecuteIfBound(this);
+            Event.ExecuteIfBound();
         }));
+    }
+}
+
+void ADCharacterPlayer::DisplayInteractiveButton(FText Desc)
+{
+    if (PlayerHUD.IsValid())
+    {
+        PlayerHUD->DisplayInteractiveButton(Desc);
     }
 }
 
@@ -1383,6 +1914,31 @@ void ADCharacterPlayer::OnActiveGameplayEffectRemoved(const FActiveGameplayEffec
     if (UDGameplayEffectUIData_Buff* BuffUIData = Cast<UDGameplayEffectUIData_Buff>(Effect.Spec.Def->UIData))
     {
         PlayerHUD->RemoveStateIcon(BuffUIData->BuffTag);
+    }
+}
+
+void ADCharacterPlayer::OnMovementModeChanged(EMovementMode PrevMovementMode, uint8 PreviousCustomMode)
+{
+    Super::OnMovementModeChanged(PrevMovementMode, PreviousCustomMode);
+
+    EMovementMode MovementMode = GetCharacterMovement()->MovementMode.GetValue();
+
+    /*UE_LOG(LogDream, Error, TEXT("OnMovementModeChanged: %s, %s"),
+        *UEnum::GetValueAsString(GetLocalRole()), *UEnum::GetValueAsString(MovementMode));*/
+
+    switch (MovementMode)
+    {
+    case EMovementMode::MOVE_Walking:
+    case EMovementMode::MOVE_NavWalking:
+        MovementState = EMovementState::Grounded;
+        break;
+
+    case EMovementMode::MOVE_Falling:
+        MovementState = EMovementState::InAir;
+        break;
+    default:
+        MovementState = EMovementState::None;
+        break;
     }
 }
 
@@ -1482,10 +2038,10 @@ bool ADCharacterPlayer::PickUpMagazine(EAmmoType AmmoType)
     if (IsLocallyControlled())
     {
         bool bPickUp = false;
-        if (ADPlayerController* PC = GetPlayerController())
+        if (ADMPlayerController* PC = GetPlayerController())
         {
-            bPickUp = PC->AddWeaponAmmunition(AmmoType, CDOProjectSettings->GetPickupAmmunitionAmount());
-            UpdateAmmoUI();
+            bPickUp = PC->AddWeaponAmmunition(AmmoType, UDMProjectSettings::Get()->GetPickupAmmunitionAmount());
+            UpdateMagazineUI();
         }
         return bPickUp;
     }
@@ -1514,7 +2070,7 @@ void ADCharacterPlayer::StateSwitchToRelax()
         if (CombatStatusCount == 0)
         {
             GetWorldTimerManager().SetTimer(Handle_CombatStatus, this,
-                &ADCharacterPlayer::SetStateToRelax, CDOProjectSettings->GetIdleSwitchingTime());
+                &ADCharacterPlayer::SetStateToRelax, UDMProjectSettings::Get()->GetIdleSwitchingTime());
         }
     }
 }
@@ -1548,14 +2104,29 @@ void ADCharacterPlayer::SetMouseInputScale(int32 Value)
     BaseLookUpRate = FMath::Min(BaseLookUpRate + Value * 3, MAX_MOUSE_SENSITIVITY);
 }
 
-const FCharacterMontage* ADCharacterPlayer::GetCurrentActionMontage() const
+bool ADCharacterPlayer::IsLocalCharacter() const
 {
-    if (ActiveWeapon)
+    return GetLocalRole() == ROLE_AutonomousProxy || GetNetMode() == NM_Standalone;
+}
+
+bool ADCharacterPlayer::IsNotServerCharacter() const
+{
+    if (GetNetMode() == NM_Standalone)
     {
-        return &ActiveWeapon->CharacterAnim;
+        return true;
     }
 
-    return nullptr;
+    if (GetLocalRole() == ROLE_SimulatedProxy || GetLocalRole() == ROLE_AutonomousProxy)
+    {
+        return true;
+    }
+
+    return false;
+}
+
+FRotator ADCharacterPlayer::GetRepControllerRotation() const
+{
+    return IsLocalCharacter() ? GetControlRotation() : ControllerRotation.Rotation();
 }
 
 void ADCharacterPlayer::SetCameraFieldOfView(float NewFOV) const
@@ -1567,6 +2138,22 @@ void ADCharacterPlayer::CameraAimTransformLerp(float Alpha) const
 {
     TPCamera->SetRelativeRotation(FMath::LerpStable(DefaultCameraRotation, AimedCameraRotation, Alpha));
     TPCameraArm->SocketOffset = FMath::LerpStable(DefaultArmSocketOffset, AimedArmSocketOffset, Alpha);
+}
+
+bool ADCharacterPlayer::IsUnhealthy() const
+{
+    if (CharacterAttributes == nullptr)
+    {
+        return false;
+    }
+
+    // death
+    if (CharacterAttributes->GetHealth() == 0)
+    {
+        return false;
+    }
+    
+    return !FMath::IsNearlyEqual(CharacterAttributes->GetHealth(), CharacterAttributes->GetMaxHealth());
 }
 
 void ADCharacterPlayer::ToggleCrosshairVisible(bool bVisible)
@@ -1583,3 +2170,5 @@ void ADCharacterPlayer::ToggleCrosshairVisible(bool bVisible)
         }
     }
 }
+
+#undef LOCTEXT_NAMESPACE

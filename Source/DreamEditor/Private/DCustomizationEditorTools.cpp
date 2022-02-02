@@ -1,8 +1,5 @@
 // ReSharper disable All
 #include "DCustomizationEditorTools.h"
-
-
-
 #include "BlueprintEditorModule.h"
 #include "BlueprintEditorUtils.h"
 #include "BroadcastReceiverComponent.h"
@@ -11,6 +8,7 @@
 #include "DetailCategoryBuilder.h"
 #include "DetailLayoutBuilder.h"
 #include "DetailWidgetRow.h"
+#include "DMDevelopmentSettings.h"
 #include "IDetailChildrenBuilder.h"
 #include "IPropertyAccessEditor.h"
 #include "IPropertyUtilities.h"
@@ -443,11 +441,21 @@ void FWeaponMeshPreviewCustomizationMenu::LoadMenuContext()
 void FWeaponMeshPreviewCustomizationMenu::AddContextMenuEntries(FMenuBuilder& MenuBuilder) const
 {
 	MenuBuilder.AddMenuEntry(
-        LOCTEXT("MenuLabel", "添加到预览网格体"),
-        LOCTEXT("MenuLabel", "添加到预览网格体"),
+        LOCTEXT("MenuLabel1", "添加到预览网格体(Active)"),
+        LOCTEXT("MenuLabel1Tooltips", "附加到手中"),
         FSlateIcon(),
         FUIAction(
             FExecuteAction::CreateSP(this, &FWeaponMeshPreviewCustomizationMenu::OnExecuteAction),
+            FCanExecuteAction::CreateSP(this, &FWeaponMeshPreviewCustomizationMenu::OnCanExecuteAction)
+        )
+    );
+
+	MenuBuilder.AddMenuEntry(
+        LOCTEXT("MenuLabel2", "添加到预览网格体(Holster)"),
+        LOCTEXT("MenuLabel2Tooltips", "附加到背后"),
+        FSlateIcon(),
+        FUIAction(
+            FExecuteAction::CreateSP(this, &FWeaponMeshPreviewCustomizationMenu::OnExecuteAction2),
             FCanExecuteAction::CreateSP(this, &FWeaponMeshPreviewCustomizationMenu::OnCanExecuteAction)
         )
     );
@@ -457,18 +465,10 @@ void FWeaponMeshPreviewCustomizationMenu::OnExecuteAction() const
 {
 	AShootWeapon* WeaponCDO = SelectedWeaponClass->GetDefaultObject<AShootWeapon>();
 
-	static FString SkeletonAssetPath = TEXT("/Game/Character/BaseCharacter/Mesh/UE4_Mannequin_Skeleton");
-
-	USkeleton* Skeleton = FindObject<USkeleton>(NULL, *SkeletonAssetPath);
-
-	if (Skeleton == nullptr)
+	if (USkeleton* Skeleton = UDMDevelopmentSettings::Get()->GetPreviewTargetSkeletal())
 	{
-		Skeleton = LoadObject<USkeleton>(NULL, *SkeletonAssetPath);
-	}
-	
-	if (Skeleton)
-	{
-		static FName PreviewSocketName(TEXT("Preview"));
+		FName PreviewSocketName = UDMDevelopmentSettings::Get()->GetActivePreviewSocketName();
+		
 		USkeletalMeshSocket* PreviewSocket = Skeleton->FindSocket(PreviewSocketName);
 
 		PreviewSocket->RelativeLocation = WeaponCDO->WeaponSocketOffset.GetLocation();
@@ -483,6 +483,26 @@ void FWeaponMeshPreviewCustomizationMenu::OnExecuteAction() const
 bool FWeaponMeshPreviewCustomizationMenu::OnCanExecuteAction() const
 {
 	return SelectedWeaponClass != nullptr;
+}
+
+void FWeaponMeshPreviewCustomizationMenu::OnExecuteAction2() const
+{
+	AShootWeapon* WeaponCDO = SelectedWeaponClass->GetDefaultObject<AShootWeapon>();
+
+	if (USkeleton* Skeleton = UDMDevelopmentSettings::Get()->GetPreviewTargetSkeletal())
+	{
+		FName PreviewSocketName = UDMDevelopmentSettings::Get()->GetHolsterPreviewSocketName();
+		
+		USkeletalMeshSocket* PreviewSocket = Skeleton->FindSocket(PreviewSocketName);
+
+		PreviewSocket->RelativeLocation = WeaponCDO->WeaponHolsterSocketOffset.GetLocation();
+		PreviewSocket->RelativeRotation = WeaponCDO->WeaponHolsterSocketOffset.Rotator();
+		PreviewSocket->RelativeScale = WeaponCDO->WeaponHolsterSocketOffset.GetScale3D();
+		
+		Skeleton->PreviewAttachedAssetContainer.ClearAllAttachedObjects();
+		Skeleton->PreviewAttachedAssetContainer.AddAttachedObject(WeaponCDO->WeaponMesh->SkeletalMesh, PreviewSocketName);
+		Skeleton->Modify();
+	}
 }
 
 TSharedRef<class FExtender> FWeaponMeshPreviewCustomizationMenu::ProcessMenuContext(const TArray<FAssetData> & NewSelectedAssets)

@@ -54,7 +54,7 @@ void UTalentGrid::RefreshTalents()
 	}
 }
 
-void UTalentGrid::GetLearnedTalents(int64& LearnedTalents, TArray<TSubclassOf<class UDreamGameplayAbility>>& TalentClasses) const
+void UTalentGrid::GetLearnedTalents(int64& LearnedTalents) const
 {
 	int64 Temp = 0;
 	for (UTalentItem* TalentItem : TalentWidgets)
@@ -62,7 +62,6 @@ void UTalentGrid::GetLearnedTalents(int64& LearnedTalents, TArray<TSubclassOf<cl
 		if (TalentItem->TalentInfo.bLearned)
 		{
 			Temp |= 1LL << TalentItem->TalentInfo.TalentIndex;
-			TalentClasses.Add(TalentItem->TalentInfo.TalentClass);
 		}
 	}
 

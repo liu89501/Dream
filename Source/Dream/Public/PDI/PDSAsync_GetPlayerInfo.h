@@ -23,9 +23,9 @@ public:
 	UFUNCTION(BlueprintCallable, meta = (WorldContext = "WorldContextObject", BlueprintInternalUseOnly = "TRUE"), Category=PDI)
 	static UPDSAsync_GetPlayerInfo* PDI_GetPlayerInformation(UObject* WorldContextObject,
 																bool bWeapon,
-																bool bWeaponEquipped,
+																bool bWeaponEquippedOnly,
 																bool bModule,
-																bool bModuleEquipped,
+																bool bModuleEquippedOnly,
 																bool bMaterials,
 																bool bSkin);
 

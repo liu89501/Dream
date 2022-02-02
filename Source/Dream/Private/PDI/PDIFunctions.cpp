@@ -1,10 +1,12 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
-
 #include "PDI/PDIFunctions.h"
+#include "DDropReward.h"
 #include "EngineUtils.h"
 #include "ShootWeapon.h"
 #include "DModuleBase.h"
+#include "DMProjectSettings.h"
+#include "DRewardPool.h"
 #include "PlayerDataInterface.h"
 #include "PlayerDataInterfaceStatic.h"
 #include "GameFramework/PlayerState.h"
@@ -134,4 +136,77 @@ void UPDIFunctions::MakeItemArray(const FItemListHandle& ItemListHandle, TArray<
 FItemHandle UPDIFunctions::MakeSimpleItemHandle(FItemGuidHandle Guid, int32 Num)
 {
 	return FItemHandle(MakeShared<FItemSimple>(Guid.ItemGuid, Num));
+}
+
+void UPDIFunctions::SpawnRewardsAtLocation(APlayerController* PlayerController, UDRewardPool* RewardPool, const FVector& Location)
+{
+	if (PlayerController == nullptr || RewardPool == nullptr)
+	{
+		UE_LOG(LogDream, Error, TEXT("SpawnRewardsAtLocation: Parameters Invalid"));
+		return;
+	}
+	
+	if (PlayerController->GetLocalRole() != ROLE_Authority)
+	{
+		UE_LOG(LogDream, Error, TEXT("SpawnRewardsAtLocation: GetLocalRole() != ROLE_Authority"));
+		return;
+	}
+
+	FItemListHandle DropRewards;
+	FItemListHandle DirectRewards;
+	RewardPool->GenerateRewards(DropRewards, DirectRewards);
+
+	if (DropRewards.IsNotEmpty())
+	{
+		UWorld* World = PlayerController->GetWorld();
+
+		for (const TSharedPtr<FItem>& DropReward : DropRewards)
+		{
+			if (!DropReward.IsValid())
+			{
+				continue;
+			}
+        
+			EItemType::Type ItemType = GetItemType(DropReward->GetItemGuid());
+			TSubclassOf<ADDropReward> DropClass = UDMProjectSettings::GetProjectSettings()->GetRewardDropClass(ItemType);
+
+			if (DropClass)
+			{
+				FTransform Transform(Location);
+
+				ADDropReward* DropRewardActor = World->SpawnActorDeferred<ADDropReward>(DropClass, Transform, PlayerController);
+				DropRewardActor->Initialize(DropReward);
+				DropRewardActor->FinishSpawning(Transform);
+			}
+		}
+	}
+
+	if (DirectRewards.IsNotEmpty())
+	{
+		if (PlayerController->PlayerState)
+		{
+			FPDIStatic::Get()->AddPlayerRewards(FItemListParam(PlayerController->PlayerState->GetPlayerId(), DirectRewards));
+		}
+		else
+		{
+			UE_LOG(LogDream, Error, TEXT("SpawnRewardsAtLocation: PlayerState Invalid"));
+		}
+	}
+}
+
+void UPDIFunctions::GenerateRewardsForAllPlayers(UObject* WorldContextObject, UDRewardPool* RewardPool, const FVector& Location)
+{
+	if (RewardPool == nullptr)
+	{
+		UE_LOG(LogDream, Error, TEXT("GenerateRewardsForAllPlayers: RewardPool == nullptr"));
+		return;
+	}
+
+	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::LogAndReturnNull))
+	{
+		for( FConstPlayerControllerIterator Iterator = World->GetPlayerControllerIterator(); Iterator; ++Iterator )
+		{
+			SpawnRewardsAtLocation(Iterator->Get(), RewardPool, Location);
+		}
+	}
 }

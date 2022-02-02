@@ -1,7 +1,6 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "DAIGeneratorAssociated.h"
-
 #include "BroadcastReceiverComponent.h"
 #include "DAIGeneratorUnit.h"
 #include "DEnemyBase.h"
@@ -14,18 +13,38 @@ ADAIGeneratorAssociated::ADAIGeneratorAssociated()
 	BroadcastReceiver = CreateDefaultSubobject<UBroadcastReceiverComponent>(TEXT("BroadcastReceiver"));
 }
 
-void ADAIGeneratorAssociated::ProcessAIGenerate()
+int32 ADAIGeneratorAssociated::ProcessAIGenerate()
 {
-	ActiveAICounter = AIInstance.Num();
-
 	for (ADAIGeneratorUnit* Unit : AIInstance)
 	{
-		checkf(Unit, TEXT("GeneratorUnit Invalid"));
+		if (!Unit)
+		{
+			UE_LOG(LogDream, Error, TEXT("GeneratorUnit Invalid"));
+			continue;
+		}
 		
 		FActorSpawnParameters SpawnParameters;
 		SpawnParameters.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 		ADEnemyBase* Enemy = GetWorld()->SpawnActor<ADEnemyBase>(Unit->AIClass, Unit->GetActorTransform(), SpawnParameters);
+		
 		Enemy->SetAIGenerator(this);
+
+		Unit->InitializeAI(Enemy);
+	}
+
+	return AIInstance.Num();
+}
+
+void ADAIGeneratorAssociated::Destroyed()
+{
+	Super::Destroyed();
+	
+	for (ADAIGeneratorUnit* Unit : AIInstance)
+	{
+		if (Unit)
+		{
+			Unit->Destroy();
+		}
 	}
 }
 
@@ -48,7 +67,7 @@ void ADAIGeneratorAssociated::PostEditChangeProperty(FPropertyChangedEvent& Prop
 			{
 				if (UWorld* World = GetWorld())
 				{
-					Unit = World->SpawnActor<ADAIGeneratorUnit>(GetActorLocation() + FVector(50.f), FRotator::ZeroRotator);
+					Unit = World->SpawnActor<ADAIGeneratorUnit>(GetActorLocation() + FVector(100.f), FRotator::ZeroRotator);
 				}
 			}
 		}

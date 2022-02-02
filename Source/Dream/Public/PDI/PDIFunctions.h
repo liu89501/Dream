@@ -7,6 +7,8 @@
 #include "Kismet/BlueprintFunctionLibrary.h"
 #include "PDIFunctions.generated.h"
 
+class UDRewardPool;
+
 DECLARE_DYNAMIC_DELEGATE_OneParam(FPDIFOnPropertiesChange, const FPlayerProperties&, Properties);
 
 /**
@@ -63,5 +65,13 @@ public:
 	static float GetConditionPercentage(const FQuestConditionHandle& Handle);
 
 	UFUNCTION(BlueprintCallable, Category="DreamStatics|PDI")
-	static FItemHandle MakeSimpleItemHandle(FItemGuidHandle Guid, int32 Num); 
+	static FItemHandle MakeSimpleItemHandle(FItemGuidHandle Guid, int32 Num);
+
+
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Meta = (WorldContext="WorldContextObject"), Category = "DreamStatics|PDI")
+    static void SpawnRewardsAtLocation(APlayerController* PlayerController, UDRewardPool* RewardPool, const FVector& Location);
+	
+	/** 给当前所有玩家生成奖励 */
+	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Meta = (WorldContext="WorldContextObject"), Category = "DreamStatics|PDI")
+    static void GenerateRewardsForAllPlayers(UObject* WorldContextObject, UDRewardPool* RewardPool, const FVector& Location);
 };

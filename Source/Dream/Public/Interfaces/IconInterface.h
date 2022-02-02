@@ -8,7 +8,7 @@
 #include "IconInterface.generated.h"
 
 // This class does not need to be modified.
-UINTERFACE(Blueprintable, meta = (CannotImplementInterfaceInBlueprint))
+UINTERFACE(Blueprintable)
 class UIconInterface : public UInterface
 {
 	GENERATED_BODY()
@@ -25,4 +25,7 @@ class DREAM_API IIconInterface
 public:
 
 	virtual UIconComponent* GetIconComponent() const = 0;
+
+	UFUNCTION(BlueprintImplementableEvent)
+	UIconComponent* BP_GetIconComponent();
 };

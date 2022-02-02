@@ -75,9 +75,9 @@ void ADreamGameSession::OnLoginCallback(bool bSuccessfully)
 	FString ServerID;
 	if (FParse::Value(FCommandLine::Get(), TEXT("ServerId="), ServerID))
 	{
+		FParse::Value(FCommandLine::Get(), TEXT("MaxPlayers="), MaxPlayers);
+		
 		int32 Port = GetNetDriver()->GetLocalAddr()->GetPort();
-		ADreamGameMode* GameMode = Cast<ADreamGameMode>(GetWorld()->GetAuthGameMode());
-		MaxPlayers = GameMode->GetGameModeMaxPlayers();
 		
 		FLaunchNotifyParam Param;
 		Param.ServerId = ServerID;
