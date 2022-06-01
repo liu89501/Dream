@@ -249,6 +249,7 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 		{
 			int32 PlayerId = Ctrl->PlayerState->GetPlayerId();
 			FPDIStatic::Get()->UpdateTaskState(FQuestActionHandle(PlayerId, MakeShared<FQuestAction_KilledTarget>(PawnType)));
+			// test doc
 		}
 	}
 
