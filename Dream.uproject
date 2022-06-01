@@ -1,6 +1,6 @@
 {
 	"FileVersion": 3,
-	"EngineAssociation": "{38C5BE64-4D80-3A98-D6AE-9E9DA8DBE9FE}",
+	"EngineAssociation": "4.27",
 	"Category": "",
 	"Description": "",
 	"Modules": [
@@ -23,6 +23,10 @@
 	"Plugins": [
 		{
 			"Name": "LiveLink",
+			"Enabled": true
+		},
+		{
+			"Name": "GameplayCameras",
 			"Enabled": true
 		},
 		{
@@ -59,7 +63,7 @@
 		},
 		{
 			"Name": "CustomAnimNode",
-			"Enabled": true,
+			"Enabled": false,
 			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/8901af6d589b40b68d763b44c9ced66c"
 		},
 		{
@@ -92,7 +96,7 @@
 		},
 		{
 			"Name": "ElectronicNodes",
-			"Enabled": true,
+			"Enabled": false,
 			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/5cb2a394d0c04e73891762be4cbd7216"
 		},
 		{

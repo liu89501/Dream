@@ -8,7 +8,7 @@
 #include "GameplayEffectTypes.h"
 #include "GameplayAbilityTypes.h"
 #include "HoldState.h"
-#include "MatchmakingCallProxy.h"
+#include "Matchmaking.h"
 #include "PlayerDataInterface.h"
 #include "PlayerGameData.h"
 #include "Kismet/BlueprintFunctionLibrary.h"

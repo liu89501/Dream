@@ -47,7 +47,8 @@ public class Dream : ModuleRules
             "OnlineSubsystemSteam",
             "AIModule",
             "AssetRegistry",
-            "DreamLoadingScreen"
+            "DreamLoadingScreen",
+            "GameplayCameras"
         });
 
         AddEngineThirdPartyPrivateStaticDependencies(Target, "Steamworks");

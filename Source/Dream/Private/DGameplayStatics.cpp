@@ -698,7 +698,7 @@ void UDGameplayStatics::ClearHoldStateHandle(UObject* WorldContextObject, const 
 
 void UDGameplayStatics::OverrideSystemUserVariableSplineComponent(UNiagaraComponent* NiagaraSystem, const FString& OverrideName, USplineComponent* SplineComponent)
 {
-	if (NiagaraSystem)
+	/*if (NiagaraSystem)
 	{
 		const FNiagaraParameterStore& OverrideParameters = NiagaraSystem->GetOverrideParameters();
 		FNiagaraVariable Variable(FNiagaraTypeDefinition(UNiagaraDataInterfaceSpline::StaticClass()), *OverrideName);
@@ -710,7 +710,7 @@ void UDGameplayStatics::OverrideSystemUserVariableSplineComponent(UNiagaraCompon
 			InterfaceSpline->Source = SplineComponent->GetOwner();
 			InterfaceSpline->SourceComponent = SplineComponent;
 		}
-	}
+	}*/
 }
 
 void UDGameplayStatics::CloseGame()

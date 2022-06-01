@@ -14,7 +14,7 @@
 void ADreamGameSession::RegisterServer()
 {
 	// 注册会话到steam
-	IOnlineSessionPtr SessionInterface = Online::GetSessionInterfaceChecked();
+	/*IOnlineSessionPtr SessionInterface = Online::GetSessionInterfaceChecked();
 
 	FOnlineSessionSettings Settings;
 
@@ -37,7 +37,7 @@ void ADreamGameSession::RegisterServer()
 	Handle_CreateSession = SessionInterface->AddOnCreateSessionCompleteDelegate_Handle(
         FOnCreateSessionCompleteDelegate::CreateUObject(this, &ADreamGameSession::OnCreateSession));
 		
-	SessionInterface->CreateSession(0, SessionName, Settings);
+	SessionInterface->CreateSession(0, SessionName, Settings);*/
 }
 
 void ADreamGameSession::OnCreateSession(FName InSessionName, bool bWasSuccessful)
@@ -88,19 +88,4 @@ void ADreamGameSession::OnLoginCallback(bool bSuccessfully)
 		
 		FPDIStatic::Get()->NotifyBackendServer(Param);
 	}
-	
-	/*
-	else
-	{
-		FDedicatedServerInformation Information;
-		Information.Port = Port;
-		Information.MapName = GetWorld()->GetMapName();
-		Information.MaxPlayers = MaxPlayers;
-		Information.GameModeName = GetWorld()->GetAuthGameMode()->GetName();
-	
-		FPDIStatic::Get()->RegisterServer(Information);
-
-		UE_LOG_ONLINE(Log, TEXT("MapName: %s"), *GetWorld()->GetMapName());
-		UE_LOG_ONLINE(Log, TEXT("GameModeName: %s"), *Information.GameModeName);
-	}*/
 }
