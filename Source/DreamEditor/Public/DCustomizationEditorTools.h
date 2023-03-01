@@ -47,16 +47,39 @@ private:
 
 class FWeaponMeshPreviewCustomizationMenu : public TSharedFromThis<FWeaponMeshPreviewCustomizationMenu>
 {
+	
 public:
 
-	UClass* SelectedWeaponClass;
-
 	void LoadMenuContext();
-
 	TSharedRef<class FExtender> ProcessMenuContext(const TArray<FAssetData> & NewSelectedAssets);
 	void AddContextMenuEntries(class FMenuBuilder& MenuBuilder) const;
 
-	void OnExecuteAction() const;
 	bool OnCanExecuteAction() const;
+	void OnExecuteAction() const;
 	void OnExecuteAction2() const;
+	void OnExecuteAction3() const;
+	void OnExecuteAction4() const;
+
+private:
+
+	TWeakObjectPtr<class AShootWeapon> Weapon;
+};
+
+
+class FItemsTableMenu
+{
+
+public:
+
+	void LoadMenuContext();
+	void AddContextMenuEntries(class FMenuBuilder& MenuBuilder) const;
+	TSharedRef<class FExtender> ProcessMenuContext(const TArray<FAssetData> & NewSelectedAssets);
+
+	void OnExecuteRepair() const;
+	bool OnCanExecuteRepair() const;
+
+private:
+	
+	TWeakObjectPtr<UDataTable> DataTable;
+	
 };

@@ -139,7 +139,10 @@ public:
 
 
 	UFUNCTION(BlueprintPure, Category = "DreamWidget|Settings")
-	static FText GetWeaponTypeName(EWeaponType WeaponType);
+	static const FText& GetWeaponTypeName(EWeaponType WeaponType);
+	
+	UFUNCTION(BlueprintPure, Category = "DreamWidget|Settings")
+	static const FText& GetWeaponFireModeName(EFireMode FireMode);
 
 
 	/** item Handle */
@@ -150,10 +153,35 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="DreamWidget|Item")
 	static const FQualityInfo& GetQualityInfo(EPropsQuality Quality);
+
+	UFUNCTION(BlueprintCallable, meta=(CompactNodeTitle = "ClickSound-Normal", WorldContext="WorldContextObject"), Category="DreamWidget|Sound")
+	static void PlayClickSoundNormal(UObject* WorldContextObject);
+	
+	UFUNCTION(BlueprintCallable, meta=(CompactNodeTitle = "ClickSound-Hold", WorldContext="WorldContextObject"), Category="DreamWidget|Sound")
+	static void PlayClickSoundHold(UObject* WorldContextObject);
+	
+	UFUNCTION(BlueprintCallable, meta=(CompactNodeTitle = "HoverSound-Style1", WorldContext="WorldContextObject"), Category="DreamWidget|Sound")
+	static void PlayHoverSoundStyle1(UObject* WorldContextObject);
+	
+	UFUNCTION(BlueprintCallable, meta=(CompactNodeTitle = "HoverSound-Style2", WorldContext="WorldContextObject"), Category="DreamWidget|Sound")
+	static void PlayHoverSoundStyle2(UObject* WorldContextObject);
+	
+	UFUNCTION(BlueprintCallable, meta=(CompactNodeTitle = "SuccessSound", WorldContext="WorldContextObject"), Category="DreamWidget|Sound")
+	static void PlayUISuccessSound(UObject* WorldContextObject);
+	
+	UFUNCTION(BlueprintCallable, meta=(CompactNodeTitle = "ErrorSound", WorldContext="WorldContextObject"), Category="DreamWidget|Sound")
+	static void PlayUIErrorSound(UObject* WorldContextObject);
+	
+	UFUNCTION(BlueprintCallable, meta=(CompactNodeTitle = "LockedSound", WorldContext="WorldContextObject"), Category="DreamWidget|Sound")
+	static void PlayUILockedSound(UObject* WorldContextObject);
+	
 	
 private:
 	
 	template<class Class>
 	static Class* GetGameInstance(UObject* WorldContextObject);
 };
+
+
+
 

@@ -12,7 +12,7 @@ UPDSAsync_DeliverTask* UPDSAsync_DeliverTask::PDI_DeliverTask(UObject* WorldCont
 
 void UPDSAsync_DeliverTask::OnCompleted(bool bSuccess)
 {
-	FPDIStatic::Get()->RemoveOnDeliverTask(Handle);
+	GDataInterface->RemoveOnDeliverTask(Handle);
 	
 	if (bSuccess)
 	{
@@ -26,6 +26,6 @@ void UPDSAsync_DeliverTask::OnCompleted(bool bSuccess)
 
 void UPDSAsync_DeliverTask::Activate()
 {
-	Handle = FPDIStatic::Get()->AddOnDeliverTask(FOnCompleted::FDelegate::CreateUObject(this, &UPDSAsync_DeliverTask::OnCompleted));
-	FPDIStatic::Get()->DeliverTask(T_TaskId);
+	Handle = GDataInterface->AddOnDeliverTask(FOnCompleted::FDelegate::CreateUObject(this, &UPDSAsync_DeliverTask::OnCompleted));
+	GDataInterface->DeliverTask(T_TaskId);
 }

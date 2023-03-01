@@ -3,14 +3,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
-
-#include "DMAnimType.h"
+#include "DMCharacterType.h"
 #include "UObject/Interface.h"
-#include "DMAnimationInterface.generated.h"
+#include "DMCharacterInterface.generated.h"
 
 // This class does not need to be modified.
 UINTERFACE(Blueprintable)
-class UDMAnimationInterface : public UInterface
+class UDMCharacterInterface : public UInterface
 {
 	GENERATED_BODY()
 };
@@ -18,7 +17,7 @@ class UDMAnimationInterface : public UInterface
 /**
  * 
  */
-class DREAM_API IDMAnimationInterface
+class DREAM_API IDMCharacterInterface
 {
 	GENERATED_BODY()
 

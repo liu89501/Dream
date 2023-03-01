@@ -2,13 +2,12 @@
 
 
 #include "DreamGameInstance.h"
-
-#if WITH_EDITOR
-
+#include "DGameplayStatics.h"
+#include "DreamWidgetStatics.h"
 #include "PlayerDataInterface.h"
 #include "PlayerDataInterfaceStatic.h"
 
-#endif
+#define LOCTEXT_NAMESPACE "DreamGameInstance"
 
 UDreamGameInstance::UDreamGameInstance()
 {
@@ -17,12 +16,15 @@ UDreamGameInstance::UDreamGameInstance()
 void UDreamGameInstance::Init()
 {
 	Super::Init();
+
+	GDataInterface->OnServerConnectionLoseDelegate().BindUObject(this, &UDreamGameInstance::OnPDIConnectionLose);
 	
 #if WITH_EDITOR
 
-	FPDIStatic::Get()->Login();
+	GDataInterface->Login();
 	
 #endif
+	
 }
 
 void UDreamGameInstance::OnStart()
@@ -33,4 +35,17 @@ void UDreamGameInstance::OnStart()
 void UDreamGameInstance::Shutdown()
 {
 	Super::Shutdown();
+
+	GDataInterface->OnServerConnectionLoseDelegate().Unbind();
 }
+
+void UDreamGameInstance::OnPDIConnectionLose()
+{
+	if (!IsRunningDedicatedServer())
+	{
+		UDGameplayStatics::ReturnToHomeWorld(this);
+		UDreamWidgetStatics::PopupDialog(EDialogType::ERROR, LOCTEXT("PDI_Disconnect", "与服务器的连接已断开"), 3.f);
+	}
+}
+
+#undef LOCTEXT_NAMESPACE

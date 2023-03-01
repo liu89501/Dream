@@ -11,13 +11,11 @@
 #include "OnlineSubsystemSessionSettings.h"
 #include "OnlineSubsystemUtils.h"
 
-#define START_WAIT_TIME 30
-
-#define TICK_INTERVAL 1
-
-#define MAX_NUMBER_OF_SEARCH 5
-
 #define GAME_SERVER_KEY TEXT("GameServerAddress")
+
+#define START_WAIT_TIME 30
+#define TICK_INTERVAL 1
+#define SearchTimeout 120
 
 
 void FMatchmakingHandle::Clear()
@@ -57,7 +55,7 @@ void FMatchmakingHandle::Clear()
 		SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(Handle_CreateSessionComplete);
 	}
 
-	FPDIStatic::Get()->RemoveOnSearchServer(Handle_SearchServer);
+	GDataInterface->RemoveOnLaunchServer(Handle_LaunchServer);
 }
 
 UMatchmakingCallProxy* UMatchmakingCallProxy::Matchmaking(
@@ -69,7 +67,6 @@ UMatchmakingCallProxy* UMatchmakingCallProxy::Matchmaking(
 	UMatchmakingCallProxy* Proxy = NewObject<UMatchmakingCallProxy>(PlayerController);
 	Proxy->PlayerController = PlayerController;
 	Proxy->T_LevelInformation = LevelInformation;
-	Proxy->NumberOfSearch = 0;
 	Proxy->WaitingStartTime = 0;
 
 	Proxy->Handle = FMatchmakingHandle(PlayerController->GetWorld());
@@ -93,6 +90,8 @@ void UMatchmakingCallProxy::Activate()
 		SearchSettings->QuerySettings.Set(SETTING_MAPNAME, T_LevelInformation.Map.GetAssetName(), EOnlineComparisonOp::Equals);
 		SearchSettings->QuerySettings.Set(SETTING_GAMEMODE, T_LevelInformation.GameModeClassAlias, EOnlineComparisonOp::Equals);
 
+		LastSearchingTime = GetWorld()->GetTimeSeconds();
+		
 		FindLobby();
 	}
 	else
@@ -110,15 +109,12 @@ void UMatchmakingCallProxy::WaitingTick()
 	{
 		GetWorld()->GetTimerManager().ClearTimer(Handle.Handle_Ticker);
 		
-		FSearchServerParam Param(T_LevelInformation.Map.GetAssetName(),
-            T_LevelInformation.GameModeClassAlias, T_LevelInformation.Map.GetLongPackageName());
+		FLaunchServerParam Param(T_LevelInformation.GameModeClassAlias, T_LevelInformation.Map.GetLongPackageName());
 
-		FPlayerDataInterface* DataInterface = FPDIStatic::Get();
+		Handle.Handle_LaunchServer = GDataInterface->AddOnLaunchServer(
+			FOnLaunchServer::FDelegate::CreateUObject(this, &UMatchmakingCallProxy::OnLaunchServer));
 		
-		Handle.Handle_SearchServer = DataInterface->AddOnSearchServer(
-			FOnSearchServer::FDelegate::CreateUObject(this, &UMatchmakingCallProxy::OnPDISearchServer));
-		
-		DataInterface->SearchDedicatedServer(Param);
+		GDataInterface->LaunchDedicatedServer(Param);
 	}
 	
 	WaitingStartTime += TICK_INTERVAL;
@@ -126,7 +122,7 @@ void UMatchmakingCallProxy::WaitingTick()
 
 void UMatchmakingCallProxy::FindLobby()
 {
-	if (NumberOfSearch == MAX_NUMBER_OF_SEARCH)
+	if (SearchingSeconds > SearchTimeout)
 	{
 		CreateLobby();
 	}
@@ -138,7 +134,9 @@ void UMatchmakingCallProxy::FindLobby()
 		SessionInt->FindSessions(0, SearchSettings.ToSharedRef());
 	}
 
-	NumberOfSearch++;
+	float TimeSeconds = GetWorld()->GetTimeSeconds();
+	SearchingSeconds += LastSearchingTime - TimeSeconds;
+	LastSearchingTime = TimeSeconds;
 }
 
 void UMatchmakingCallProxy::OnSearchCompleted(bool bSuccessful)
@@ -154,7 +152,7 @@ void UMatchmakingCallProxy::OnSearchCompleted(bool bSuccessful)
 	}
 	else
 	{
-		GetWorld()->GetTimerManager().SetTimer(Handle.Handle_Search, this, &UMatchmakingCallProxy::FindLobby, 6.f);
+		GetWorld()->GetTimerManager().SetTimer(Handle.Handle_Search, this, &UMatchmakingCallProxy::FindLobby, 5.f);
 	}
 }
 
@@ -217,9 +215,9 @@ void UMatchmakingCallProxy::OnCreateSessionCompleted(FName SessionName, bool bSu
 	}
 }
 
-void UMatchmakingCallProxy::OnPDISearchServer(const FSearchServerResult& Result, bool bSuccessfully)
+void UMatchmakingCallProxy::OnLaunchServer(const FLaunchServerResult& Result, bool bSuccessfully)
 {
-	FPDIStatic::Get()->RemoveOnSearchServer(Handle.Handle_SearchServer);
+	GDataInterface->RemoveOnLaunchServer(Handle.Handle_LaunchServer);
 	
 	if (bSuccessfully)
 	{
@@ -285,10 +283,9 @@ void UMatchmakingCallProxy::OnServerReadyComplete(FName SessionName, const FOnli
 	FString DedicatedServerAddress;
 	if (Settings.Get(GAME_SERVER_KEY, DedicatedServerAddress))
 	{
-		SessionInt->StartSession(MatchmakingSessionName);
-		
 		OnSuccess.Broadcast();
 
+		SessionInt->StartSession(SessionName);
 		TravelToServer(DedicatedServerAddress);
 	}
 	else
@@ -303,7 +300,8 @@ void UMatchmakingCallProxy::OnServerReadyComplete(FName SessionName, const FOnli
 
 void UMatchmakingCallProxy::TravelToServer(const FString& ServerAddress) const
 {
-	int32 ClientPlayerID = FPDIStatic::Get()->GetClientPlayerID();
+
+	int32 ClientPlayerID = GDataInterface->GetClientPlayerID();
 
 	FString URL = FString::Printf(TEXT("%s?PlayerId=%d"), *ServerAddress, ClientPlayerID);
 

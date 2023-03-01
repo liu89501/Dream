@@ -35,6 +35,7 @@ public class DreamEditor : ModuleRules
             "ContentBrowser",
             "EditorWidgets",
             "Dream",
+            "GraphEditor",
             "UnrealEd",
             "BlueprintGraph",
             "AIModule"

@@ -48,7 +48,7 @@ FString ADreamGameMode::InitNewPlayer(APlayerController* NewPlayerController, co
 
 #if WITH_EDITOR
 
-			NewPlayerController->PlayerState->SetPlayerId(FPDIStatic::Get()->GetClientPlayerID());
+			NewPlayerController->PlayerState->SetPlayerId(GDataInterface->GetClientPlayerID());
 
 #else
 
@@ -60,11 +60,6 @@ FString ADreamGameMode::InitNewPlayer(APlayerController* NewPlayerController, co
 	}
 
 	return Error;
-}
-
-void ADreamGameMode::UpdateActivePlayers() const
-{
-	FPDIStatic::Get()->UpdateActivePlayers(FUpdateServerPlayerParam(CurrentPlayers));
 }
 
 void ADreamGameMode::OnPlayerCharacterDie(APlayerController* PlayerController)
@@ -97,7 +92,7 @@ void ADreamGameMode::PostLogin(APlayerController* NewPlayer)
 
 	if (ADPlayerController* DPlayer = Cast<ADPlayerController>(NewPlayer))
 	{
-		TSharedPtr<FInternetAddr> Addr = FPDIStatic::Get()->GetBackendServerAddr();
+		TSharedPtr<FInternetAddr> Addr = GDataInterface->GetBackendServerAddr();
 
 		uint32 Address;
 		int32 Port;

@@ -4,15 +4,17 @@
 
 #include "CoreMinimal.h"
 #include "GameplayEffect.h"
-#include "DGE_WeaponBaseDamage.generated.h"
+#include "DMEffect_ShootingDamage.generated.h"
 
 /**
  * 
  */
 UCLASS()
-class DREAM_API UDGE_WeaponBaseDamage : public UGameplayEffect
+class DREAM_API UDMEffect_ShootingDamage : public UGameplayEffect
 {
 	GENERATED_BODY()
 
-	UDGE_WeaponBaseDamage();
+public:
+	
+	UDMEffect_ShootingDamage();
 };

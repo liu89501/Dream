@@ -113,8 +113,6 @@ FPreviewWorld* SharedPreviewWorld::AllocPreviewWorld()
 
 	GRefCount.Increment();
 
-	//UE_LOG(LogTemp, Error, TEXT("AllocPreviewWorld %d"), GRefCount.GetValue());
-
 	return GPreviewWorld;
 }
 

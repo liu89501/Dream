@@ -2,6 +2,10 @@
 
 
 #include "DreamWidgetType.h"
+
+
+#include "DMProjectSettings.h"
+#include "DMUpgradeAddition.h"
 #include "DreamWidgetStatics.h"
 
 int64 UWItem::GetItemID() const
@@ -40,12 +44,24 @@ const FPropsInfo& UWItem::GetPropsInfo() const
 	return FEmptyStruct::EmptyPropsInfo;
 }
 
+EPropsQuality UWItem::GetQuality() const
+{
+	TSharedPtr<FItem> Item = GetItem();
+
+	if (Item.IsValid())
+	{
+		return ItemUtils::GetItemQuality(Item->GetItemGuid());
+	}
+
+	return EPropsQuality::Normal;
+}
+
 TEnumAsByte<EItemType::Type> UWItem::GetItemType() const
 {
 	TSharedPtr<FItem> Item = GetItem();
 	if (Item.IsValid())
 	{
-		return ::GetItemType(Item->GetItemGuid());
+		return ItemUtils::GetItemType(Item->GetItemGuid());
 	}
 	return EItemType::INVALID;
 }
@@ -70,6 +86,62 @@ int64 UWItem::NativeGetItemID() const
 const FEquipmentAttributes& UWItemEquipment::GetAttributes() const
 {
 	return ItemEquipment->Attributes;
+}
+
+int32 UWItemEquipment::GetGearLevel() const
+{
+	return ItemEquipment->GearLevel;
+}
+
+void UWItemEquipment::IncreaseLevel()
+{
+	ItemEquipment->GearLevel++;
+}
+
+float UWItemEquipment::GetAttributeMagnitude(FAttributeHandle Attribute) const
+{
+	FFloatProperty* Property = Attribute.AttributeProperty.Get();
+	if (Property && ItemEquipment.IsValid())
+	{
+		return Property->GetPropertyValue_InContainer(&ItemEquipment->Attributes);
+	}
+
+	return 0.f;
+}
+
+void UWItemEquipment::GetGearUpgradeAdditionMagnitude(FAttributeHandle Attribute, float& AttributeMagnitude, float& AdditionMagnitude)
+{
+	AttributeMagnitude = 0.f;
+	AdditionMagnitude = 0.f;
+	
+	if (ItemEquipment.IsValid())
+	{
+		if (FFloatProperty* Property = Attribute.AttributeProperty.Get())
+		{
+			AttributeMagnitude = Property->GetPropertyValue_InContainer(&ItemEquipment->Attributes);
+
+			if (UpgradeGearInfluence && UpgradeGearInfluence->IsInfluence(Attribute) && ItemEquipment->GearLevel > 0)
+			{
+				EPropsQuality Quality = ItemUtils::GetItemQuality(ItemEquipment->GetItemGuid());
+				UDMUpgradeAddition* UpgradeAddition = GSProject->GetUpgradeAddition();
+				float AdditionStrength = UpgradeAddition->GetAdditionStrength(Quality, ItemEquipment->GearLevel);
+				AdditionMagnitude = AttributeMagnitude * AdditionStrength;
+			}
+		}
+	}
+}
+
+void UWItemEquipment::SetItemEquipment(TSharedPtr<FItemEquipment> InItem)
+{
+	ItemEquipment = InItem;
+
+	if (UClass* ItemClass = GetItemClass())
+	{
+		if (IGearInterface* GearInterface = Cast<IGearInterface>(ItemClass->GetDefaultObject()))
+		{
+			UpgradeGearInfluence = GearInterface->GetUpgradeAttributesInfluence();
+		}
+	}
 }
 
 void UTaskViewData::ToggleTaskTracking()

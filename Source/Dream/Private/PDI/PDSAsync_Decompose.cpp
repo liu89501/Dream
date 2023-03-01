@@ -13,7 +13,7 @@ UPDSAsync_Decompose* UPDSAsync_Decompose::PDI_DecomposeItem(UObject* WorldContex
 
 void UPDSAsync_Decompose::OnCompleted(bool bSuccess) 
 {
-	FPDIStatic::Get()->RemoveOnDecomposeItem(Handle);
+	GDataInterface->RemoveOnDecomposeItem(Handle);
 	
 	if (bSuccess)
 	{
@@ -27,7 +27,7 @@ void UPDSAsync_Decompose::OnCompleted(bool bSuccess)
 
 void UPDSAsync_Decompose::Activate()
 {
-	FPlayerDataInterface* Interface = FPDIStatic::Get();
+	FPlayerDataInterface* Interface = GDataInterface;
 	
 	Handle = Interface->AddOnDecomposeItem(FOnCompleted::FDelegate::CreateUObject(this, &UPDSAsync_Decompose::OnCompleted));
 	

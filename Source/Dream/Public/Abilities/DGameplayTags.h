@@ -30,6 +30,11 @@ struct MyCustomizeTags
     /** GameplayExecution中的临时变量标签 */
     FGameplayTag Exec_Temporary_PercentageDmgInc; // 百分比增伤
     FGameplayTag Exec_Temporary_FixedDamage; // 固定伤害
+
+
+    FGameplayTag Ability_Firing;
+    
+    FGameplayTag Event_Firing;
 };
 
 static const MyCustomizeTags& CustomizeTags()

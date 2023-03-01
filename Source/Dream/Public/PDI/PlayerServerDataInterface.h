@@ -33,6 +33,9 @@ DEFINED_SERVICE_INFO(26, void, TReceive_MaterialsChange);
 
 DEFINED_SERVICE_INFO(27, FQueryPlayerParam, TService_PlayerInfo_Server);
 
+DEFINED_SERVICE_INFO(28, int64, TService_UpgradeWeapon);
+DEFINED_SERVICE_INFO(29, int64, TService_UpgradeModule);
+
 
 class FPlayerServerDataInterface : public FPlayerDataInterfaceBase
 {
@@ -57,11 +60,15 @@ public:
 	DEFAULT_SERVICE_IMPLEMENT(UpdateTaskState, TService_UpdateTaskState);
 	DEFAULT_SERVICE_IMPLEMENT(ModifyTrackingState, TService_ModifyTrackingState);
 	DEFAULT_SERVICE_IMPLEMENT(DecomposeItem, TService_Decompose);
+	DEFAULT_SERVICE_IMPLEMENT(UpgradeWeapon, TService_UpgradeWeapon);
+	DEFAULT_SERVICE_IMPLEMENT(UpgradeModule, TService_UpgradeModule);
 	DEFAULT_SERVICE_IMPLEMENT(ServerGetPlayerInfo, TService_PlayerInfo_Server);
+	DEFAULT_SERVICE_IMPLEMENT(NotifyServerLaunched, TService_LaunchedNotify);
+
 
 	virtual const FPlayerProperties& GetCachedProperties() const override;
 
-	virtual const FMaterialsHandle& GetMaterialsHandle() const override;
+	virtual FMaterialsHandle& GetMaterialsHandle() override;
 
 public:
 
@@ -80,7 +87,12 @@ public:
 	void OnReceiveModifyTrackingState(FPacketArchiveReader& Reader);
 	void OnReceivePropertiesChange(FPacketArchiveReader& Reader);
 	void OnReceiveDecomposeItem(FPacketArchiveReader& Reader);
+	void OnReceiveUpgradeGears(FPacketArchiveReader& Reader);
 	void OnReceiveMaterialsChange(FPacketArchiveReader& Reader);
+
+private:
+
+	void UpdateCacheMaterials(const TArray<FPlayerMaterial>& ChangeMaterials);
 
 private:
 
@@ -89,4 +101,6 @@ private:
 	FMaterialsHandle MaterialsHandle;
 	
 };
+
+
 

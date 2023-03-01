@@ -1,11 +1,11 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 
-#include "DGE_WeaponBaseDamage.h"
+#include "DMEffect_ShootingDamage.h"
 #include "DMAttributeSet.h"
 #include "DreamDamageCalculation.h"
 
-UDGE_WeaponBaseDamage::UDGE_WeaponBaseDamage()
+UDMEffect_ShootingDamage::UDMEffect_ShootingDamage()
 {
     FGameplayEffectExecutionDefinition ExecDef;
     ExecDef.CalculationClass = UDreamDamageCalculation::StaticClass();

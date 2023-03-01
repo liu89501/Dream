@@ -3,7 +3,6 @@
 
 #include "DreamGameSession.h"
 #include "OnlineSubsystem.h"
-#include "DreamGameMode.h"
 #include "Online.h"
 #include "OnlineSessionInterface.h"
 #include "OnlineSessionSettings.h"
@@ -35,22 +34,20 @@ void ADreamGameSession::RegisterServer()
 	Settings.NumPublicConnections = MaxPlayers;
 
 	Handle_CreateSession = SessionInterface->AddOnCreateSessionCompleteDelegate_Handle(
-        FOnCreateSessionCompleteDelegate::CreateUObject(this, &ADreamGameSession::OnCreateSession));
+        FOnCreateSessionCompleteDelegate::CreateUObject(this, &ADreamGameSession::OnCreatedSession));
 		
 	SessionInterface->CreateSession(0, SessionName, Settings);
 }
 
-void ADreamGameSession::OnCreateSession(FName InSessionName, bool bWasSuccessful)
+void ADreamGameSession::OnCreatedSession(FName InSessionName, bool bWasSuccessful)
 {
 	IOnlineSessionPtr SessionInterface = Online::GetSessionInterfaceChecked();
 	SessionInterface->ClearOnCreateSessionCompleteDelegate_Handle(Handle_CreateSession);
 	
-	FPlayerDataInterface* DataInterface = FPDIStatic::Get();
-
 	FOnCompleted::FDelegate Delegate;
 	Delegate.BindUObject(this, &ADreamGameSession::OnLoginCallback);
-	Handle_Login = DataInterface->AddOnLogin(Delegate);
-	DataInterface->Login();
+	Handle_Login = GDataInterface->AddOnLogin(Delegate);
+	GDataInterface->Login();
 	
 	if (bWasSuccessful)
 	{
@@ -64,7 +61,7 @@ void ADreamGameSession::OnCreateSession(FName InSessionName, bool bWasSuccessful
 
 void ADreamGameSession::OnLoginCallback(bool bSuccessfully)
 {
-	FPDIStatic::Get()->RemoveOnLogin(Handle_Login);
+	GDataInterface->RemoveOnLogin(Handle_Login);
 	
 	if (!bSuccessfully)
 	{
@@ -84,23 +81,8 @@ void ADreamGameSession::OnLoginCallback(bool bSuccessfully)
 		Param.ListenPort = Port;
 		Param.MaxPlayers = MaxPlayers;
 
-		FParse::Value(FCommandLine::Get(), TEXT("PlayerId="), Param.PlayerId);
+		FParse::Value(FCommandLine::Get(), TEXT("OwningPlayerId="), Param.PlayerId);
 		
-		FPDIStatic::Get()->NotifyBackendServer(Param);
+		GDataInterface->NotifyServerLaunched(Param);
 	}
-	
-	/*
-	else
-	{
-		FDedicatedServerInformation Information;
-		Information.Port = Port;
-		Information.MapName = GetWorld()->GetMapName();
-		Information.MaxPlayers = MaxPlayers;
-		Information.GameModeName = GetWorld()->GetAuthGameMode()->GetName();
-	
-		FPDIStatic::Get()->RegisterServer(Information);
-
-		UE_LOG_ONLINE(Log, TEXT("MapName: %s"), *GetWorld()->GetMapName());
-		UE_LOG_ONLINE(Log, TEXT("GameModeName: %s"), *Information.GameModeName);
-	}*/
 }

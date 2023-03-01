@@ -31,11 +31,6 @@ namespace EItemType
     };
 }
 
-FORCEINLINE EItemType::Type GetItemType(int32 ItemGuid)
-{
-	return static_cast<EItemType::Type>(ItemGuid >> 16 & 0xFFFF);
-}
-
 UENUM(BlueprintType)
 enum class ERewardNotifyMode : uint8
 {
@@ -97,6 +92,8 @@ struct FItemDef : public FTableRowBase
 
 	UPROPERTY(BlueprintReadWrite, EditAnywhere)
 	FPropsInfo ItemBaseInfo;
+
+	UClass* GetItemClass() const;
 };
 
 USTRUCT(BlueprintType)
@@ -167,6 +164,8 @@ struct FEquipmentAttributes
 
 	FEquipmentAttributes& MergeAndSkipPerks(const FEquipmentAttributes& Other);
 
+	bool IsValidNumericalValue(float ErrorTolerance = SMALL_NUMBER) const;
+	
 	/**
 	* 攻击力
 	*/
@@ -221,7 +220,39 @@ struct FEquipmentAttributes
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = Attribute)
 	TArray<int32> Perks;
 
+	bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess);
+
 	friend FArchive& operator<<(FArchive& Ar, FEquipmentAttributes& Attr);
+};
+
+template<>
+struct TStructOpsTypeTraits<FEquipmentAttributes> : TStructOpsTypeTraitsBase2<FEquipmentAttributes>
+{
+	enum
+	{
+        WithNetSerializer = true
+    };
+};
+
+/**
+ * FEquipmentAttributes 属性句柄
+ */
+USTRUCT(BlueprintType)
+struct FAttributeHandle
+{
+	GENERATED_BODY()
+
+public:
+	
+	UPROPERTY(EditAnywhere)
+	TFieldPath<FFloatProperty> AttributeProperty;
+
+public:
+
+	bool operator==(const FAttributeHandle& Other) const;
+	bool operator!=(const FAttributeHandle& Other) const;
+
+	friend uint32 GetTypeHash(const FAttributeHandle& Other);
 };
 
 namespace FEmptyStruct
@@ -230,4 +261,17 @@ namespace FEmptyStruct
 	extern const FEquipmentAttributes EmptyAttributes;
 	extern const FSoftClassPath EmptySoftClassPath;
 	extern const FItemDef EmptyItemDef;
+}
+
+namespace ItemUtils
+{
+	FORCEINLINE EItemType::Type GetItemType(int32 ItemGuid)
+	{
+		return static_cast<EItemType::Type>(ItemGuid >> 20 & 0xFF);
+	}
+
+	FORCEINLINE EPropsQuality GetItemQuality(int32 ItemGuid)
+	{
+		return static_cast<EPropsQuality>(ItemGuid >> 16 & 0xF);
+	}
 }

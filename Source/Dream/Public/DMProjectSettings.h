@@ -18,6 +18,9 @@ class UDMProjectSettingsInstance;
 class USurfaceImpactAsset;
 class UCurveVector;
 class UDMMantleAsset;
+class UDMUISoundSet;
+class UDMUpgradeAddition;
+class UDMRollingAsset;
 
 struct FTalentInfo;
 
@@ -222,13 +225,13 @@ class DREAM_API UDMProjectSettings : public UObject
 public:
 
 	UFUNCTION(BlueprintPure, Category=DreamProjectSettings)
-	FText GetWeaponTypeName(EWeaponType WeaponType) const;
+	const FText& GetWeaponTypeName(EWeaponType WeaponType) const;
 
 	UFUNCTION(BlueprintPure, Category=DreamProjectSettings)
-	FText GetWeaponFireMode(EFireMode FireMode) const;
+	const FText& GetWeaponFireMode(EFireMode FireMode) const;
 
 	UFUNCTION(BlueprintPure, Category=DreamProjectSettings)
-    FText GetItemTypeName(TEnumAsByte<EItemType::Type> ItemType) const;
+    const FText& GetItemTypeName(TEnumAsByte<EItemType::Type> ItemType) const;
 
 	UFUNCTION(BlueprintPure, Category=DreamProjectSettings)
 	const FSoftObjectPath& GetMainUILevel() const;
@@ -349,6 +352,12 @@ private:
 	UPROPERTY(Config, EditAnywhere, Meta = (MetaClass = "DamageWidgetComponent"), Category = ProjectSettings)
 	FSoftClassPath DamageWidgetClass;
 
+	UPROPERTY(Config, EditAnywhere, Meta = (AllowedClasses = "DMUISoundSet"), Category="ProjectSettings")
+	FSoftObjectPath UISoundSetAsset;
+	
+	UPROPERTY(Config, EditAnywhere, Meta = (AllowedClasses = "DMUpgradeAddition"), Category="ProjectSettings")
+	FSoftObjectPath UpgradeAdditionAsset;
+
 	/** 拾取弹药时应该随机恢复的范围 */
 	UPROPERTY(Config, EditAnywhere, Category = ProjectSettings)
 	FRangeRandomFloat PickupAmmunitionAmount;
@@ -362,17 +371,20 @@ private:
 	UPROPERTY(Config, EditAnywhere, Meta = (AllowedClasses = "CurveFloat"), Category="ProjectSettings|Character")
 	FSoftObjectPath RotationRateCurve;
 
-	UPROPERTY(Config, EditAnywhere, Category="ProjectSettings|Mantle")
+	UPROPERTY(Config, EditAnywhere, Category="ProjectSettings|Character")
 	FMantleTraceSettings MantleTraceSettings;
 
-	UPROPERTY(Config, EditAnywhere, Meta = (AllowedClasses = "CurveFloat"), Category="ProjectSettings|Mantle")
+	UPROPERTY(Config, EditAnywhere, Meta = (AllowedClasses = "CurveFloat"), Category="ProjectSettings|Character")
 	FSoftObjectPath MantlePositionCurve;
 	
-	UPROPERTY(Config, EditAnywhere, Meta = (AllowedClasses = "CurveFloat"), Category="ProjectSettings|Mantle")
+	UPROPERTY(Config, EditAnywhere, Meta = (AllowedClasses = "CurveFloat"), Category="ProjectSettings|Character")
 	FSoftObjectPath MantlingRotationCurve;
 	
 	UPROPERTY(Config, EditAnywhere, Meta = (AllowedClasses = "DMMantleAsset"), Category="ProjectSettings|Character")
 	FSoftObjectPath MantleAsset;
+
+	UPROPERTY(Config, EditAnywhere, Meta = (AllowedClasses = "DMRollingAsset"), Category="ProjectSettings|Character")
+	FSoftObjectPath RollingAsset;
 
 private:
 
@@ -391,28 +403,30 @@ public:
 
 	virtual void FinishDestroy() override;
 
-	UClass* GetMasterAnimClass() const;
-	UClass* GetSlaveAnimClass() const;
-	UClass* GetDamageWidgetClass() const;
-	ULevelListAsset* GetLevelListAsset() const;
-	USurfaceImpactAsset* GetSurfaceImpactAsset() const;
+	UClass* GetMasterAnimClass();
+	UClass* GetSlaveAnimClass();
+	UClass* GetDamageWidgetClass();
+	ULevelListAsset* GetLevelListAsset();
+	USurfaceImpactAsset* GetSurfaceImpactAsset();
 	UTalentAsset* GetTalentAsset() const;
-	UDBaseAttributesAsset* GetPlayerBaseAttributes() const;
+	UDBaseAttributesAsset* GetPlayerBaseAttributes();
 	UClass* GetItemClassFromGuid(int32 ItemGuid) const;
-    const struct FSurfaceImpactEffect& GetSurfaceImpactEffect(EPhysicalSurface SurfaceType) const;
+    const struct FSurfaceImpactEffect& GetSurfaceImpactEffect(EPhysicalSurface SurfaceType);
 	const FItemDef& GetItemDefinition(int32 ItemGuid) const;
 	void GetTalents(ETalentCategory Category, int64 Talents, TArray<FTalentInfo>& AllTalents) const;
 	void GetLearnedTalents(ETalentCategory Category, int64 Talents, TArray<FTalentInfo>& LearnedTalents) const;
 	UDataTable* GetItemTable() const;
-	UClass* GetDamageComponentClass() const;
 	FBaseAttributes GetBaseAttributes(int32 Level) const;
-	UCurveFloat* GetRotationRateCurve() const;
-	UCurveVector* GetMovementCurve() const;
-	UCurveFloat* GetMantlePositionCurve() const;
-	UCurveFloat* GetMantlingRotationCurve() const;
-	UDMMantleAsset* GetMantleAsset() const;
+	UCurveFloat* GetRotationRateCurve();
+	UCurveVector* GetMovementCurve();
+	UCurveFloat* GetMantlePositionCurve();
+	UCurveFloat* GetMantlingRotationCurve();
+	UDMMantleAsset* GetMantleAsset();
+	UDMUISoundSet* GetUISoundSet();
+	UDMUpgradeAddition* GetUpgradeAddition();
+	UDMRollingAsset* GetRollingAsset();
 	
-	const struct FMantleInformation& GetMantleInfo(EMantleType MantleType, EOverlayState OverlayState) const;
+	const struct FMantleInformation& GetMantleInfo(EMantleType MantleType, EOverlayState OverlayState);
 
 private:
 
@@ -458,6 +472,15 @@ private:
 	
 	UPROPERTY()
 	UDMMantleAsset* MantleAsset;
+	
+	UPROPERTY()
+	UDMUISoundSet* UISoundSet;
+	
+	UPROPERTY()
+	UDMUpgradeAddition* UpgradeAddition;
+	
+	UPROPERTY()
+	UDMRollingAsset* RollingAsset;
 
 
 	friend class UDMProjectSettings;

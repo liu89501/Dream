@@ -14,13 +14,13 @@ UPDSAsync_GetTask* UPDSAsync_GetTask::PDI_GetTask(UObject* WorldContextObject, i
 
 void UPDSAsync_GetTask::Activate()
 {
-	Handle = FPDIStatic::Get()->AddOnGetTasks(FOnGetTasks::FDelegate::CreateUObject(this, &UPDSAsync_GetTask::OnCompleted));
-	FPDIStatic::Get()->GetTasks(FSearchTaskParam(T_Page, T_Condition, T_TaskGroupId));
+	Handle = GDataInterface->AddOnGetTasks(FOnGetTasks::FDelegate::CreateUObject(this, &UPDSAsync_GetTask::OnCompleted));
+	GDataInterface->GetTasks(FSearchTaskParam(T_Page, T_Condition, T_TaskGroupId));
 }
 
 void UPDSAsync_GetTask::OnCompleted(const FSearchTaskResult& Result, bool bSuccess)
 {
-	FPDIStatic::Get()->RemoveOnGetTasks(Handle);
+	GDataInterface->RemoveOnGetTasks(Handle);
 	if (bSuccess)
 	{
 		OnSuccess.Broadcast(Result);

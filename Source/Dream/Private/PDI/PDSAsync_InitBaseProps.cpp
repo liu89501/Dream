@@ -14,13 +14,13 @@ UPDSAsync_InitBaseProps* UPDSAsync_InitBaseProps::PDI_InitBaseProps(UObject* Wor
 
 void UPDSAsync_InitBaseProps::Activate()
 {
-	Handle = FPDIStatic::Get()->AddOnGetPlayerInfo(FOnGetPlayerInfo::FDelegate::CreateUObject(this, &UPDSAsync_InitBaseProps::OnCompleted));
-	//FPDIStatic::Get()->GetPlayerInfo(Query_Cond_Gears);
+	Handle = GDataInterface->AddOnGetPlayerInfo(FOnGetPlayerInfo::FDelegate::CreateUObject(this, &UPDSAsync_InitBaseProps::OnCompleted));
+	//GDataInterface->GetPlayerInfo(Query_Cond_Gears);
 }
 
 void UPDSAsync_InitBaseProps::OnCompleted(const FPlayerInfo& PlayerInfo, bool bSuccess)
 {
-	FPlayerDataInterface* DataInterface = FPDIStatic::Get();
+	FPlayerDataInterface* DataInterface = GDataInterface;
 	DataInterface->RemoveOnGetPlayerInfo(Handle);
 	
 	if (bSuccess)

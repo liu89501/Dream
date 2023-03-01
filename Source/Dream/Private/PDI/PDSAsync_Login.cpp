@@ -11,13 +11,13 @@ UPDSAsync_Login* UPDSAsync_Login::PDI_Login(UObject* WorldContextObject)
 
 void UPDSAsync_Login::Activate()
 {
-	Handle = FPDIStatic::Get()->AddOnLogin(FOnCompleted::FDelegate::CreateUObject(this, &UPDSAsync_Login::OnCompleted));
-	FPDIStatic::Get()->Login();
+	Handle = GDataInterface->AddOnLogin(FOnCompleted::FDelegate::CreateUObject(this, &UPDSAsync_Login::OnCompleted));
+	GDataInterface->Login();
 }
 
 void UPDSAsync_Login::OnCompleted(bool bSuccess)
 {
-	FPDIStatic::Get()->RemoveOnLogin(Handle);
+	GDataInterface->RemoveOnLogin(Handle);
 	if (bSuccess)
 	{
 		OnSuccess.Broadcast();

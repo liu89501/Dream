@@ -5,7 +5,6 @@
 #include "PDI/PlayerDataInterfaceType.h"
 #include "DEquipmentPerkPool.h"
 #include "DGameplayStatics.h"
-#include "DreamGameInstance.h"
 
 #define LOCTEXT_NAMESPACE "PlayerDataType"
 
@@ -198,6 +197,7 @@ void FItemEquipment::Serialize(FArchive& Ar)
 	FItem::Serialize(Ar);
 
 	Ar << Attributes;
+	Ar << GearLevel;
 }
 
 void FItemSimple::Serialize(FArchive& Ar)
@@ -214,7 +214,7 @@ TSharedPtr<FItem> FItemHelper::Decode(FArchive& Ar)
 
 	TSharedPtr<FItem> Item;
 
-	EItemType::Type ItemType = GetItemType(ItemGuid);
+	EItemType::Type ItemType = ItemUtils::GetItemType(ItemGuid);
 
 	switch (ItemType)
 	{
@@ -235,7 +235,7 @@ TSharedPtr<FItem> FItemHelper::Decode(FArchive& Ar)
 
 TSharedPtr<FItem> UItemDataEquipment::MakeItemStruct()
 {
-	return MakeShared<FItemEquipment>(GuidHandle.ItemGuid, Attributes);
+	return MakeShared<FItemEquipment>(GuidHandle.ItemGuid, Level,Attributes);
 }
 
 TSharedPtr<FItem> UItemDataEquipment_Random::MakeItemStruct()
@@ -244,7 +244,7 @@ TSharedPtr<FItem> UItemDataEquipment_Random::MakeItemStruct()
 	{
 		FEquipmentAttributes Attributes;
 		AttrPool->GenerateAttributes(Attributes);
-		return MakeShared<FItemEquipment>(GuidHandle.ItemGuid, Attributes);
+		return MakeShared<FItemEquipment>(GuidHandle.ItemGuid, LevelRange.GetRandomInt(), Attributes);
 	}
 	
 	return nullptr;
@@ -255,7 +255,12 @@ TSharedPtr<FItem> UItemDataNumericalValue::MakeItemStruct()
 	return MakeShared<FItemSimple>(GuidHandle.ItemGuid, Value);
 }
 
-FString FSearchServerResult::GetConnectURL(int32 PlayerID) const
+TSharedPtr<FItem> UItemDataNumericalValue_Random::MakeItemStruct()
+{
+	return MakeShared<FItemSimple>(GuidHandle.ItemGuid, RangeValue.GetRandomInt());
+}
+
+FString FLaunchServerResult::GetConnectURL(int32 PlayerID) const
 {
 	return FString::Printf(TEXT("%s?PlayerId=%d"), *ServerAddress, PlayerID);
 }

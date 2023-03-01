@@ -10,8 +10,14 @@ class DREAM_API AShootWeapon_Instant : public AShootWeapon
 
 public:
 
+	AShootWeapon_Instant();
+	
+
 	UPROPERTY(EditAnywhere, Category = "Weapon|VFX")
 	FWeaponTrailVFX TrailVfx;
+
+	UPROPERTY(EditAnywhere, Category = "Weapon|VFX")
+	FVector DecalSize;
 	
 public:
 
@@ -19,5 +25,7 @@ public:
 	
 protected:
 
-	virtual void HandleSpawnAmmo(const FHitResult& HitResult) override;
+	virtual void HandleSpawnProjectile(const FHitResult& HitResult) override;
+
+	virtual void GetActualProjectileHitResult(const FHitResult& ViewHitResult, FHitResult& ActualHitResult) const override;
 };

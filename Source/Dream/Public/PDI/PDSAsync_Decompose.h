@@ -34,7 +34,7 @@ public:
 private:
 
 	int64 T_ItemId;
-	int64 T_ItemGuid;
+	int32 T_ItemGuid;
 
 	FDelegateHandle Handle;
 };

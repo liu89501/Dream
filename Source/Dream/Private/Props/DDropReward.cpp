@@ -45,7 +45,7 @@ void ADDropReward::ServerPickupReward_Implementation()
 {
 	if (Item.IsValid() && OwnerPlayerId > 0)
 	{
-		FPDIStatic::Get()->AddPlayerRewards(FItemListParam(OwnerPlayerId, Item));
+		GDataInterface->AddPlayerRewards(FItemListParam(OwnerPlayerId, Item));
 	}
 
 	Destroy();

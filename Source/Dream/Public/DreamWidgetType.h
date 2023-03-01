@@ -3,10 +3,10 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "PDIFunctions.h"
 #include "PlayerDataInterfaceType.h"
 #include "DreamWidgetType.generated.h"
 
+class UDMUpgradeGearInfluence;
 
 UENUM(BlueprintType)
 enum class EInteractiveType : uint8
@@ -33,6 +33,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category=ViewData)
     const FPropsInfo& GetPropsInfo() const;
+
+	UFUNCTION(BlueprintCallable, Category=ViewData)
+	EPropsQuality GetQuality() const;
 
 	UFUNCTION(BlueprintCallable, Category=ViewData)
     TEnumAsByte<EItemType::Type> GetItemType() const;
@@ -92,6 +95,18 @@ public:
 	UFUNCTION(BlueprintCallable, Category=ViewData)
 	const FEquipmentAttributes& GetAttributes() const;
 
+	UFUNCTION(BlueprintCallable, Category=ViewData)
+	int32 GetGearLevel() const;
+
+	UFUNCTION(BlueprintCallable, Category=ViewData)
+	void IncreaseLevel();
+
+	UFUNCTION(BlueprintCallable, Category=ViewData)
+	float GetAttributeMagnitude(FAttributeHandle Attribute) const;
+
+	UFUNCTION(BlueprintPure, Category=ViewData)
+	void GetGearUpgradeAdditionMagnitude(FAttributeHandle Attribute, float& AttributeMagnitude, float& AdditionMagnitude);
+
 	virtual TSharedPtr<FItem> GetItem() const override
 	{
 		return ItemEquipment;
@@ -102,10 +117,7 @@ public:
 		return EquipmentId;
 	}
 
-	void SetItemEquipment(TSharedPtr<FItemEquipment> InItem)
-	{
-		ItemEquipment = InItem;
-	}
+	void SetItemEquipment(TSharedPtr<FItemEquipment> InItem);
 
 public:
 
@@ -113,6 +125,9 @@ public:
 	int64 EquipmentId;
 
 private:
+
+	UPROPERTY()
+	UDMUpgradeGearInfluence* UpgradeGearInfluence;
 
 	TSharedPtr<FItemEquipment> ItemEquipment;
 };

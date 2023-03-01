@@ -34,7 +34,7 @@ public:
 
 private:
 
-	void OnPDISearchServer(const struct FSearchServerResult& Result, bool bSuccessfully);
+	void OnLaunchServer(const struct FLaunchServerResult& Result, bool bSuccessfully);
 	
 	void OnCreateSession(FName SessionName, bool bSuccessfully);
 

@@ -3,12 +3,14 @@
 #pragma once
 
 #include "CoreMinimal.h"
+
+#include "DMUpgradeGearInfluence.h"
 #include "UObject/Interface.h"
-#include "PreviewInterface.generated.h"
+#include "GearInterface.generated.h"
 
 // This class does not need to be modified.
 UINTERFACE(meta=(CannotImplementInterfaceInBlueprint))
-class UPreviewInterface : public UInterface
+class UGearInterface : public UInterface
 {
 	GENERATED_BODY()
 };
@@ -16,11 +18,13 @@ class UPreviewInterface : public UInterface
 /**
  * 
  */
-class DREAM_API IPreviewInterface
+class DREAM_API IGearInterface
 {
 	GENERATED_BODY()
 
 public:
 
 	virtual FTransform GetPreviewRelativeTransform() const;
+
+	virtual UDMUpgradeGearInfluence* GetUpgradeAttributesInfluence() const;
 };

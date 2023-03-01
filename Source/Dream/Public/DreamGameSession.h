@@ -20,7 +20,7 @@ public:
 
 	void OnLoginCallback(bool bSuccessfully);
 
-	void OnCreateSession(FName InSessionName, bool bWasSuccessful);
+	void OnCreatedSession(FName InSessionName, bool bWasSuccessful);
 
 private:
 

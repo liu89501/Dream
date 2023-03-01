@@ -8,6 +8,7 @@ public class DreamTarget : TargetRules
 	{
 		Type = TargetType.Game;
 		bUsesSteam = true;
+		bWithPushModel = true;
 		ExtraModuleNames.AddRange(new[] { "Dream", "DreamLoadingScreen" });
 	}
 

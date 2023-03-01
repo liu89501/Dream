@@ -13,13 +13,13 @@ UPDSAsync_GetTalents* UPDSAsync_GetTalents::PDI_GetTalents(UObject* WorldContext
 
 void UPDSAsync_GetTalents::Activate()
 {
-	Handle = FPDIStatic::Get()->AddOnGetTalents(FOnGetTalents::FDelegate::CreateUObject(this, &UPDSAsync_GetTalents::OnCompleted));
-	FPDIStatic::Get()->GetTalents(T_Category);
+	Handle = GDataInterface->AddOnGetTalents(FOnGetTalents::FDelegate::CreateUObject(this, &UPDSAsync_GetTalents::OnCompleted));
+	GDataInterface->GetTalents(T_Category);
 }
 
 void UPDSAsync_GetTalents::OnCompleted(int64 Talents, bool bSuccess)
 {
-	FPDIStatic::Get()->RemoveOnGetTalents(Handle);
+	GDataInterface->RemoveOnGetTalents(Handle);
 
 	TArray<FTalentInfo> TalentInfos;
 	

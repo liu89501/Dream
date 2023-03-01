@@ -86,16 +86,11 @@ void ADEnemyBase::HealthChanged(const FOnAttributeChangeData& AttrData)
 				GetWorld()->SpawnActor<ADDropMagazine>(MagazineDropClass, FTransform(GetActorLocation()));
 			}
 		}
-
-		GetWorldTimerManager().ClearTimer(Handle_ShowUI);
-		HealthUI->DestroyComponent();
 	}
-	else
-	{
-		HealthUI->SetVisibility(true);
-		GetWorldTimerManager().SetTimerForNextTick(this, &ADEnemyBase::UpdateHealthUI);
-		GetWorldTimerManager().SetTimer(Handle_ShowUI, this, &ADEnemyBase::HiddenHealthUI, HealthUIShowSecond);
-	}
+	
+	HealthUI->SetVisibility(true);
+	GetWorldTimerManager().SetTimerForNextTick(this, &ADEnemyBase::UpdateHealthUI);
+	GetWorldTimerManager().SetTimer(Handle_ShowUI, this, &ADEnemyBase::HiddenHealthUI, HealthUIShowSecond);
 }
 
 AAIController* ADEnemyBase::GetAIController() const
@@ -124,7 +119,7 @@ FRotator ADEnemyBase::GetReplicationControllerRotation() const
 
 void ADEnemyBase::HiddenHealthUI()
 {
-	if (HealthUI)
+	if (HealthUI && !IsPendingKillPending())
 	{
 		HealthUI->SetVisibility(false);
 	}
@@ -157,7 +152,7 @@ void ADEnemyBase::BeginPlay()
 			ActivateBehaviorTree();
 		}
 
-		AIPerception->OnTargetPerceptionUpdated.AddDynamic(this, &ADEnemyBase::OnTargetPerceptionUpdated0);
+		AIPerception->OnTargetPerceptionUpdated.AddDynamic(this, &ADEnemyBase::OnTargetPerceptionUpdated);
 
 		for (TSubclassOf<UGameplayAbility> OwningAbility : OwningAbilities)
 		{
@@ -180,6 +175,11 @@ void ADEnemyBase::BeginPlay()
 void ADEnemyBase::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
 	Super::EndPlay(EndPlayReason);
+
+	if (Handle_ShowUI.IsValid())
+	{
+		GetWorldTimerManager().ClearTimer(Handle_ShowUI);
+	}
 }
 
 void ADEnemyBase::HandleDamage(const float DamageDone, const FGameplayEffectContextHandle& Handle)
@@ -248,7 +248,7 @@ void ADEnemyBase::OnDeath(const AActor* Causer)
 		if (ADMPlayerController* Ctrl = Player->GetPlayerController())
 		{
 			int32 PlayerId = Ctrl->PlayerState->GetPlayerId();
-			FPDIStatic::Get()->UpdateTaskState(FQuestActionHandle(PlayerId, MakeShared<FQuestAction_KilledTarget>(PawnType)));
+			GDataInterface->UpdateTaskState(FQuestActionHandle(PlayerId, MakeShared<FQuestAction_KilledTarget>(PawnType)));
 		}
 	}
 
@@ -266,12 +266,14 @@ void ADEnemyBase::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifet
 	DOREPLIFETIME(ADEnemyBase, ReplicatedCtrlRotation);
 }
 
-void ADEnemyBase::ActivateHostile(ADCharacterBase* Hostile, bool bTriggerTeamStimulus)
+void ADEnemyBase::ActivateHostile(AActor* Hostile, bool bTriggerTeamStimulus)
 {
 	if (!bUseControllerRotationYaw)
 	{
 		AIController->SetFocus(Hostile);
 	}
+
+	FocusHostile = Hostile;
 
 	if (bTriggerTeamStimulus)
 	{
@@ -280,13 +282,9 @@ void ADEnemyBase::ActivateHostile(ADCharacterBase* Hostile, bool bTriggerTeamSti
 		PerceptionSystem->OnEvent(TeamStimulusEvent);
 	}
 
-	UBlackboardComponent* Blackboard = AIController->GetBlackboardComponent();
-	Blackboard->SetValueAsObject(BlackboardName_HostileTarget, Hostile);
-
-	FCharacterDeathSignature& Delegate = Hostile->GetCharacterDeathDelegate();
-	if (!Delegate.IsBoundToObject(this))
+	if (UBlackboardComponent* Blackboard = AIController->GetBlackboardComponent())
 	{
-		Delegate.AddUObject(this, &ADEnemyBase::HostileTargetDestroy);
+		Blackboard->SetValueAsObject(BlackboardName_HostileTarget, Hostile);
 	}
 }
 
@@ -315,15 +313,26 @@ void ADEnemyBase::LostAllHostileTarget()
 	GetCharacterMovement()->MaxWalkSpeed = GetClass()->GetDefaultObject<ADEnemyBase>()->GetCharacterMovement()->MaxWalkSpeed;
 }
 
-void ADEnemyBase::OnTargetPerceptionUpdated(ADCharacterBase* StimulusPawn, FAIStimulus Stimulus)
+void ADEnemyBase::OnTargetPerceptionUpdated(AActor* StimulusActor, FAIStimulus Stimulus)
 {
+	if (StimulusActor == nullptr)
+	{
+		DREAM_NLOG(Warning, TEXT("OnTargetPerceptionUpdated -> Actor Invalid"));
+		return;
+	}
+
+	if (StimulusActor->ActorHasTag(DMActorTagName::Death))
+	{
+		return;
+	}
+	
 	TSubclassOf<UAISense> SenseClass = UAIPerceptionSystem::GetSenseClassForStimulus(this, Stimulus);
 
 	if (SenseClass->IsChildOf<UAISense_Damage>())
 	{
 		if (Stimulus.WasSuccessfullySensed())
 		{
-			ActivateHostile(StimulusPawn);
+			ActivateHostile(StimulusActor);
 		}
 		else
 		{
@@ -335,18 +344,21 @@ void ADEnemyBase::OnTargetPerceptionUpdated(ADCharacterBase* StimulusPawn, FAISt
 	{
 		if (Stimulus.WasSuccessfullySensed())
 		{
-			ActivateHostile(StimulusPawn);
+			ActivateHostile(StimulusActor);
 		}
 	}
 	else if (SenseClass->IsChildOf<UAISense_Team>())
 	{
 		if (Stimulus.WasSuccessfullySensed())
 		{
-			AActor* FocusEnemy = Cast<AActor>(AIController->GetBlackboardComponent()->GetValueAsObject(BlackboardName_HostileTarget));
-
-			if (FocusEnemy == nullptr || FocusEnemy->IsPendingKill())
+			if (UBlackboardComponent* Blackboard = AIController->GetBlackboardComponent())
 			{
-				ActivateHostile(StimulusPawn, false);
+				AActor* FocusEnemy = Cast<AActor>(Blackboard->GetValueAsObject(BlackboardName_HostileTarget));
+
+				if (FocusEnemy == nullptr || FocusEnemy->IsPendingKill())
+				{
+					ActivateHostile(StimulusActor, false);
+				}
 			}
 		}
 	}
@@ -384,30 +396,14 @@ void ADEnemyBase::Tick(float DeltaSeconds)
 			}
 		}
 	}
-}
 
-void ADEnemyBase::HostileTargetDestroy(ADCharacterBase* DestroyedActor)
-{
-	AIPerception->ForgetActor(DestroyedActor);
-	RefreshActiveHostile();
-}
-
-void ADEnemyBase::OnTargetPerceptionUpdated0(AActor* Actor, FAIStimulus Stimulus)
-{
-	if (Actor == nullptr)
+	if (GetLocalRole() == ROLE_Authority)
 	{
-		DREAM_NLOG(Warning, TEXT("OnTargetPerceptionUpdated0 -> Actor Invalid"));
-		return;
-	}
-
-	if (ADCharacterBase* StimulusPawn = Cast<ADCharacterBase>(Actor->GetInstigator()))
-	{
-		if (StimulusPawn->IsDeath())
+		if (FocusHostile && (FocusHostile->IsPendingKillPending() || FocusHostile->ActorHasTag(DMActorTagName::Death)))
 		{
-			// 死亡的敌人不用走后续逻辑
-			return;
+			AIPerception->ForgetActor(FocusHostile);
+			RefreshActiveHostile();
 		}
-
-		OnTargetPerceptionUpdated(StimulusPawn, Stimulus);
 	}
 }
+

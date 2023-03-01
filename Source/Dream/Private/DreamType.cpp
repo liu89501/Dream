@@ -5,7 +5,7 @@
 
 DEFINE_LOG_CATEGORY(LogDream)
 
-const FName DreamActorTagName::Death = TEXT("Death");
+const FName DMActorTagName::Death = TEXT("Death");
 
 uint32 IPTools::IPV4StringToUint32(const FString& IpString)
 {
@@ -38,4 +38,10 @@ float FRangeRandomFloat::GetRandomFloat() const
 {
 	FRandomStream Stream(FMath::Rand());
 	return Stream.FRandRange(Min, Max);
+}
+
+int32 FRangeRandomInt::GetRandomInt() const
+{
+	FRandomStream Stream(FMath::Rand());
+	return Stream.RandRange(Min, Max);
 }

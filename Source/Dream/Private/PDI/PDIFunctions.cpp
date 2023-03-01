@@ -6,19 +6,19 @@
 #include "ShootWeapon.h"
 #include "DModuleBase.h"
 #include "DMProjectSettings.h"
-#include "DRewardPool.h"
 #include "PlayerDataInterface.h"
 #include "PlayerDataInterfaceStatic.h"
+#include "Asset/DRewardPool.h"
 #include "GameFramework/PlayerState.h"
 
 const FPlayerProperties& UPDIFunctions::GetCachedPlayerProperties()
 {
-	return FPDIStatic::Get()->GetCachedProperties();
+	return GDataInterface->GetCachedProperties();
 }
 
 int32 UPDIFunctions::GetPlayerMaterialNum(int32 ItemGuid)
 {
-	const FMaterialsHandle& MaterialsHandle = FPDIStatic::Get()->GetMaterialsHandle();
+	const FMaterialsHandle& MaterialsHandle = GDataInterface->GetMaterialsHandle();
 	if (MaterialsHandle.IsValid())
 	{
 		if (int32* Num = MaterialsHandle->Find(ItemGuid))
@@ -30,12 +30,59 @@ int32 UPDIFunctions::GetPlayerMaterialNum(int32 ItemGuid)
 	return 0;
 }
 
+/*void UPDIFunctions::ConsumeMaterial(const TArray<FAcquisitionCost>& Costs)
+{
+	FMaterialsHandle& MaterialsHandle = GDataInterface->GetMaterialsHandle();
+
+	for (const FAcquisitionCost& Cost : Costs)
+	{
+		int& MaterialNum = MaterialsHandle->FindOrAdd(Cost.ItemGuid);
+		MaterialNum = FMath::Max(0, MaterialNum - Cost.CostAmount);
+	}
+}
+void UPDIFunctions::ConsumeMaterialFromHandle(const FCostsHandle& Handle)
+{
+	if (Handle.Costs.IsValid())
+	{
+		ConsumeMaterial(*Handle.Costs);
+	}
+}*/
+
+bool UPDIFunctions::CheckMaterials(const TArray<FAcquisitionCost>& Costs)
+{
+	bool bResult = true;
+	
+	FMaterialsHandle& MaterialsHandle = GDataInterface->GetMaterialsHandle();
+	for (const FAcquisitionCost& Cost : Costs)
+	{
+		int* Num = MaterialsHandle->Find(Cost.ItemGuid);
+		
+		if (Num == nullptr || *Num < Cost.CostAmount)
+		{
+			bResult = false;
+			break;
+		}
+	}
+
+	return bResult;
+}
+
+bool UPDIFunctions::CheckMaterialsFromHandle(const FCostsHandle& Handle)
+{
+	if (Handle.Costs.IsValid())
+	{
+		return CheckMaterials(*Handle.Costs);
+	}
+
+	return false;
+}
+
 void UPDIFunctions::SendUpdateTaskCondForEvent(APlayerController* PlayerCtrl, FName EventName)
 {
 	if (PlayerCtrl && PlayerCtrl->PlayerState)
 	{
 		TSharedRef<FQuestAction_Event> ActionEvent = MakeShared<FQuestAction_Event>(EventName);
-		FPDIStatic::Get()->UpdateTaskState(FQuestActionHandle(PlayerCtrl->PlayerState->GetPlayerId(), ActionEvent));
+		GDataInterface->UpdateTaskState(FQuestActionHandle(PlayerCtrl->PlayerState->GetPlayerId(), ActionEvent));
 	}
 }
 
@@ -55,12 +102,12 @@ void UPDIFunctions::SendUpdateTaskCondForEventToAll(UObject* WorldContextObject,
 
 void UPDIFunctions::BindPropertiesChangeDelegate(FPDIFOnPropertiesChange Delegate, FMulticastDelegateHandle& Handle)
 {
-	Handle.Handle = FPDIStatic::Get()->GetPlayerDataDelegate().OnPropertiesChange.AddUFunction(Delegate.GetUObject(), Delegate.GetFunctionName());
+	Handle.Handle = GDataInterface->GetPlayerDataDelegate().OnPropertiesChange.AddUFunction(Delegate.GetUObject(), Delegate.GetFunctionName());
 }
 
 void UPDIFunctions::RemovePropertiesDelegateHandle(const FMulticastDelegateHandle& MulticastDelegateHandle)
 {
-	FPDIStatic::Get()->GetPlayerDataDelegate().OnPropertiesChange.Remove(MulticastDelegateHandle.Handle);
+	GDataInterface->GetPlayerDataDelegate().OnPropertiesChange.Remove(MulticastDelegateHandle.Handle);
 }
 
 void UPDIFunctions::GroupModules(const TArray<FPlayerModule>& Modules, TMap<EModuleCategory, FPlayerModuleList>& GroupModules)
@@ -167,7 +214,7 @@ void UPDIFunctions::SpawnRewardsAtLocation(APlayerController* PlayerController, 
 				continue;
 			}
         
-			EItemType::Type ItemType = GetItemType(DropReward->GetItemGuid());
+			EItemType::Type ItemType = ItemUtils::GetItemType(DropReward->GetItemGuid());
 			TSubclassOf<ADDropReward> DropClass = UDMProjectSettings::GetProjectSettings()->GetRewardDropClass(ItemType);
 
 			if (DropClass)
@@ -185,7 +232,7 @@ void UPDIFunctions::SpawnRewardsAtLocation(APlayerController* PlayerController, 
 	{
 		if (PlayerController->PlayerState)
 		{
-			FPDIStatic::Get()->AddPlayerRewards(FItemListParam(PlayerController->PlayerState->GetPlayerId(), DirectRewards));
+			GDataInterface->AddPlayerRewards(FItemListParam(PlayerController->PlayerState->GetPlayerId(), DirectRewards));
 		}
 		else
 		{

@@ -5,6 +5,9 @@
 #include "DamageWidgetComponent.h"
 #include "DBaseAttributesAsset.h"
 #include "DMMantleAsset.h"
+#include "DMRollingAsset.h"
+#include "DMUISoundSet.h"
+#include "DMUpgradeAddition.h"
 #include "GameMapsSettings.h"
 #include "PlayerDataInterfaceType.h"
 #include "SurfaceImpactAsset.h"
@@ -32,9 +35,22 @@
 		Assign = nullptr; \
 	}
 
+#define Lazy_Load_Class(c, sc, v) \
+	if (v == nullptr) \
+	{ \
+		DM_LOAD_CLASS(c, UDMProjectSettings::Get()->sc, v) \
+	}
+
+#define Lazy_Load_Object(c, sc, v) \
+	if (v == nullptr) \
+	{ \
+		DM_LOAD_OBJECT(c, UDMProjectSettings::Get()->sc, v) \
+	}
+
 FSurfaceImpactEffect InvalidImpactEffect = FSurfaceImpactEffect();
 FQualityInfo InvalidQualityInfo = FQualityInfo();
 FItemTypeSettingsInfo InvalidItemTypeInfo = FItemTypeSettingsInfo(NAME_None);
+FText TEXT_None = FText::FromName(NAME_None);
 
 DREAM_API UDMProjectSettingsInstance* GSProject = nullptr;
 
@@ -45,7 +61,7 @@ UDMProjectSettings::UDMProjectSettings()
 	
 }
 
-FText UDMProjectSettings::GetWeaponTypeName(EWeaponType WeaponType) const
+const FText& UDMProjectSettings::GetWeaponTypeName(EWeaponType WeaponType) const
 {
 	switch (WeaponType)
 	{
@@ -56,10 +72,10 @@ FText UDMProjectSettings::GetWeaponTypeName(EWeaponType WeaponType) const
 	case EWeaponType::SniperRifle:		return WeaponTypeDisplayNames.SniperRifle;
 	}
 
-	return FText::FromName(NAME_None);
+	return TEXT_None;
 }
 
-FText UDMProjectSettings::GetWeaponFireMode(EFireMode FireMode) const
+const FText& UDMProjectSettings::GetWeaponFireMode(EFireMode FireMode) const
 {
 	switch (FireMode)
 	{
@@ -68,10 +84,10 @@ FText UDMProjectSettings::GetWeaponFireMode(EFireMode FireMode) const
 	case EFireMode::SemiAutomatic:	return FireModeDisplayNames.SemiAutomatic;
 	}
 
-	return FText::FromName(NAME_None);
+	return TEXT_None;
 }
 
-FText UDMProjectSettings::GetItemTypeName(TEnumAsByte<EItemType::Type> ItemType) const
+const FText& UDMProjectSettings::GetItemTypeName(TEnumAsByte<EItemType::Type> ItemType) const
 {
 	return GetItemTypeInfo(ItemType).ItemTypeDisplayName;
 }
@@ -90,7 +106,7 @@ const FQualityInfo& UDMProjectSettings::GetQualityInfo(EPropsQuality Quality) co
 	return InvalidQualityInfo;
 }
 
-const FSurfaceImpactEffect& UDMProjectSettingsInstance::GetSurfaceImpactEffect(EPhysicalSurface SurfaceType) const
+const FSurfaceImpactEffect& UDMProjectSettingsInstance::GetSurfaceImpactEffect(EPhysicalSurface SurfaceType)
 {
 	if (USurfaceImpactAsset* SurfaceImpact = GetSurfaceImpactAsset())
 	{
@@ -221,7 +237,7 @@ const FItemDef& UDMProjectSettingsInstance::GetItemDefinition(int32 ItemGuid) co
 UClass* UDMProjectSettingsInstance::GetItemClassFromGuid(int32 ItemGuid) const
 {
 	const FItemDef& Definition = GetItemDefinition(ItemGuid);
-	return Definition.ItemClass.TryLoadClass<UObject>();
+	return Definition.GetItemClass();
 }
 
 void UDMProjectSettingsInstance::GetTalents(ETalentCategory Category, int64 Talents, TArray<FTalentInfo>& AllTalents) const
@@ -266,11 +282,6 @@ UDataTable* UDMProjectSettingsInstance::GetItemTable() const
 	return ItemListTable;
 }
 
-UClass* UDMProjectSettingsInstance::GetDamageComponentClass() const
-{
-	return DamageWidgetClass;
-}
-
 void UDMProjectSettingsInstance::Initialize()
 {
 	InitializeSettingsInstances();
@@ -283,28 +294,33 @@ void UDMProjectSettingsInstance::FinishDestroy()
 	RemoveFromRoot();
 }
 
-UClass* UDMProjectSettingsInstance::GetMasterAnimClass() const
+UClass* UDMProjectSettingsInstance::GetMasterAnimClass()
 {
+	Lazy_Load_Class(UAnimInstance, PawnMasterAnimClass, PawnMasterAnimClass);
 	return PawnMasterAnimClass;
 }
 
-UClass* UDMProjectSettingsInstance::GetSlaveAnimClass() const
+UClass* UDMProjectSettingsInstance::GetSlaveAnimClass()
 {
+	Lazy_Load_Class(UAnimInstance, PawnSlaveAnimClass, PawnSlaveAnimClass);
 	return PawnSlaveAnimClass;
 }
 
-UClass* UDMProjectSettingsInstance::GetDamageWidgetClass() const
+UClass* UDMProjectSettingsInstance::GetDamageWidgetClass()
 {
+	Lazy_Load_Class(UDamageWidgetComponent, DamageWidgetClass, DamageWidgetClass);
 	return DamageWidgetClass;
 }
 
-ULevelListAsset* UDMProjectSettingsInstance::GetLevelListAsset() const
+ULevelListAsset* UDMProjectSettingsInstance::GetLevelListAsset()
 {
+	Lazy_Load_Object(ULevelListAsset, LevelAsset, LevelListAsset);
 	return LevelListAsset;
 }
 
-USurfaceImpactAsset* UDMProjectSettingsInstance::GetSurfaceImpactAsset() const
+USurfaceImpactAsset* UDMProjectSettingsInstance::GetSurfaceImpactAsset()
 {
+	Lazy_Load_Object(USurfaceImpactAsset, SurfaceImpactAsset, SurfaceImpactAsset);
 	return SurfaceImpactAsset;
 }
 
@@ -313,57 +329,69 @@ UTalentAsset* UDMProjectSettingsInstance::GetTalentAsset() const
 	return TalentAsset;
 }
 
-UDBaseAttributesAsset* UDMProjectSettingsInstance::GetPlayerBaseAttributes() const
+UDBaseAttributesAsset* UDMProjectSettingsInstance::GetPlayerBaseAttributes()
 {
+	Lazy_Load_Object(UDBaseAttributesAsset, PlayerBaseAttributes, PlayerBaseAttributes);
 	return PlayerBaseAttributes;
 }
 
-UCurveFloat* UDMProjectSettingsInstance::GetRotationRateCurve() const
+UCurveFloat* UDMProjectSettingsInstance::GetRotationRateCurve()
 {
+	Lazy_Load_Object(UCurveFloat, RotationRateCurve, RotationRateCurve);
 	return RotationRateCurve;
 }
 
-UCurveVector* UDMProjectSettingsInstance::GetMovementCurve() const
+UCurveVector* UDMProjectSettingsInstance::GetMovementCurve()
 {
+	Lazy_Load_Object(UCurveVector, MovementCurve, MovementCurve);
 	return MovementCurve;
 }
 
-UCurveFloat* UDMProjectSettingsInstance::GetMantlePositionCurve() const
+UCurveFloat* UDMProjectSettingsInstance::GetMantlePositionCurve()
 {
+	Lazy_Load_Object(UCurveFloat, MantlePositionCurve, MantlePositionCurve);
 	return MantlePositionCurve;
 }
 
-UCurveFloat* UDMProjectSettingsInstance::GetMantlingRotationCurve() const
+UCurveFloat* UDMProjectSettingsInstance::GetMantlingRotationCurve()
 {
+	Lazy_Load_Object(UCurveFloat, MantlingRotationCurve, MantlingRotationCurve);
 	return MantlingRotationCurve;
 }
 
-UDMMantleAsset* UDMProjectSettingsInstance::GetMantleAsset() const
+UDMMantleAsset* UDMProjectSettingsInstance::GetMantleAsset()
 {
+	Lazy_Load_Object(UDMMantleAsset, MantleAsset, MantleAsset);
 	return MantleAsset;
 }
 
-const FMantleInformation& UDMProjectSettingsInstance::GetMantleInfo(EMantleType MantleType, EOverlayState OverlayState) const
+UDMUISoundSet* UDMProjectSettingsInstance::GetUISoundSet()
 {
-	return MantleAsset->GetMantleInfo(MantleType, OverlayState);
+	Lazy_Load_Object(UDMUISoundSet, UISoundSetAsset, UISoundSet);
+	return UISoundSet;
+}
+
+UDMUpgradeAddition* UDMProjectSettingsInstance::GetUpgradeAddition()
+{
+	Lazy_Load_Object(UDMUpgradeAddition, UpgradeAdditionAsset, UpgradeAddition);
+	return UpgradeAddition;
+}
+
+UDMRollingAsset* UDMProjectSettingsInstance::GetRollingAsset()
+{
+	Lazy_Load_Object(UDMRollingAsset, RollingAsset, RollingAsset);
+	return RollingAsset;
+}
+
+const FMantleInformation& UDMProjectSettingsInstance::GetMantleInfo(EMantleType MantleType, EOverlayState OverlayState)
+{
+	return GetMantleAsset()->GetMantleInfo(MantleType, OverlayState);
 }
 
 void UDMProjectSettingsInstance::InitializeSettingsInstances()
 {
 	UDMProjectSettings* ProjectSettings = GetMutableDefault<UDMProjectSettings>();
-
-	DM_LOAD_CLASS(UAnimInstance, ProjectSettings->PawnMasterAnimClass, PawnMasterAnimClass);
-	DM_LOAD_CLASS(UAnimInstance, ProjectSettings->PawnSlaveAnimClass, PawnSlaveAnimClass);
-	DM_LOAD_CLASS(UDamageWidgetComponent, ProjectSettings->DamageWidgetClass, DamageWidgetClass);
-
-	DM_LOAD_OBJECT(ULevelListAsset, ProjectSettings->LevelAsset, LevelListAsset);
-	DM_LOAD_OBJECT(USurfaceImpactAsset, ProjectSettings->SurfaceImpactAsset, SurfaceImpactAsset);
+	
 	DM_LOAD_OBJECT(UDataTable, ProjectSettings->ItemsTable, ItemListTable);
 	DM_LOAD_OBJECT(UTalentAsset, ProjectSettings->TalentAsset, TalentAsset);
-	DM_LOAD_OBJECT(UDBaseAttributesAsset, ProjectSettings->PlayerBaseAttributes, PlayerBaseAttributes);
-	DM_LOAD_OBJECT(UCurveFloat, ProjectSettings->RotationRateCurve, RotationRateCurve);
-	DM_LOAD_OBJECT(UCurveFloat, ProjectSettings->MantlePositionCurve, MantlePositionCurve);
-	DM_LOAD_OBJECT(UCurveFloat, ProjectSettings->MantlingRotationCurve, MantlingRotationCurve);
-	DM_LOAD_OBJECT(UCurveVector, ProjectSettings->MovementCurve, MovementCurve);
-	DM_LOAD_OBJECT(UDMMantleAsset, ProjectSettings->MantleAsset, MantleAsset);
 }

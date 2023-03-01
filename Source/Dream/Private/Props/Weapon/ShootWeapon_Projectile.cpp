@@ -2,38 +2,27 @@
 
 #include "Props/Weapon/ShootWeapon_Projectile.h"
 #include "DCharacterPlayer.h"
-#include "DProjectileComponent.h"
-#include "GameFramework/ProjectileMovementComponent.h"
 
-void AShootWeapon_Projectile::BeginPlay()
-{
-	Super::BeginPlay();
-}
 
-void AShootWeapon_Projectile::HandleSpawnAmmo(const FHitResult& HitResult)
+void AShootWeapon_Projectile::HandleSpawnProjectile(const FHitResult& HitResult)
 {
-	if (GetLocalRole() == ROLE_Authority)
+	if (GetLocalRole() == ROLE_Authority && Projectile && OwningShooter)
 	{
-		if (Projectile)
-		{
-			// 子弹的方向
-			FRotator ProjectileDir = (HitResult.ImpactPoint - HitResult.TraceStart).Rotation();
+		const FVector& EndPoint = HitResult.bBlockingHit ? HitResult.ImpactPoint : HitResult.TraceEnd;
+			
+		FVector MuzzleLoc;
+		FRotator MuzzleRot;
+		
+		// 这里不使用枪口插槽的位置， 因为在服务器上动画状态可能与客户端不一样(客户端瞄准，但服务器并不是)
+		OwningShooter->GetActorEyesViewPoint(MuzzleLoc, MuzzleRot);
 
-			FActorSpawnParameters SpawnParam;
-			SpawnParam.Owner = this;
-			SpawnParam.Instigator = GetOwningShooter();
+		FRotator ProjectileDir = (EndPoint - MuzzleLoc).Rotation();
 
-			GetWorld()->SpawnActor<ADProjectile>(Projectile, HitResult.TraceStart, ProjectileDir, SpawnParam);
+		FActorSpawnParameters SpawnParam;
+		SpawnParam.Owner = this;
+		SpawnParam.Instigator = GetOwningShooter();
 
-			/*if (HitResult.bBlockingHit)
-			{
-				ADProjectile* SpawnProjectile = ;
-				ETeamAttitude::Type Attitude = FGenericTeamId::GetAttitude(GetOwner(), HitResult.GetActor());
-				if (Attitude == ETeamAttitude::Hostile)
-				{
-					SpawnProjectile->Projectile->HomingTargetComponent = HitResult.GetComponent();
-				}
-			}*/
-		}
+		GetWorld()->SpawnActor<ADProjectile>(Projectile, MuzzleLoc, ProjectileDir, SpawnParam);
+		
 	}
 }

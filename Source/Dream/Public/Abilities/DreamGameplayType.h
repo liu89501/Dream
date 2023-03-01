@@ -13,6 +13,7 @@ enum class EDDamageType : uint8
     Weapon_Shotgun,
     Weapon_SniperRifle,
     Weapon_PrecisionRifle,
+    Weapon,
     Other
 };
 

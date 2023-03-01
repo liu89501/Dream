@@ -24,7 +24,7 @@ void SInteractive::Construct(const FArguments& InArgs)
 
 	SetCanTick(false);
 
-	FName KeyName = UDGameplayStatics::GetInputActionKeyName(InArgs._InPlayerOwner, "Interactive");
+	FText KeyName = UDGameplayStatics::GetInputActionKeyName(InArgs._InPlayerOwner, "Interactive");
 
 	ChildSlot
 	[
@@ -51,7 +51,7 @@ void SInteractive::Construct(const FArguments& InArgs)
 			.HAlign(HAlign_Center)
 			[
 				SNew(STextBlock)
-				.Text(FText::FromName(KeyName))
+				.Text(KeyName)
 				.TextStyle(&InteractiveStyle.KeyFontStyle)
 			]
 		]

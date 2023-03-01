@@ -4,8 +4,11 @@
 #include "DCustomizationEditorTools.h"
 #include "DMDevelopmentSettings.h"
 #include "DMProjectSettings.h"
+#include "EdGraphUtilities.h"
+#include "FGearAttributesGraphPinFactory.h"
 #include "PreviewSceneSettings.h"
 #include "ISettingsModule.h"
+#include "PropertyCustomizeGearAttribute.h"
 
 #define LOCTEXT_NAMESPACE "DreamEditor"
 
@@ -18,10 +21,19 @@ void FDreamEditorModule::StartupModule()
 	
 	PropertyModule.RegisterCustomPropertyTypeLayout(TEXT("ItemGuidHandle"),
 		FOnGetPropertyTypeCustomizationInstance::CreateStatic(&FItemSelectedCustomization::MakeInstance));
-
-	WeaponMeshPreview = MakeShareable(new FWeaponMeshPreviewCustomizationMenu());
-	WeaponMeshPreview->LoadMenuContext();
 	
+	PropertyModule.RegisterCustomPropertyTypeLayout(TEXT("AttributeHandle"),
+		FOnGetPropertyTypeCustomizationInstance::CreateStatic(&FPropertyCustomizeGearAttribute::MakeInstance));
+
+	WeaponMeshPreview = MakeShared<FWeaponMeshPreviewCustomizationMenu>();
+	WeaponMeshPreview->LoadMenuContext();
+
+	ItemsTableMenu = MakeShared<FItemsTableMenu>();
+	ItemsTableMenu->LoadMenuContext();
+
+	GearAttributesGraphPinFactory = MakeShared<FGearAttributesGraphPinFactory>();
+	FEdGraphUtilities::RegisterVisualPinFactory(GearAttributesGraphPinFactory);
+
 	ISettingsModule* SettingsModule = FModuleManager::GetModulePtr<ISettingsModule>("Settings");
 	if (SettingsModule != nullptr)
 	{
@@ -50,6 +62,9 @@ void FDreamEditorModule::ShutdownModule()
 	FPropertyEditorModule& PropertyModule = FModuleManager::GetModuleChecked<FPropertyEditorModule>("PropertyEditor");
 	PropertyModule.UnregisterCustomPropertyTypeLayout(TEXT("TargetDelegate"));
 	PropertyModule.UnregisterCustomPropertyTypeLayout(TEXT("ItemGuidHandle"));
+	PropertyModule.UnregisterCustomPropertyTypeLayout(TEXT("AttributeHandle"));
+
+	FEdGraphUtilities::UnregisterVisualPinFactory(GearAttributesGraphPinFactory);
 
 	ISettingsModule* SettingsModule = FModuleManager::GetModulePtr<ISettingsModule>("Settings");
 	if (SettingsModule != nullptr)

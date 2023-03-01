@@ -7,6 +7,7 @@
 #include "DMPlayerController.h"
 #include "DPlayerState.h"
 #include "DMProjectSettings.h"
+#include "DMUISoundSet.h"
 #include "GameMapsSettings.h"
 #include "PanelWidget.h"
 #include "SViewport.h"
@@ -30,7 +31,7 @@ UWItemEquipment* UDreamWidgetStatics::MakeWEquipmentFromPW(UObject* WorldContext
 {
 	UWItemEquipment* ViewData = NewObject<UWItemEquipment>(WorldContextObject);
 	ViewData->EquipmentId = PW.WeaponId;
-	ViewData->SetItemEquipment(MakeShared<FItemEquipment>(PW.ItemGuid, PW.Attributes));
+	ViewData->SetItemEquipment(MakeShared<FItemEquipment>(PW.ItemGuid, PW.WeaponLevel, PW.Attributes));
 	return ViewData;
 }
 
@@ -38,7 +39,7 @@ UWItemEquipment* UDreamWidgetStatics::MakeWEquipmentFromPM(UObject* WorldContext
 {
 	UWItemEquipment* ViewData = NewObject<UWItemEquipment>(WorldContextObject);
 	ViewData->EquipmentId = PM.ModuleId;
-	ViewData->SetItemEquipment(MakeShared<FItemEquipment>(PM.ItemGuid, PM.Attributes));
+	ViewData->SetItemEquipment(MakeShared<FItemEquipment>(PM.ItemGuid, PM.ModuleLevel, PM.Attributes));
 	return ViewData;
 }
 
@@ -244,9 +245,14 @@ FText UDreamWidgetStatics::WeightToPercentageText(float Weight)
 	return FText::FromString(Percentage);
 }
 
-FText UDreamWidgetStatics::GetWeaponTypeName(EWeaponType WeaponType)
+const FText& UDreamWidgetStatics::GetWeaponTypeName(EWeaponType WeaponType)
 {
 	return UDMProjectSettings::GetProjectSettings()->GetWeaponTypeName(WeaponType);
+}
+
+const FText& UDreamWidgetStatics::GetWeaponFireModeName(EFireMode FireMode)
+{
+	return UDMProjectSettings::GetProjectSettings()->GetWeaponFireMode(FireMode);
 }
 
 const FPropsInfo& UDreamWidgetStatics::GetPropsInfo(const FItemHandle& ItemHandle)
@@ -262,6 +268,69 @@ const FPropsInfo& UDreamWidgetStatics::GetPropsInfo(const FItemHandle& ItemHandl
 const FQualityInfo& UDreamWidgetStatics::GetQualityInfo(EPropsQuality Quality)
 {
 	return UDMProjectSettings::GetProjectSettings()->GetQualityInfo(Quality);
+}
+
+void UDreamWidgetStatics::PlayClickSoundNormal(UObject* WorldContextObject)
+{
+	UDMUISoundSet* UISoundSet = GSProject->GetUISoundSet();
+	if (UISoundSet->ClickSoundNormal)
+	{
+		UGameplayStatics::PlaySound2D(WorldContextObject, UISoundSet->ClickSoundNormal);
+	}
+}
+
+void UDreamWidgetStatics::PlayClickSoundHold(UObject* WorldContextObject)
+{
+	UDMUISoundSet* UISoundSet = GSProject->GetUISoundSet();
+	if (UISoundSet->ClickSoundHold)
+	{
+		UGameplayStatics::PlaySound2D(WorldContextObject, UISoundSet->ClickSoundHold);
+	}
+}
+
+void UDreamWidgetStatics::PlayHoverSoundStyle1(UObject* WorldContextObject)
+{
+	UDMUISoundSet* UISoundSet = GSProject->GetUISoundSet();
+	if (UISoundSet->HoverSoundStyle1)
+	{
+		UGameplayStatics::PlaySound2D(WorldContextObject, UISoundSet->HoverSoundStyle1);
+	}
+}
+
+void UDreamWidgetStatics::PlayHoverSoundStyle2(UObject* WorldContextObject)
+{
+	UDMUISoundSet* UISoundSet = GSProject->GetUISoundSet();
+	if (UISoundSet->HoverSoundStyle2)
+	{
+		UGameplayStatics::PlaySound2D(WorldContextObject, UISoundSet->HoverSoundStyle2);
+	}
+}
+
+void UDreamWidgetStatics::PlayUISuccessSound(UObject* WorldContextObject)
+{
+	UDMUISoundSet* UISoundSet = GSProject->GetUISoundSet();
+	if (UISoundSet->Success)
+	{
+		UGameplayStatics::PlaySound2D(WorldContextObject, UISoundSet->Success);
+	}
+}
+
+void UDreamWidgetStatics::PlayUIErrorSound(UObject* WorldContextObject)
+{
+	UDMUISoundSet* UISoundSet = GSProject->GetUISoundSet();
+	if (UISoundSet->Error)
+	{
+		UGameplayStatics::PlaySound2D(WorldContextObject, UISoundSet->Error);
+	}
+}
+
+void UDreamWidgetStatics::PlayUILockedSound(UObject* WorldContextObject)
+{
+	UDMUISoundSet* UISoundSet = GSProject->GetUISoundSet();
+	if (UISoundSet->Lock)
+	{
+		UGameplayStatics::PlaySound2D(WorldContextObject, UISoundSet->Lock);
+	}
 }
 
 template <class Class>

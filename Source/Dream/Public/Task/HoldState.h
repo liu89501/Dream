@@ -10,9 +10,8 @@ struct FHoldStateHandle
 {
 	GENERATED_BODY()
 
-	FHoldStateHandle() : Handle_Task(nullptr)
+	FHoldStateHandle() : Handle_Task(MakeShared<FTimerHandle>())
 	{
-		Handle_Task = MakeShared<FTimerHandle>();
 	}
 
 	TSharedPtr<FTimerHandle> Handle_Task;

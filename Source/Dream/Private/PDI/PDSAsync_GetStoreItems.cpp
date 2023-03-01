@@ -16,13 +16,13 @@ UPDSAsync_GetStoreInformation* UPDSAsync_GetStoreInformation::PDI_GetStoreInform
 
 void UPDSAsync_GetStoreInformation::Activate()
 {
-	Handle = FPDIStatic::Get()->AddOnGetStoreItems(FOnGetStoreItems::FDelegate::CreateUObject(this, &UPDSAsync_GetStoreInformation::OnLoadCompleted));
-	FPDIStatic::Get()->GetStoreItems(FSearchStoreItemsParam(T_StoreId, T_Page));
+	Handle = GDataInterface->AddOnGetStoreItems(FOnGetStoreItems::FDelegate::CreateUObject(this, &UPDSAsync_GetStoreInformation::OnLoadCompleted));
+	GDataInterface->GetStoreItems(FSearchStoreItemsParam(T_StoreId, T_Page));
 }
 
 void UPDSAsync_GetStoreInformation::OnLoadCompleted(const FStoreInformation& StoreInfo, bool bSuccess)
 {
-	FPDIStatic::Get()->RemoveOnGetStoreItems(Handle);
+	GDataInterface->RemoveOnGetStoreItems(Handle);
 
 	FWStoreInformation StoreInformation;
 	

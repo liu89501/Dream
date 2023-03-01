@@ -29,7 +29,7 @@ UPDSAsync_GetPlayerInfo* UPDSAsync_GetPlayerInfo::PDI_GetPlayerInformation(UObje
 
 void UPDSAsync_GetPlayerInfo::OnLoadCompleted(const FPlayerInfo& PlayerInfo, bool bSuccess)
 {
-	FPDIStatic::Get()->RemoveOnGetPlayerInfo(Handle);
+	GDataInterface->RemoveOnGetPlayerInfo(Handle);
 	if (bSuccess)
 	{
 		OnSuccess.Broadcast(PlayerInfo);
@@ -42,7 +42,7 @@ void UPDSAsync_GetPlayerInfo::OnLoadCompleted(const FPlayerInfo& PlayerInfo, boo
 
 void UPDSAsync_GetPlayerInfo::Activate()
 {
-	Handle = FPDIStatic::Get()->AddOnGetPlayerInfo(FOnGetPlayerInfo::FDelegate::CreateUObject(this, &UPDSAsync_GetPlayerInfo::OnLoadCompleted));
-	FPDIStatic::Get()->GetPlayerInfo(T_Condition);
+	Handle = GDataInterface->AddOnGetPlayerInfo(FOnGetPlayerInfo::FDelegate::CreateUObject(this, &UPDSAsync_GetPlayerInfo::OnLoadCompleted));
+	GDataInterface->GetPlayerInfo(T_Condition);
 }
 

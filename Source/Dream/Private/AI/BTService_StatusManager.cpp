@@ -2,12 +2,10 @@
 
 
 #include "AI/BTService_StatusManager.h"
-
 #include "AIController.h"
 #include "DEnemyBase.h"
 #include "BehaviorTree/BlackboardComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
-#include "Kismet/KismetMathLibrary.h"
 
 void UBTService_StatusManager::TickNode(UBehaviorTreeComponent& OwnerComp, uint8* NodeMemory, float DeltaSeconds)
 {

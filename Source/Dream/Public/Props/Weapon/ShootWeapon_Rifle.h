@@ -3,7 +3,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-
 #include "ShootWeapon_Instant.h"
 #include "ShootWeapon_Rifle.generated.h"
 

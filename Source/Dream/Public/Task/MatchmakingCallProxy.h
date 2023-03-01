@@ -34,7 +34,7 @@ public:
 	FDelegateHandle Handle_CustomUpdateComplete;
 	FDelegateHandle Handle_CreateSessionComplete;
 	
-	FDelegateHandle Handle_SearchServer;
+	FDelegateHandle Handle_LaunchServer;
 
 public:
 
@@ -90,7 +90,7 @@ private:
 
 	void OnJoinSessionCompleted(FName SessionName, EOnJoinSessionCompleteResult::Type CompleteResult);
 
-	void OnPDISearchServer(const struct FSearchServerResult& Result, bool bSuccessfully);
+	void OnLaunchServer(const struct FLaunchServerResult& Result, bool bSuccessfully);
 	
 	void OnServerReadyComplete(FName SessionName, const FOnlineSessionSettings& Settings);
 
@@ -116,8 +116,9 @@ private:
 	/* 会话查询配置 */
 	TSharedPtr<FOnlineSessionSearch> SearchSettings;
 
-	/* 最大查询会话时间 */
-	uint16 NumberOfSearch;
+	/* 会话查询时间 */
+	uint16 SearchingSeconds;
+	uint16 LastSearchingTime;
 
 	/* 连接到会话后等待开始游戏的时间(会话的玩家人数未满时) */
 	uint8 WaitingStartTime;

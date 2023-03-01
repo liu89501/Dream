@@ -9,6 +9,7 @@ public class DreamServerTarget : TargetRules
 	{
 		Type = TargetType.Server;
 		bUsesSteam = true;
+		bWithPushModel = true;
 		ExtraModuleNames.AddRange(new[] { "Dream" });
 	}
 }

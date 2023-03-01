@@ -2,9 +2,10 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystemGlobals.h"
 #include "DGameplayStatics.h"
-#include "DGE_WeaponBaseDamage.h"
+#include "DMEffect_ShootingDamage.h"
 #include "DMPlayerController.h"
 #include "DMProjectSettings.h"
+#include "DMUpgradeGearInfluence.h"
 #include "Engine.h"
 #include "DreamType.h"
 #include "Kismet/GameplayStatics.h"
@@ -13,23 +14,30 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "DreamGameplayType.h"
 
-#define BulletHitInfo_ID_Bits 4
+#if ENABLE_WEAPON_DEBUG
 
-uint8 FBulletHitInfo::GetStructID() const
-{
-	return 0;
-}
+TAutoConsoleVariable<int32> DebugWeaponCVar::DebugCVar(
+    TEXT("p.dm.WeaponTrace"),
+    0,
+    TEXT("Whether to draw debug information.\n")
+    TEXT("0: Disable, 1: Enable"),
+    ECVF_Cheat);
 
-bool FBulletHitInfo::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
+#endif
+
+bool FHitInfo::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
 {
 	bOutSuccess = true;
 	return true;
 }
 
-bool FBulletHitInfo_SingleBullet::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
+TSharedPtr<FHitInfo> FHitInfo::Clone() const
 {
-	//Super::NetSerialize(Ar, Map, bOutSuccess);
+	return nullptr;
+}
 
+bool FHitInfo_SingleBullet::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
+{
 	uint8 Verify = 0;
 
 	if (Ar.IsSaving())
@@ -56,7 +64,12 @@ bool FBulletHitInfo_SingleBullet::NetSerialize(FArchive& Ar, UPackageMap* Map, b
 	return true;
 }
 
-bool FBulletHitInfo_MultiBullet::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
+TSharedPtr<FHitInfo> FHitInfo_SingleBullet::Clone() const
+{
+	return MakeShared<FHitInfo_SingleBullet>(*this);
+}
+
+bool FHitInfo_MultiBullet::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
 {
 	//Super::NetSerialize(Ar, Map, bOutSuccess);
 
@@ -81,57 +94,86 @@ bool FBulletHitInfo_MultiBullet::NetSerialize(FArchive& Ar, UPackageMap* Map, bo
 	return true;
 }
 
-TSharedPtr<FBulletHitInfo> GetBulletHitInfoFromStructID(uint8 StructID)
+TSharedPtr<FHitInfo> FHitInfo_MultiBullet::Clone() const
 {
-	switch (StructID)
-	{
-		case 1: return MakeShared<FBulletHitInfo_SingleBullet>();
-		case 2: return MakeShared<FBulletHitInfo_MultiBullet>();
-		default: return nullptr;
-	}
+	return MakeShared<FHitInfo_MultiBullet>(*this);
 }
 
 template <typename Type>
-Type* FBulletHitInfoHandle::Get() const
+Type* FHitInfoHandle::Get() const
 {
 	if (Data.IsValid())
 	{
-		if (Data->StaticStruct() == Type::StaticStruct())
+		if (Data->GetScriptStruct() == Type::StaticStruct())
 		{
-			return (Type*)Data.Get();
+			return static_cast<Type*>(Data.Get());
 		}
 	}
 
 	return nullptr;
 }
 
-bool FBulletHitInfoHandle::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
+bool FHitInfoHandle::NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess)
 {
-	uint8 bValidData = Data.IsValid();
-	Ar.SerializeBits(&bValidData, 1);
+	uint8 bValidData = Data.IsValid() ? 1 : 0;
+	
+	Ar << bValidData;
 
-	if (bValidData == 1)
+	bOutSuccess = bValidData == 1;
+
+	if (bOutSuccess)
 	{
-		uint8 StructID = 0;
+		UScriptStruct* ScriptStruct = nullptr;
+		
 		if (Ar.IsSaving())
 		{
-			StructID = Data->GetStructID();
+			ScriptStruct = Data->GetScriptStruct();
 		}
 		
-		Ar.SerializeBits(&StructID, BulletHitInfo_ID_Bits);
+		Ar << ScriptStruct;
 
 		if (Ar.IsLoading())
 		{
-			if (!Data.IsValid())
+			if (ScriptStruct)
 			{
-				Data = GetBulletHitInfoFromStructID(StructID);
+				FHitInfo* HitInfo = static_cast<FHitInfo*>(FMemory::Malloc(ScriptStruct->GetStructureSize()));
+				ScriptStruct->InitializeStruct(HitInfo);
+				Data = TSharedPtr<FHitInfo>(HitInfo);
+			}
+			else
+			{
+				bOutSuccess = false;
+				UE_LOG(LogDream, Error, TEXT("HitInfo ScriptStruct Invalid"));
 			}
 		}
 
-		Data->NetSerialize(Ar, Map, bOutSuccess);
+		if (bOutSuccess)
+		{
+			Data->NetSerialize(Ar, Map, bOutSuccess);
+		}
 	}
 
 	return bOutSuccess;
+}
+
+bool FHitInfoHandle::operator==(const FHitInfoHandle& Other) const
+{
+	if (Data.IsValid() != Other.Data.IsValid())
+	{
+		return false;
+	}
+
+	if (Data.Get() != Other.Data.Get())
+	{
+		return false;
+	}
+	
+	return true;
+}
+
+bool FHitInfoHandle::operator!=(const FHitInfoHandle& Other) const
+{
+	return !(*this == Other);
 }
 
 AShootWeapon::AShootWeapon():
@@ -160,63 +202,66 @@ AShootWeapon::AShootWeapon():
 	bReplicates = true;
 
 	WeaponMesh->SetReceivesDecals(false);
+
+	ConstructorHelpers::FObjectFinder<UDMUpgradeGearInfluence> UpgradeInf(TEXT("/Game/Main/Asset/Upgrade/DA_UpgradeInf_Atk.DA_UpgradeInf_Atk"));
+	UpgradeInfluenceAttributes = UpgradeInf.Object;
 }
 
 void AShootWeapon::BeginPlay()
 {
+	if (GetIsReplicated())
+	{
+		OwningShooter = Cast<ADCharacterPlayer>(GetOwner());
+		ensureMsgf(OwningShooter, TEXT("OwningShooter Invalid"));
+	}
+	
+	if (IsLocalWeapon())
+	{
+		CurrentSpread = MinRecoil;
+
+		if (RecoveryCurve)
+		{
+			FOnTimelineFloatStatic ReSpreadDelegate;
+			ReSpreadDelegate.BindUObject(this, &AShootWeapon::RecoverTimelineTick);
+			RecoveryTimeline.AddInterpFloat(RecoveryCurve, ReSpreadDelegate);
+		}
+
+		if (RecoilCurve)
+		{
+			FOnTimelineFloatStatic SpreadDeltaDelegate;
+			SpreadDeltaDelegate.BindUObject(this, &AShootWeapon::RecoilTimelineTick);
+			RecoilTimeline.AddInterpFloat(RecoilCurve, SpreadDeltaDelegate);
+		}
+
+		if (CameraOffsetCurve)
+		{
+			FOnTimelineFloatStatic CameraRiseTickDelegate;
+			CameraRiseTickDelegate.BindUObject(this, &AShootWeapon::CameraOffsetTimelineTick);
+			RecoilTimeline.AddInterpFloat(CameraOffsetCurve, CameraRiseTickDelegate);
+		}
+
+		if (AimCurve)
+		{
+			FOnTimelineFloatStatic AimTickDelegate;
+			AimTickDelegate.BindUObject(this, &AShootWeapon::AimTimelineTick);
+			AimTimeline.AddInterpFloat(AimCurve, AimTickDelegate);
+
+			FOnTimelineEvent OnEnded;
+			OnEnded.BindUFunction(this, GET_FUNCTION_NAME_CHECKED(AShootWeapon, OnAimEnded));
+			AimTimeline.AddEvent(AimCurve->FloatCurve.GetLastKey().Time, OnEnded);
+		}
+
+		InitializeAmmunition();
+
+		//SetActorTickEnabled(true);
+
+		if (ADMPlayerController* OwningController = GetOwningController())
+		{
+			Handle_PlayerAmmunitionChange = OwningController->GetAmmunitionChangeDelegate().AddUObject(this, &AShootWeapon::OnPlayerAmmunitionChanged);
+		}
+	}
+
 	Super::BeginPlay();
-
-	OwningShooter = Cast<ADCharacterPlayer>(GetOwner());
-
-	ensureMsgf(OwningShooter, TEXT("OwningShooter Invalid"));
-
-	if (!IsLocalWeapon())
-	{
-		return;
-	}
-
-	CurrentSpread = MinRecoil;
-
-	if (RecoveryCurve)
-	{
-		FOnTimelineFloatStatic ReSpreadDelegate;
-		ReSpreadDelegate.BindUObject(this, &AShootWeapon::RecoverTimelineTick);
-		RecoveryTimeline.AddInterpFloat(RecoveryCurve, ReSpreadDelegate);
-	}
-
-	if (RecoilCurve)
-	{
-		FOnTimelineFloatStatic SpreadDeltaDelegate;
-		SpreadDeltaDelegate.BindUObject(this, &AShootWeapon::RecoilTimelineTick);
-		RecoilTimeline.AddInterpFloat(RecoilCurve, SpreadDeltaDelegate);
-	}
-
-	if (CameraOffsetCurve)
-	{
-		FOnTimelineFloatStatic CameraRiseTickDelegate;
-		CameraRiseTickDelegate.BindUObject(this, &AShootWeapon::CameraOffsetTimelineTick);
-		RecoilTimeline.AddInterpFloat(CameraOffsetCurve, CameraRiseTickDelegate);
-	}
-
-	if (AimCurve)
-	{
-		FOnTimelineFloatStatic AimTickDelegate;
-		AimTickDelegate.BindUObject(this, &AShootWeapon::AimTimelineTick);
-		AimTimeline.AddInterpFloat(AimCurve, AimTickDelegate);
-
-		FOnTimelineEvent OnEnded;
-		OnEnded.BindUFunction(this, GET_FUNCTION_NAME_CHECKED(AShootWeapon, OnAimEnded));
-		AimTimeline.AddEvent(AimCurve->FloatCurve.GetLastKey().Time, OnEnded);
-	}
-
-	InitializeAmmunition();
-
-	SetActorTickEnabled(true);
-
-	if (ADMPlayerController* OwningController = GetOwningController())
-	{
-		Handle_PlayerAmmunitionChange = OwningController->GetAmmunitionChangeDelegate().AddUObject(this, &AShootWeapon::OnPlayerAmmunitionChanged);
-	}
 }
 
 void AShootWeapon::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -290,19 +335,19 @@ void AShootWeapon::CameraOffsetTimelineTick(float Value) const
 	float PitchDelta = Value * CameraOffsetScale.Y * GetWorld()->GetDeltaSeconds() * FMath::FRandRange(0.2f, 1.f);
 	float YawDelta = Value * CameraOffsetScale.X * GetWorld()->GetDeltaSeconds() * FMath::FRandRange(-1.f, 1.f);
 
-	if (ADCharacterPlayer* Shooter = GetOwningShooter())
+	if (OwningShooter)
 	{
-		Shooter->AddControllerYawInput(YawDelta);
-		Shooter->AddControllerPitchInput(PitchDelta);
+		OwningShooter->AddControllerYawInput(YawDelta);
+		OwningShooter->AddControllerPitchInput(PitchDelta);
 	}
 }
 
 void AShootWeapon::AimTimelineTick(float Value) const
 {
-	if (ADCharacterPlayer* Shooter = GetOwningShooter())
+	if (OwningShooter)
 	{
-		Shooter->SetCameraFieldOfView(FMath::LerpStable(90.f, AimFOV, Value));
-		Shooter->CameraAimTransformLerp(Value);
+		OwningShooter->SetCameraFieldOfView(FMath::LerpStable(90.f, AimFOV, Value));
+		OwningShooter->CameraAimTransformLerp(Value);
 	}
 }
 
@@ -311,19 +356,9 @@ float AShootWeapon::GetCurrentRecoil() const
 	return CurrentSpread;
 }
 
-void AShootWeapon::GetLineTracePoint(FVector& Point, FRotator& Direction) const
-{
-	if (OwningShooter && OwningShooter->Controller)
-	{
-		OwningShooter->Controller->GetPlayerViewPoint(Point, Direction);
-	}
-}
-
 void AShootWeapon::HandleFire()
 {
-	UWorld* World = GetWorld();
-
-	LastFireTime = World->TimeSeconds;
+	LastFireTime = GetWorld()->TimeSeconds;
 	GetWorldTimerManager().SetTimer(Handle_ReSpread, this, &AShootWeapon::SpreadRecovery, RecoveryRecoilDelay, false);
 
 	if (RecoveryTimeline.IsPlaying())
@@ -331,11 +366,13 @@ void AShootWeapon::HandleFire()
 		RecoveryTimeline.Stop();
 	}
 
-	FVector ViewLoc;
-	FRotator ViewRot;
-	GetLineTracePoint(ViewLoc, ViewRot);
-
-	TSharedPtr<FBulletHitInfo> HitInfoPtr;
+	if (FireCameraShake)
+	{
+		if (ADMPlayerController* PlayerController = GetOwningController())
+		{
+			PlayerController->PlayerCameraManager->StartCameraShake(FireCameraShake);
+		}
+	}
 
 	if (ShellFragment > 1)
 	{
@@ -344,33 +381,43 @@ void AShootWeapon::HandleFire()
 		
 		for (int32 I = 0; I < ShellFragment; I++)
 		{
-			HandleLineTrace(ViewLoc, ViewRot, Hits[I]);
+			HandleLineTrace(Hits[I]);
 		}
-
-		HitInfoPtr = MakeShared<FBulletHitInfo_MultiBullet>(Hits);
+		
+		HitInfoHandle.Set(MakeShared<FHitInfo_MultiBullet>(Hits));
 	}
 	else
 	{
 		FHitResult Hit;
-		HandleLineTrace(ViewLoc, ViewRot, Hit);
+		HandleLineTrace(Hit);
 		
-		HitInfoPtr = MakeShared<FBulletHitInfo_SingleBullet>(Hit);
+		HitInfoHandle.Set(MakeShared<FHitInfo_SingleBullet>(Hit));
 	}
-
-	FBulletHitInfoHandle Handle(HitInfoPtr);
 
 	// 增加后坐力
 	RecoilTimeline.PlayFromStart();
 
 	BP_OnFiring();
 
-	SpawnAmmoAndFX(Handle);
+	SpawnProjectile();
+	ServerSpawnProjectile(HitInfoHandle);
 
 	AmmoNum--;
 }
 
-void AShootWeapon::HandleLineTrace(const FVector& ViewLoc, const FRotator& ViewRot, FHitResult& OutHit) const
+void AShootWeapon::HandleFireStop()
 {
+	
+}
+
+void AShootWeapon::HandleLineTrace(FHitResult& OutHit) const
+{
+	check(OwningShooter);
+
+	FVector CameraLoc;
+	FRotator CameraRot;
+	OwningShooter->GetCameraLocationAndRotation(CameraLoc, CameraRot);
+	
 	FRandomStream RandomStream(FMath::Rand());
 	
 	float AngleRadians = 0.f;
@@ -387,51 +434,64 @@ void AShootWeapon::HandleLineTrace(const FVector& ViewLoc, const FRotator& ViewR
 		AngleRadians = FMath::DegreesToRadians(CurrentSpread) / 30;
 	}
 
-	FVector ShootDir = RandomStream.VRandCone(ViewRot.Vector(), AngleRadians, AngleRadians);
-	FVector TraceEnd = ViewLoc + ShootDir * TraceDistance;
+	FVector ShootDir = RandomStream.VRandCone(CameraRot.Vector(), AngleRadians, AngleRadians);
+	FVector TraceEnd = CameraLoc + ShootDir * TraceDistance;
 
 	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(GetOwningShooter());
-	QueryParams.bReturnPhysicalMaterial = true;
+	QueryParams.AddIgnoredActor(this);
+	QueryParams.AddIgnoredActor(GetInstigator());
+	
 
-	/*GetWorld()->SweepSingleByChannel(OutHit, ViewLoc, TraceEnd, FQuat::Identity,
-	                                 ECollisionChannel::ECC_Visibility,
-	                                 FCollisionShape::MakeSphere(TraceCenterOffset), QueryParams);*/
+	FHitResult ViewHitResult;
+	GetWorld()->LineTraceSingleByChannel(ViewHitResult, CameraLoc, TraceEnd, ECC_Visibility, QueryParams);
 
-	GetWorld()->LineTraceSingleByChannel(OutHit, ViewLoc, TraceEnd, ECC_Visibility, QueryParams);
+	GetActualProjectileHitResult(ViewHitResult, OutHit);
 
-	OutHit.TraceStart = WeaponMesh->GetSocketLocation(MuzzleSocketName);
+#if ENABLE_DRAW_DEBUG
 
-	if (!OutHit.bBlockingHit)
+	if (DebugWeaponCVar::DebugCVar.GetValueOnAnyThread() == 1)
 	{
-		OutHit.ImpactPoint = TraceEnd;
-		OutHit.Location = TraceEnd;
+		UKismetSystemLibrary::DrawDebugLine(this, CameraLoc, TraceEnd, FLinearColor::Blue, 5.f, 1.f);
 	}
+
+#endif
+
 }
 
-void AShootWeapon::SpawnAmmoAndFX(const FBulletHitInfoHandle& HitInfo)
+void AShootWeapon::GetActualProjectileHitResult(const FHitResult& ViewHitResult, FHitResult& ActualHitResult) const
 {
-	if (FBulletHitInfo_SingleBullet* SingleBullet = HitInfo.Get<FBulletHitInfo_SingleBullet>())
+	ActualHitResult = ViewHitResult;
+}
+
+void AShootWeapon::ServerSpawnProjectile_Implementation(const FHitInfoHandle& HitInfo)
+{
+	MARK_PROPERTY_DIRTY_FROM_NAME(AShootWeapon, HitInfoHandle, this);
+
+	HitInfoHandle = HitInfo;
+
+	SpawnProjectile();
+}
+
+void AShootWeapon::SpawnProjectile()
+{
+	if (FHitInfo_SingleBullet* SingleHit = HitInfoHandle.Get<FHitInfo_SingleBullet>())
 	{
-		if (FHitResult* HitResult = SingleBullet->GetHitResult())
+		if (FHitResult* HitResult = SingleHit->GetHitResult())
 		{
-			HandleSpawnAmmo(*HitResult);
+			HandleSpawnProjectile(*HitResult);
 		}
 	}
-	else if (FBulletHitInfo_MultiBullet* MultiBullet = HitInfo.Get<FBulletHitInfo_MultiBullet>())
+	else if (FHitInfo_MultiBullet* MultiHit = HitInfoHandle.Get<FHitInfo_MultiBullet>())
 	{
-		const TArray<FHitResult>& HitResults = MultiBullet->GetHits();
+		// todo 或许可以聚合一下 ?
+		const TArray<FHitResult>& HitResults = MultiHit->GetHits();
 		for (const FHitResult& HitResult : HitResults)
 		{
-			HandleSpawnAmmo(HitResult);
+			HandleSpawnProjectile(HitResult);
 		}
 	}
 
-	if (GetNetMode() == NM_DedicatedServer)
-	{
-		ServerSpawnAmmo(HitInfo);
-	}
-	else
+	if (GetNetMode() != NM_DedicatedServer)
 	{
 		if (OwningShooter)
 		{
@@ -452,20 +512,21 @@ void AShootWeapon::SpawnAmmoAndFX(const FBulletHitInfoHandle& HitInfo)
 	}
 }
 
-void AShootWeapon::ServerSpawnAmmo_Implementation(const FBulletHitInfoHandle& HitInfo)
-{
-	HitInfoHandle = HitInfo;
-}
-
 // [ROLE_Simulation]
 void AShootWeapon::OnRep_HitInfoHandle()
 {
-	SpawnAmmoAndFX(HitInfoHandle);
+	SpawnProjectile();
 }
+
 
 FTransform AShootWeapon::GetPreviewRelativeTransform() const
 {
 	return PreviewTransform;
+}
+
+UDMUpgradeGearInfluence* AShootWeapon::GetUpgradeAttributesInfluence() const
+{
+	return UpgradeInfluenceAttributes;
 }
 
 void AShootWeapon::GetMuzzlePoint(FVector& Point, FRotator& Direction) const
@@ -474,46 +535,73 @@ void AShootWeapon::GetMuzzlePoint(FVector& Point, FRotator& Direction) const
 	Point = WeaponMesh->GetSocketLocation(MuzzleSocketName) + Direction.RotateVector(MuzzleLocationOffset);
 }
 
+void AShootWeapon::GetOwningPlayerCameraViewPoint(FVector& Location, FRotator& Rotation)
+{
+	if (OwningShooter)
+	{
+		OwningShooter->GetCameraLocationAndRotation(Location, Rotation);
+	}
+}
+
+int32 AShootWeapon::GetInitAmmoNum() const
+{
+	return InitAmmo;
+}
+
+int32 AShootWeapon::GetInitReserveAmmoNum() const
+{
+	return InitReserveAmmo;
+}
+
+void AShootWeapon::InitializeWeaponAttributes(const FEquipmentAttributes& InAttributes, float AdditionMagnitude)
+{
+	WeaponAttribute = InAttributes;
+
+	if (UpgradeInfluenceAttributes && AdditionMagnitude > 0.f)
+	{
+		UpgradeInfluenceAttributes->AttemptCalculateAddition(WeaponAttribute, AdditionMagnitude);
+	}
+}
+
+const FEquipmentAttributes& AShootWeapon::GetAttributes() const
+{
+	return WeaponAttribute;
+}
+
 void AShootWeapon::OnAimEnded()
 {
 	BP_OnWeaponAimed();
 }
 
-void AShootWeapon::ApplyRadialDamage(const FRadialDamageProjectileInfo& Radial)
+void AShootWeapon::ApplyDamageEffect(const FHitResult& HitResult, const FVector& Origin)
 {
 	if (GetLocalRole() != ROLE_Authority)
 	{
 		return;
 	}
-
-	FCollisionQueryParams QueryParams;
-	QueryParams.AddIgnoredActor(GetOwner());
-	QueryParams.bReturnPhysicalMaterial = true;
-
-	TArray<FHitResult> Hits;
-	GetWorld()->SweepMultiByChannel(Hits, Radial.Origin, Radial.Origin, FQuat::Identity,
-                                    ECC_Visibility, FCollisionShape::MakeSphere(Radial.DamageRadius), QueryParams);
-
-
-	for (FArrayDistinctIterator<FHitResult, FHitResultKeyFuncs> It(Hits); It; ++It)
-	{
-		// 这里主要作用是触发引擎里默认的一些效果。 像是对击中的物体添加一个力
-		//(*It).Actor->TakeDamage(DNUMBER_ONE, DmgEvent, nullptr, GetOwner());
-
-		DoApplyDamageEffect(*It, Radial.Origin);
-	}
-}
-
-void AShootWeapon::ApplyPointDamage(const FHitResult& HitInfo)
-{
-	if (GetLocalRole() != ROLE_Authority)
+	
+	AActor* HitActor = HitResult.GetActor();
+	if (HitActor == nullptr)
 	{
 		return;
 	}
 
-	//UGameplayStatics::ApplyPointDamage(HitInfo.GetActor(), DNUMBER_ONE, HitInfo.ImpactNormal, HitInfo, nullptr, GetOwner(), nullptr);
+	if (IAbilitySystemInterface* TargetASI = Cast<IAbilitySystemInterface>(HitActor))
+	{
+		float DamageFalloff = 1.f;
+		if (DamageFalloffCurve)
+		{
+			DamageFalloff = DamageFalloffCurve->GetFloatValue(FVector::Distance(Origin, HitResult.ImpactPoint));
+		}
 
-	DoApplyDamageEffect(HitInfo, GetOwner()->GetActorLocation());
+		FDreamGameplayEffectContext* EffectContext = UDGameplayStatics::MakeDreamEffectContext(OwningShooter, DamageFalloff, HitResult);
+		EffectContext->SetDamageType(static_cast<EDDamageType>(WeaponType));
+
+		FGameplayEffectSpec Spec(GetDefault<UDMEffect_ShootingDamage>(), FGameplayEffectContextHandle(EffectContext));
+		Spec.DynamicAssetTags = DynamicAssetTags;
+		Spec.DynamicGrantedTags = DynamicGrantedTags;
+		TargetASI->GetAbilitySystemComponent()->ApplyGameplayEffectSpecToSelf(Spec);
+	}
 }
 
 void AShootWeapon::InitializeAmmunition()
@@ -529,9 +617,24 @@ void AShootWeapon::InitializeAmmunition()
 	}
 }
 
-void AShootWeapon::OnPlayerAmmunitionChanged(float NewAmmunition)
+void AShootWeapon::OnReloadFinished()
 {
-	ReserveAmmo = FMath::RoundHalfFromZero(InitReserveAmmo * NewAmmunition);
+	int32 ReloadAmmo = FMath::Min(InitAmmo - AmmoNum, ReserveAmmo);
+	
+	AmmoNum += ReloadAmmo;
+
+	if (ADMPlayerController* Controller = OwningShooter->GetPlayerController())
+	{
+		Controller->SetWeaponAmmunition(AmmoType, static_cast<float>(ReserveAmmo - ReloadAmmo) / InitReserveAmmo);
+	}
+}
+
+void AShootWeapon::OnPlayerAmmunitionChanged(EAmmoType ChangedAmmoType, float NewAmmunition)
+{
+	if (AmmoType == ChangedAmmoType)
+	{
+		ReserveAmmo = FMath::RoundHalfFromZero(InitReserveAmmo * NewAmmunition);
+	}
 }
 
 void AShootWeapon::ServerSetWeaponState_Implementation(EWeaponState NewState)
@@ -542,25 +645,20 @@ void AShootWeapon::ServerSetWeaponState_Implementation(EWeaponState NewState)
 void AShootWeapon::SetWeaponState(EWeaponState NewState)
 {
 	// [local/server]
-	
 	WeaponState = NewState;
-	
-	if (GetLocalRole() != ROLE_Authority)
+
+	if (GetLocalRole() == ROLE_Authority)
+	{
+		MARK_PROPERTY_DIRTY_FROM_NAME(AShootWeapon, WeaponState, this);
+	}
+	else
 	{
 		ServerSetWeaponState(NewState);
 	}
 }
 
-void AShootWeapon::OnRep_WeaponState(EWeaponState LastState)
+void AShootWeapon::OnRep_WeaponState()
 {
-	if (LastState != EWeaponState::Idle)
-	{
-		if (WeaponMesh->AnimScriptInstance)
-		{
-			WeaponMesh->AnimScriptInstance->StopAllMontages(0.1f);
-		}
-	}
-	
 	if (WeaponState == EWeaponState::Reloading)
 	{
 		PlayWeaponReloadingAnim();
@@ -570,70 +668,61 @@ void AShootWeapon::OnRep_WeaponState(EWeaponState LastState)
 	{
 		OwningShooter->PlayMontage(CharacterAnim.EquipAnim);
 	}
+	else if (WeaponState == EWeaponState::Idle && LastWeaponState != EWeaponState::Idle)
+	{
+		if (WeaponMesh->AnimScriptInstance)
+		{
+			WeaponMesh->AnimScriptInstance->StopAllMontages(0.2f);
+		}
+
+		if (UAnimInstance* AnimInstance = OwningShooter->GetMesh()->GetAnimInstance())
+		{
+			AnimInstance->StopAllMontages(0.2f);		
+		}
+	}
+
+	LastWeaponState = WeaponState;
 }
 
 void AShootWeapon::PlayWeaponShootingAnim()
 {
-	if (WeaponMesh->AnimScriptInstance)
-	{
-		WeaponMesh->AnimScriptInstance->Montage_Play(ReloadAnim);
-	}
-}
-
-void AShootWeapon::PlayWeaponReloadingAnim()
-{
-	if (WeaponMesh->AnimScriptInstance)
+	if (WeaponMesh->AnimScriptInstance && ShootAnim)
 	{
 		WeaponMesh->AnimScriptInstance->Montage_Play(ShootAnim);
 	}
 }
 
-void AShootWeapon::OnReloadFinished()
+void AShootWeapon::PlayWeaponReloadingAnim()
 {
-	int32 ReloadAmmo = FMath::Min(InitAmmo - AmmoNum, ReserveAmmo);
-	
-	AmmoNum += ReloadAmmo;
-
-	ADMPlayerController* Controller = GetOwningShooter()->GetPlayerController();
-	Controller->SetWeaponAmmunition(AmmoType, static_cast<float>(ReserveAmmo - ReloadAmmo) / InitReserveAmmo);
-}
-
-void AShootWeapon::DoApplyDamageEffect(const FHitResult& Hit, const FVector& Origin) const
-{
-	AActor* HitActor = Hit.GetActor();
-	if (HitActor == nullptr)
+	if (WeaponMesh->AnimScriptInstance && ReloadAnim)
 	{
-		return;
-	}
-
-	if (IAbilitySystemInterface* TargetASI = Cast<IAbilitySystemInterface>(HitActor))
-	{
-		float DamageFalloff = 1.f;
-		if (DamageFalloffCurve)
-		{
-			DamageFalloff = DamageFalloffCurve->GetFloatValue(FVector::Distance(Origin, Hit.ImpactPoint));
-		}
-
-		FDreamGameplayEffectContext* EffectContext = UDGameplayStatics::MakeDreamEffectContext(OwningShooter, DamageFalloff, Hit);
-		EffectContext->SetDamageType(static_cast<EDDamageType>(WeaponType));
-
-		FGameplayEffectSpec Spec(GetDefault<UDGE_WeaponBaseDamage>(), FGameplayEffectContextHandle(EffectContext));
-		Spec.DynamicAssetTags = DynamicAssetTags;
-		Spec.DynamicGrantedTags = DynamicGrantedTags;
-		TargetASI->GetAbilitySystemComponent()->ApplyGameplayEffectSpecToSelf(Spec);
+		WeaponMesh->AnimScriptInstance->Montage_Play(ReloadAnim);
 	}
 }
+
 
 void AShootWeapon::SetWeaponEnable(bool bEnable)
 {
-	if (IsLocalWeapon())
+	BP_OnWeaponEnable(bEnable);
+	SetActorTickEnabled(bEnable);
+	if (!bEnable)
 	{
-		BP_OnWeaponEnable(bEnable);
-		SetActorTickEnabled(bEnable);
-		if (!bEnable)
+		RecoverTimelineTick(1.f);
+		AimTimelineTick(0.f);
+	}
+}
+
+void AShootWeapon::OnRep_AttachmentReplication()
+{
+	Super::OnRep_AttachmentReplication();
+
+	const FRepAttachment& AttachmentRep = GetAttachmentReplication();
+
+	if (AttachmentRep.AttachSocket == UDMProjectSettings::Get()->GetWepActiveSockName())
+	{
+		if (ADCharacterPlayer* AttachedShooter = Cast<ADCharacterPlayer>(AttachmentRep.AttachParent))
 		{
-			RecoverTimelineTick(1.f);
-			AimTimelineTick(0.f);
+			AttachedShooter->UpdateOverlayDetailID(AnimID);
 		}
 	}
 }
@@ -693,16 +782,6 @@ float AShootWeapon::GetRemainAmmoPercent() const
 	return static_cast<float>(AmmoNum) / InitAmmo;
 }
 
-void AShootWeapon::BP_GetMuzzlePoint(FVector& Point, FRotator& Direction) const
-{
-	GetMuzzlePoint(Point, Direction);
-}
-
-void AShootWeapon::BP_GetLineTracePoint(FVector& Point, FRotator& Direction) const
-{
-	GetLineTracePoint(Point, Direction);
-}
-
 ADCharacterPlayer* AShootWeapon::GetOwningShooter() const
 {
 	return OwningShooter;
@@ -749,6 +828,10 @@ void AShootWeapon::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLife
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
 
-	DOREPLIFETIME_CONDITION(AShootWeapon, HitInfoHandle, COND_SkipOwner);
-	DOREPLIFETIME_CONDITION(AShootWeapon, WeaponState, COND_SkipOwner);
+	FDoRepLifetimeParams Params;
+	Params.Condition = COND_SkipOwner;
+	Params.bIsPushBased = true;
+	
+	DOREPLIFETIME_WITH_PARAMS_FAST(AShootWeapon, HitInfoHandle, Params);
+	DOREPLIFETIME_WITH_PARAMS_FAST(AShootWeapon, WeaponState, Params);
 }

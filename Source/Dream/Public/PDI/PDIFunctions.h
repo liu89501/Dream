@@ -38,6 +38,17 @@ public:
 
 	UFUNCTION(BlueprintPure, Category = "DreamStatics|PDI")
 	static int32 GetPlayerMaterialNum(int32 ItemGuid);
+
+	/*UFUNCTION(BlueprintCallable, Category = "DreamStatics|PDI")
+	static void ConsumeMaterial(const TArray<FAcquisitionCost>& Costs);
+	UFUNCTION(BlueprintCallable, Category = "DreamStatics|PDI")
+    static void ConsumeMaterialFromHandle(const FCostsHandle& Handle);*/
+	
+	UFUNCTION(BlueprintPure, Category = "DreamStatics|PDI")
+	static bool CheckMaterials(const TArray<FAcquisitionCost>& Costs);
+	
+	UFUNCTION(BlueprintPure, Category = "DreamStatics|PDI")
+	static bool CheckMaterialsFromHandle(const FCostsHandle& Handle);
 	
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category = "DreamStatics|PDI")
 	static void SendUpdateTaskCondForEvent(APlayerController* PlayerCtrl, FName EventName);

@@ -32,11 +32,11 @@ void AShootWeapon_Sniper::OnAimEnded()
 	BP_OnAimChange();
 	if (bAimed)
 	{
-		GetOwningShooter()->GetRootComponent()->SetVisibility(false, true);
+		OwningShooter->SetActorHiddenInGame(true);
 	}
 	else
 	{
-		GetOwningShooter()->GetRootComponent()->SetVisibility(true, true);
+		OwningShooter->SetActorHiddenInGame(false);
 	}
 }
 
@@ -50,8 +50,8 @@ void AShootWeapon_Sniper::GetMuzzlePoint(FVector& Point, FRotator& Direction) co
 	ADCharacterPlayer* Shooter = GetOwningShooter();
 	if (Shooter->IsLocallyControlled() && bAimed)
 	{
-		Direction = Shooter->TPCamera->GetComponentRotation();
-		Point = Shooter->TPCamera->GetComponentLocation() + Direction.RotateVector(AimMuzzleOffset);
+		Shooter->GetCameraLocationAndRotation(Point, Direction);
+		Point += Direction.RotateVector(AimMuzzleOffset);
 	}
 	else
 	{

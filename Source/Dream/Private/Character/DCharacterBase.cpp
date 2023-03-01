@@ -99,7 +99,7 @@ void ADCharacterBase::HealthChanged(const FOnAttributeChangeData& AttrData)
 
     if (IsDeath())
     {
-        Tags.Add(DreamActorTagName::Death);
+        Tags.Add(DMActorTagName::Death);
         
         //GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
         GetMesh()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Ignore);

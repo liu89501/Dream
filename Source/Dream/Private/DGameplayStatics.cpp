@@ -15,6 +15,7 @@
 #include "DGameUserSettings.h"
 #include "DMAttributeSet.h"
 #include "DMProjectSettings.h"
+#include "DMUpgradeAddition.h"
 #include "DreamGameMode.h"
 #include "DreamGameplayType.h"
 #include "DreamGameplayAbility.h"
@@ -95,18 +96,18 @@ bool UDGameplayStatics::ContainsActionKey(APlayerController* PlayerController, c
 	return bResult;
 }
 
-FName UDGameplayStatics::GetInputActionKeyName(APlayerController* PlayerController, FName ActionName)
+FText UDGameplayStatics::GetInputActionKeyName(APlayerController* PlayerController, FName ActionName)
 {
 	if (PlayerController)
 	{
 		TArray<FInputActionKeyMapping> ActionKeyMapping = PlayerController->PlayerInput->GetKeysForAction(ActionName);
 		if (ActionKeyMapping.IsValidIndex(0))
 		{
-			return ActionKeyMapping[0].Key.GetFName();
+			return ActionKeyMapping[0].Key.GetDisplayName(false);
 		}
 	}
 
-	return TEXT("NONE");
+	return FText::FromName(NAME_None);
 }
 
 float UDGameplayStatics::GetDefaultGravityZ(UObject* WorldContextObject)
@@ -237,7 +238,7 @@ bool UDGameplayStatics::LineTraceAndSendEvent(
 	FGameplayTag InEventTag,
 	FVector TraceStart,
 	FVector TraceEnd,
-	ECollisionChannel TraceChannel,
+	ECollisionChannel CollisionChannel,
 	FHitResult& OutHit)
 {
 	UWorld* World = Source->GetWorld();
@@ -254,17 +255,11 @@ bool UDGameplayStatics::LineTraceAndSendEvent(
 		return false;
 	}
 
-	FCollisionQueryParams QueryParams(TEXT("UDGameplayStatics::LineTraceAndSendEvent"), false, Source);
-	bool bHit = World->LineTraceSingleByChannel(OutHit, TraceStart, TraceEnd, TraceChannel, QueryParams);
-
-#if WITH_EDITOR
-
-	//DrawDebugSphere(World, TraceEnd, 100.f, 32, FColor::Red, false, 2, 0, 2);
+	FCollisionQueryParams QueryParams;
+	QueryParams.AddIgnoredActor(Source);
+	QueryParams.bReturnPhysicalMaterial = true;
 	
-	//AActor* HitActor = OutHit.GetActor();
-	//UE_LOG(LogDream, Error, TEXT("LineTraceAndSendEvent: %s, bHit: %d"), HitActor ? *HitActor->GetFullName() : TEXT("NONE"), bHit);
-
-#endif
+	bool bHit = World->LineTraceSingleByChannel(OutHit, TraceStart, TraceEnd, CollisionChannel, QueryParams);
 
 	if (bHit)
 	{
@@ -273,6 +268,13 @@ bool UDGameplayStatics::LineTraceAndSendEvent(
 		Payload.Instigator = Source;
 		AbilitySystem->HandleGameplayEvent(InEventTag, &Payload);
 	}
+
+	/*UKismetSystemLibrary::DrawDebugLine(World, TraceStart, TraceEnd, FLinearColor::Red, 1.f, 1.f);
+
+	if (bHit)
+	{
+		UKismetSystemLibrary::DrawDebugPoint(World, OutHit.ImpactPoint, 50.f, FLinearColor::Green, 1.f);
+	}*/
 	
 	return bHit;
 }
@@ -327,7 +329,7 @@ bool UDGameplayStatics::SphereTraceAndSendEvent(
 	return true;
 }
 
-void ApplyGameplayEffect(UAbilitySystemComponent* SourceASC, AActor* TargetActor,
+void UDGameplayStatics::ApplyGameplayEffect(UAbilitySystemComponent* SourceASC, AActor* TargetActor,
 	UClass* GEClass, float GELevel, bool bIncludeHitResult, EDDamageType DamageType)
 {
 	UAbilitySystemComponent* TargetComponent = UAbilitySystemGlobals::GetAbilitySystemComponentFromActor(TargetActor);
@@ -449,7 +451,8 @@ bool UDGameplayStatics::ApplyGameplayEffectToAllActors(UGameplayAbility* Ability
 	for (TWeakObjectPtr<AActor> Target : TargetActors)
 	{
 		AActor* TargetActor = Target.Get();
-		if (TargetActor == nullptr)
+		
+		if (TargetActor == nullptr || TargetActor->GetNativeInterfaceAddress(IAbilitySystemInterface::UClassType::StaticClass()) == nullptr)
 		{
 			continue;
 		}
@@ -556,61 +559,6 @@ APlayerController* UDGameplayStatics::GetActorPlayerController(AActor* Actor)
 	return nullptr;
 }
 
-void UDGameplayStatics::ReturnToMainMenuWithTextReason(APlayerController* PlayerCtrl, FText Reason)
-{
-	if (PlayerCtrl)
-	{
-		PlayerCtrl->ClientReturnToMainMenuWithTextReason(Reason);
-	}
-}
-
-void UDGameplayStatics::CalculateOrientation(const FVector& Velocity, const FRotator& BaseRotation, float& Angle, int32& Orientation)
-{
-	Angle = 0.f;
-	Orientation = 0;
-	
-	if (!Velocity.IsNearlyZero())
-	{
-		FRotator DeltaRotation = Velocity.Rotation() - BaseRotation;
-		DeltaRotation.Normalize();
-
-		float Tolerance = 2.f;
-
-		bool bRight = DeltaRotation.Yaw > 0;
-
-		float YawAbs = FMath::Abs(DeltaRotation.Yaw);
-
-		if (YawAbs < 45.f + Tolerance)
-		{
-			Orientation = 0;
-			Angle = DeltaRotation.Yaw;
-		}
-		else if (YawAbs < 135.f - Tolerance)
-		{
-			float Abs = FMath::Abs(YawAbs - 90.f);
-			if (bRight)
-			{
-				Orientation = 1;
-				
-				Angle = Abs;
-			}
-			else
-			{
-				Orientation = 3;
-				Angle = -Abs;
-			}
-		}
-		else
-		{
-			Orientation = 2;
-			float BackwardDegrees = 180.f - YawAbs;
-			Angle = bRight ? -BackwardDegrees : BackwardDegrees;
-		}
-
-		//UE_LOG(LogDream, Error, TEXT("Orientation: %d, Angle: %f, YawAbs: %f"), Orientation, Angle, YawAbs);
-	}
-}
-
 float UDGameplayStatics::CalculateDir(const FVector& Velocity, const FRotator& BaseRotation)
 {
 	FMatrix RotMatrix = FRotationMatrix(BaseRotation);
@@ -636,17 +584,16 @@ float UDGameplayStatics::CalculateDir(const FVector& Velocity, const FRotator& B
 void UDGameplayStatics::SpawnWeaponTrailParticles(UObject* WorldContextObject, const FWeaponTrailVFX& TrailVfx,
                                                   const FVector& StartLocation, const FVector& EndLocation)
 {
-	if (TrailVfx.TrailEffect)
+	if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull))
 	{
-		if (UWorld* World = GEngine->GetWorldFromContextObject(WorldContextObject, EGetWorldErrorMode::ReturnNull))
-		{
-			FRotator Rotation = UKismetMathLibrary::FindLookAtRotation(StartLocation, EndLocation);
-			FVector SpawnLocation = StartLocation + Rotation.RotateVector(TrailVfx.SpawnPositionOffset);
+		FRotator Rotation = UKismetMathLibrary::FindLookAtRotation(StartLocation, EndLocation);
+		FVector SpawnLocation = StartLocation + Rotation.RotateVector(TrailVfx.SpawnPositionOffset);
 
-			float Distance = FVector::Distance(SpawnLocation, EndLocation);
-			if (Distance > TrailVfx.MinimumSpawnDistance)
+		float Distance = FVector::Distance(SpawnLocation, EndLocation);
+		if (Distance > TrailVfx.MinimumSpawnDistance)
+		{
+			if (UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, TrailVfx.TrailEffect, SpawnLocation))
 			{
-				UNiagaraComponent* NC = UNiagaraFunctionLibrary::SpawnSystemAtLocation(World, TrailVfx.TrailEffect, SpawnLocation);
 				NC->SetVectorParameter(TrailVfx.TrailEndLocationParamName, EndLocation);
 				NC->SetFloatParameter(TrailVfx.TrailLifeTimeParamName, Distance / TrailVfx.TrailFlyingSpeed);
 			}
@@ -698,7 +645,7 @@ void UDGameplayStatics::ClearHoldStateHandle(UObject* WorldContextObject, const 
 
 void UDGameplayStatics::OverrideSystemUserVariableSplineComponent(UNiagaraComponent* NiagaraSystem, const FString& OverrideName, USplineComponent* SplineComponent)
 {
-	if (NiagaraSystem)
+	if (NiagaraSystem && SplineComponent)
 	{
 		const FNiagaraParameterStore& OverrideParameters = NiagaraSystem->GetOverrideParameters();
 		FNiagaraVariable Variable(FNiagaraTypeDefinition(UNiagaraDataInterfaceSpline::StaticClass()), *OverrideName);

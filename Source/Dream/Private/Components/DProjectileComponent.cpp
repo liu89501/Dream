@@ -12,6 +12,11 @@ UDProjectileComponent::UDProjectileComponent()
 
 FVector UDProjectileComponent::ComputeHomingAcceleration(const FVector& InVelocity, float DeltaTime) const
 {
+	if (!bIsHomingProjectile)
+	{
+		return Super::ComputeHomingAcceleration(InVelocity, DeltaTime);
+	}
+	
 	FVector NewDirection = HomingTargetComponent->GetComponentLocation() - UpdatedComponent->GetComponentLocation();
 
 	if (LimitAngle > 0.f)

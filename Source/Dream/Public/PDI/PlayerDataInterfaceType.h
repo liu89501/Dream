@@ -19,7 +19,6 @@ enum class ETaskCondGUID : int32
 	EVENT
 };
 
-
 UENUM(BlueprintType)
 enum class ETalentCategory : uint8
 {
@@ -351,17 +350,20 @@ public:
 
 	FItemEquipment()
 		: FItem(IM_Equipment)
+		, GearLevel(0)
 	{
 	}
 	
 	FItemEquipment(int32 InItemGuid)
 		: FItem(InItemGuid, IM_Equipment)
+		, GearLevel(0)
 	{
 	}
 
-	FItemEquipment(int32 InItemGuid, const FEquipmentAttributes& InAttributes)
+	FItemEquipment(int32 InItemGuid, int32 InGearLevel, const FEquipmentAttributes& InAttributes)
 		: FItem(InItemGuid, IM_Equipment)
 		, Attributes(InAttributes)
+		, GearLevel(InGearLevel)
 	{
 	}
 
@@ -375,6 +377,8 @@ public:
 public:
 	
 	FEquipmentAttributes Attributes;
+
+	uint8 GearLevel;
 };
 
 /**
@@ -629,6 +633,7 @@ struct FQueryPlayerParam
 	}
 };
 
+
 /** ================================================ ↑↑↑↑↑↑ ================================================ */
 /** ================================================ 物品相关 ================================================ */
 
@@ -663,6 +668,9 @@ public:
 
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category=ItemData)
 	FEquipmentAttributes Attributes;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Meta = (ClampMin = 0, ClampMax = 100), Category=ItemData)
+	int32 Level;
 };
 
 
@@ -675,6 +683,9 @@ public:
 
 	UPROPERTY(EditAnywhere, Category=ItemData)
 	class UDEquipmentAttributesPool* AttrPool;
+
+	UPROPERTY(EditAnywhere, Category=ItemData)
+	FRangeRandomInt LevelRange;
 
 public:
 
@@ -697,6 +708,22 @@ public:
 	virtual TSharedPtr<FItem> MakeItemStruct() override;
 };
 
+UCLASS()
+class DREAM_API UItemDataNumericalValue_Random : public UItemData
+{
+	GENERATED_BODY()
+
+public:
+
+	/** 按范围随机取得一个数值 */
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category=ItemData)
+	FRangeRandomInt RangeValue;
+
+public:
+
+	virtual TSharedPtr<FItem> MakeItemStruct() override;
+};
+
 /** ================================================ 物品蓝图相关 ================================================ */
 /** ================================================ ********** ================================================ */
 
@@ -705,10 +732,10 @@ struct FAcquisitionCost
 {
 	GENERATED_BODY()
 
-	UPROPERTY(BlueprintReadOnly)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	int32 ItemGuid;
 
-	UPROPERTY(BlueprintReadOnly)
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	int32 CostAmount;
 
 	friend FArchive& operator<<(FArchive& Ar, FAcquisitionCost& R)
@@ -717,6 +744,14 @@ struct FAcquisitionCost
 		Ar << R.CostAmount;
 		return Ar;
 	}
+};
+
+USTRUCT(BlueprintType)
+struct FCostsHandle
+{
+	GENERATED_BODY()
+
+	TSharedPtr<TArray<FAcquisitionCost>> Costs;
 };
 
 
@@ -901,7 +936,8 @@ struct FPlayerWeapon
 		: ItemGuid(0),
 		  bEquipped(false),
 		  Index(0),
-		  WeaponId(0)
+		  WeaponId(0),
+		  WeaponLevel(0)
 	{
 	}
 
@@ -920,6 +956,9 @@ struct FPlayerWeapon
 	UPROPERTY(BlueprintReadOnly)
 	FEquipmentAttributes Attributes;
 
+	UPROPERTY()
+	uint8 WeaponLevel;
+
 	friend FArchive& operator<<(FArchive& Ar, FPlayerWeapon& Weapon)
 	{
 		Ar << Weapon.WeaponId;
@@ -927,6 +966,8 @@ struct FPlayerWeapon
 		Ar << Weapon.bEquipped;
 		Ar << Weapon.Index;
 		Ar << Weapon.Attributes;
+		Ar << Weapon.WeaponLevel;
+		
 		return Ar;
 	}
 };
@@ -940,7 +981,8 @@ struct FPlayerModule
 		: ItemGuid(0),
 		  bEquipped(false),
 		  ModuleId(0),
-		  Category(EModuleCategory::C1)
+		  Category(EModuleCategory::C1),
+		  ModuleLevel(0)
 	{
 	}
 
@@ -959,6 +1001,9 @@ struct FPlayerModule
 	UPROPERTY(BlueprintReadOnly)
 	FEquipmentAttributes Attributes;
 
+	UPROPERTY()
+	uint8 ModuleLevel;
+
 	friend FArchive& operator<<(FArchive& Ar, FPlayerModule& Module)
 	{
 		Ar << Module.ModuleId;
@@ -966,6 +1011,8 @@ struct FPlayerModule
 		Ar << Module.bEquipped;
 		Ar << Module.Category;
 		Ar << Module.Attributes;
+		Ar << Module.ModuleLevel;
+		
 		return Ar;
 	}
 };
@@ -1091,40 +1138,30 @@ struct FPlayerInfo
 	}
 };
 
-USTRUCT(BlueprintType)
-struct FSearchServerParam
+struct FLaunchServerParam
 {
-	GENERATED_USTRUCT_BODY()
+	FLaunchServerParam() = default;
 
-	FSearchServerParam() = default;
-
-	FSearchServerParam(const FString& InMapName, const FString& InModeName, const FString& InMapAssetPath) :
+	FLaunchServerParam(const FString& InMapAssetPath, const FString& InModeName) :
 		MapAssetPath(InMapAssetPath),
-		MapName(InMapName),
 		ModeName(InModeName)
 	{
 	}
 
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
 	FString MapAssetPath;
 
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
-	FString MapName;
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere)
 	FString ModeName;
 
-	friend FArchive& operator<<(FArchive& Ar, FSearchServerParam& A)
+	friend FArchive& operator<<(FArchive& Ar, FLaunchServerParam& A)
 	{
 		Ar << A.MapAssetPath;
-		Ar << A.MapName;
 		Ar << A.ModeName;
 		return Ar;
 	}
 };
 
 USTRUCT()
-struct FSearchServerResult
+struct FLaunchServerResult
 {
 	GENERATED_BODY()
 
@@ -1134,7 +1171,7 @@ struct FSearchServerResult
 	UPROPERTY()
 	FString ServerID;
 
-	friend FArchive& operator<<(FArchive& Ar, FSearchServerResult& A)
+	friend FArchive& operator<<(FArchive& Ar, FLaunchServerResult& A)
 	{
 		Ar << A.ServerAddress;
 		//Ar << A.ServerID;

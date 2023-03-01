@@ -3,21 +3,21 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "DMProjectileTrackComponent.generated.h"
 
-#include "DProjectile.h"
-#include "DProjectileTraceable.generated.h"
+class ADProjectile;
 
 /**
  * 
  */
-UCLASS()
-class DREAM_API ADProjectileTraceable : public ADProjectile
+UCLASS(ClassGroup=(Custom), meta=(BlueprintSpawnableComponent, DisplayName="ProjectileTrack"))
+class DREAM_API UDMProjectileTrackComponent : public UActorComponent
 {
 	GENERATED_BODY()
 
 public:
 
-    ADProjectileTraceable();
+    UDMProjectileTrackComponent();
 
 public:
 
@@ -35,7 +35,12 @@ public:
 
 public:
 
-    virtual void Tick(float DeltaSeconds) override;
+    virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
     virtual void BeginPlay() override;
+
+private:
+
+	UPROPERTY()
+	ADProjectile* OwningProjectile;
 };

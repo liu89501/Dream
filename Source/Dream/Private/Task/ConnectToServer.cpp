@@ -44,23 +44,20 @@ void UConnectToServer::OnCreateSession(FName SessionName, bool bSuccessfully)
 		return;
 	}
 	
-	FSearchServerParam Param;
-	Param.MapName = T_LevelInformation.Map.GetAssetName();
+	FLaunchServerParam Param;
 	Param.MapAssetPath = T_LevelInformation.Map.GetLongPackageName();
 	Param.ModeName = T_LevelInformation.GameModeClassAlias;
 
-	FPlayerDataInterface* DataInterface = FPDIStatic::Get();
+	FOnLaunchServer::FDelegate OnSearchServer;
+	OnSearchServer.BindUObject(this, &UConnectToServer::OnLaunchServer);
 	
-	FOnSearchServer::FDelegate OnSearchServer;
-	OnSearchServer.BindUObject(this, &UConnectToServer::OnPDISearchServer);
-	
-	Handle_SearchServer = DataInterface->AddOnSearchServer(OnSearchServer);
-	DataInterface->SearchDedicatedServer(Param);
+	Handle_SearchServer = GDataInterface->AddOnLaunchServer(OnSearchServer);
+	GDataInterface->LaunchDedicatedServer(Param);
 }
 
-void UConnectToServer::OnPDISearchServer(const FSearchServerResult& Result, bool bSuccessfully)
+void UConnectToServer::OnLaunchServer(const FLaunchServerResult& Result, bool bSuccessfully)
 {
-	FPDIStatic::Get()->RemoveOnSearchServer(Handle_SearchServer);
+	GDataInterface->RemoveOnLaunchServer(Handle_SearchServer);
 	
 	if (bSuccessfully)
 	{
@@ -68,7 +65,7 @@ void UConnectToServer::OnPDISearchServer(const FSearchServerResult& Result, bool
 
 		IDreamLoadingScreenModule::Get().StartInGameLoadingScreen();
 		
-		int32 ClientPlayerID = FPDIStatic::Get()->GetClientPlayerID();
+		int32 ClientPlayerID = GDataInterface->GetClientPlayerID();
 		GEngine->SetClientTravel(GetWorld(), *Result.GetConnectURL(ClientPlayerID), ETravelType::TRAVEL_Absolute);
 	}
 	else

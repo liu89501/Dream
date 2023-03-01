@@ -1,17 +1,17 @@
 // Fill out your copyright notice in the Description page of Project Settings.
 
 #include "DMAnimInstance.h"
-#include "DMAnimationInterface.h"
+#include "DMCharacterInterface.h"
 #include "GameFramework/Character.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Kismet/KismetMathLibrary.h"
 
 #define Execute_AnimInterface(Object, Func, ...) \
-	if (Object->GetClass()->ImplementsInterface(IDMAnimationInterface::UClassType::StaticClass())) \
+	if (Object->GetClass()->ImplementsInterface(IDMCharacterInterface::UClassType::StaticClass())) \
 	{ \
-		IDMAnimationInterface::Execute_##Func(Object, __VA_ARGS__); \
+		IDMCharacterInterface::Execute_##Func(Object, __VA_ARGS__); \
 	} \
-	else if (IDMAnimationInterface* AnimationInterface = Cast<IDMAnimationInterface>(Object)) \
+	else if (IDMCharacterInterface* AnimationInterface = Cast<IDMCharacterInterface>(Object)) \
 	{ \
 		AnimationInterface->##Func(__VA_ARGS__); \
 	} \

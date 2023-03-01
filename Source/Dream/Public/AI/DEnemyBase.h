@@ -45,7 +45,7 @@ struct FAmmunitionDropProbability
 /**
  * 
  */
-UCLASS()
+UCLASS(Abstract)
 class DREAM_API ADEnemyBase : public ADCharacterBase, public IAIPerceptionListenerInterface
 {
 	GENERATED_BODY()
@@ -54,10 +54,10 @@ public:
 
 	ADEnemyBase();
 
-	UPROPERTY(VisibleAnywhere)
+	UPROPERTY(VisibleDefaultsOnly)
 	class UAIPerceptionComponent* AIPerception;
 
-	UPROPERTY(VisibleAnywhere)
+	UPROPERTY(VisibleDefaultsOnly)
 	class UHealthWidgetComponent* HealthUI;
 	
 
@@ -138,17 +138,16 @@ protected:
 
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
-	virtual void ActivateHostile(ADCharacterBase* Hostile, bool bTriggerTeamStimulus = true);
+	virtual void ActivateHostile(AActor* Hostile, bool bTriggerTeamStimulus = true);
 
 	virtual void RefreshActiveHostile();
 
 	virtual void LostAllHostileTarget();
 
-	virtual void OnTargetPerceptionUpdated(ADCharacterBase* StimulusPawn, struct FAIStimulus Stimulus);
+	UFUNCTION()
+	virtual void OnTargetPerceptionUpdated(AActor* StimulusActor, struct FAIStimulus Stimulus);
 
 	virtual void Tick(float DeltaSeconds) override;
-
-	void HostileTargetDestroy(ADCharacterBase* DestroyedActor);
 
 protected:
 
@@ -163,13 +162,14 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly)
 	bool bTurnInProgress;
-
+	
+	
 private:
+
+	UPROPERTY()
+	AActor* FocusHostile;
 
 	FTimerHandle Handle_ShowUI;
 
 	FDelegateHandle HostileDeathHandle;
-
-	UFUNCTION()
-    void OnTargetPerceptionUpdated0(AActor* Actor, FAIStimulus Stimulus);
 };

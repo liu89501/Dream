@@ -94,7 +94,7 @@ FPlayerDataInterfaceBase::FPlayerDataInterfaceBase()
 {
 	CALLBACK_BINDING_RAW(TService_ClientLogin, this, &FPlayerDataInterfaceBase::OnReceiveClientLoginMessage);
 	CALLBACK_BINDING_RAW(TService_ServerLogin, this, &FPlayerDataInterfaceBase::OnReceiveServerLoginMessage);
-	CALLBACK_BINDING_RAW(TService_SearchServer, this, &FPlayerDataInterfaceBase::OnReceiveSearchServerMessage);
+	CALLBACK_BINDING_RAW(TService_LaunchServer, this, &FPlayerDataInterfaceBase::OnReceiveLaunchServerMessage);
 	CALLBACK_BINDING_RAW(TService_RegisterServer, this, &FPlayerDataInterfaceBase::OnReceiveRegisterServerMessage);
 }
 
@@ -112,26 +112,6 @@ void FPlayerDataInterfaceBase::Initialize()
 
 	SocketSubsystem = ISocketSubsystem::Get(PLATFORM_SOCKETSUBSYSTEM);
 	checkf(SocketSubsystem, TEXT("SocketSubsystem Invalid"));
-}
-
-void FPlayerDataInterfaceBase::RegisterServer(const FDedicatedServerInformation& Information)
-{
-	SocketSender->Send(PDIBuildParam<TService_RegisterServer>(Information));
-}
-
-void FPlayerDataInterfaceBase::SearchDedicatedServer(const FSearchServerParam& Param)
-{
-	SocketSender->Send(PDIBuildParam<TService_SearchServer>(Param));
-}
-
-void FPlayerDataInterfaceBase::UpdateActivePlayers(const FUpdateServerPlayerParam& Param)
-{
-	SocketSender->Send(PDIBuildParam<TService_UpdateServer>(Param));
-}
-
-void FPlayerDataInterfaceBase::NotifyBackendServer(const FLaunchNotifyParam& Param)
-{
-	SocketSender->Send(PDIBuildParam<TService_NotifyServer>(Param));
 }
 
 void FPlayerDataInterfaceBase::Login()
@@ -188,6 +168,11 @@ TSharedPtr<FInternetAddr> FPlayerDataInterfaceBase::GetBackendServerAddr()
 		Socket->GetPeerAddress(*Addr);
 	}
 	return Addr;
+}
+
+void FPlayerDataInterfaceBase::LaunchDedicatedServer(const FLaunchServerParam& Param)
+{
+	SocketSender->Send(PDIBuildParam<TService_LaunchServer>(Param));
 }
 
 FPlayerDataDelegate& FPlayerDataInterfaceBase::GetPlayerDataDelegate()
@@ -261,10 +246,10 @@ void FPlayerDataInterfaceBase::OnReceiveClientLoginMessage(FPacketArchiveReader&
 	BroadcastOnLogin(bLoginSucess);
 }
 
-void FPlayerDataInterfaceBase::OnReceiveSearchServerMessage(FPacketArchiveReader& Data)
+void FPlayerDataInterfaceBase::OnReceiveLaunchServerMessage(FPacketArchiveReader& Data)
 {
 	bool bSucess;
-	FSearchServerResult Result;
+	FLaunchServerResult Result;
 
 	Data << bSucess;
 	if (bSucess)
@@ -272,7 +257,7 @@ void FPlayerDataInterfaceBase::OnReceiveSearchServerMessage(FPacketArchiveReader
 		Data << Result;
 	}
 	
-	BroadcastOnSearchServer(Result, bSucess);
+	BroadcastOnLaunchServer(Result, bSucess);
 }
 
 void FPlayerDataInterfaceBase::OnReceiveRegisterServerMessage(FPacketArchiveReader& Data)

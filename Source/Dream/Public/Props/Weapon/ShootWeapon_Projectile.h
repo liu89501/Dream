@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ShootWeapon.h"
+#include "DProjectile.h"
 #include "ShootWeapon_Projectile.generated.h"
 
 UCLASS()
@@ -12,12 +13,8 @@ public:
 
 	UPROPERTY(EditAnywhere, Category = WeaponProjectile)
 	TSubclassOf<ADProjectile> Projectile;
-	
-public:
-
-	virtual void BeginPlay() override;
 
 protected:
 
-	virtual void HandleSpawnAmmo(const FHitResult& HitResult) override;
+	virtual void HandleSpawnProjectile(const FHitResult& HitResult) override;
 };

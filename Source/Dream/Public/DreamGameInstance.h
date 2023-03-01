@@ -27,4 +27,6 @@ protected:
 
 	virtual void Shutdown() override;
 
+	void OnPDIConnectionLose();
+
 };

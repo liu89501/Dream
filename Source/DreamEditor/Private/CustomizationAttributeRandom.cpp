@@ -50,7 +50,8 @@ void FItemSelectedCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> Pro
 			PropertyHandle->CreatePropertyNameWidget()
 		]
 		.ValueContent()
-		.HAlign(HAlign_Fill)
+		.HAlign(HAlign_Left)
+		.MinDesiredWidth(200.f)
 		[
 			SNew(SComboBox<TSharedPtr<FComboboxItem>>)
 		    .OptionsSource(&Options)
@@ -113,7 +114,7 @@ FText FItemSelectedCustomization::GetComboboxSelectedText() const
 
 FText FItemSelectedCustomization::FormatItemText(TSharedPtr<FComboboxItem> Item) const
 {
-	return FText::Format(FTextFormat::FromString(TEXT("{0} - {1}")), UEnum::GetDisplayValueAsText(GetItemType(Item->Guid)), Item->ItemName);
+	return FText::Format(FTextFormat::FromString(TEXT("{0} - {1}")), UEnum::GetDisplayValueAsText(ItemUtils::GetItemType(Item->Guid)), Item->ItemName);
 }
 
 bool FItemSelectedCustomization::GetAllItems(TArray<FItemDetails>& Items) const
@@ -125,7 +126,7 @@ bool FItemSelectedCustomization::GetAllItems(TArray<FItemDetails>& Items) const
 		for (TTuple<FName, uint8*> Row : ItemTable->GetRowMap())
 		{
 			int32 ItemGuid = FCString::Atoi(*Row.Key.ToString());
-			EItemType::Type Type = GetItemType(ItemGuid);
+			EItemType::Type Type = ItemUtils::GetItemType(ItemGuid);
 
 			if (Type == ItemType || ItemType == EItemType::All)
 			{

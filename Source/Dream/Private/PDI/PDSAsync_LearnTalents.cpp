@@ -15,13 +15,13 @@ UPDSAsync_LearnTalents* UPDSAsync_LearnTalents::PDI_LearnTalents(UObject* WorldC
 
 void UPDSAsync_LearnTalents::Activate()
 {
-	Handle = FPDIStatic::Get()->AddOnLearnTalents(FOnCompleted::FDelegate::CreateUObject(this, &UPDSAsync_LearnTalents::OnCompleted));
-	FPDIStatic::Get()->LearningTalents(T_TalentIds);
+	Handle = GDataInterface->AddOnLearnTalents(FOnCompleted::FDelegate::CreateUObject(this, &UPDSAsync_LearnTalents::OnCompleted));
+	GDataInterface->LearningTalents(T_TalentIds);
 }
 
 void UPDSAsync_LearnTalents::OnCompleted(bool bSuccess)
 {
-	FPDIStatic::Get()->RemoveOnLearnTalents(Handle);
+	GDataInterface->RemoveOnLearnTalents(Handle);
 	if (bSuccess)
 	{
 		OnSuccess.Broadcast();

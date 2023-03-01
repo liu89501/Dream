@@ -2,9 +2,9 @@
 
 #include "DMPreviewCharacter.h"
 #include "AbilitySystemComponent.h"
-#include "CharacterPreviewAnimInstance.h"
 #include "DCharacterPlayer.h"
 #include "DGameplayStatics.h"
+#include "DMAnimInterface.h"
 #include "DMAttributeSet.h"
 #include "DMProjectSettings.h"
 #include "ShootWeapon.h"
@@ -75,11 +75,11 @@ void ADMPreviewCharacter::InitPreviewCharacter(int32 InUseWeaponSlot, const FPla
 	}
 
 	UAnimInstance* AnimInstance = PreviewCharacterMesh->GetAnimInstance();
-	if (AnimInstance->GetClass()->ImplementsInterface(UCharacterPreviewAnimInstance::StaticClass()))
+	if (AnimInstance->GetClass()->ImplementsInterface(UDMAnimInterface::StaticClass()))
 	{
 		if (EquippedWeapons.IsValidIndex(UseWeaponSlot))
 		{
-			ICharacterPreviewAnimInstance::Execute_UpdateWeaponAnimID(AnimInstance, EquippedWeapons[UseWeaponSlot]->AnimID);
+			IDMAnimInterface::Execute_SetOverlayDetailState(AnimInstance, EquippedWeapons[UseWeaponSlot]->AnimID);
 		}
 	}
 	
@@ -103,9 +103,9 @@ void ADMPreviewCharacter::UpdatePreviewWeapon(TSubclassOf<AShootWeapon> WeaponCl
 	if (bActiveWeapon)
 	{
 		UAnimInstance* AnimInstance = PreviewCharacterMesh->GetAnimInstance();
-		if (AnimInstance->GetClass()->ImplementsInterface(UCharacterPreviewAnimInstance::StaticClass()))
+		if (AnimInstance->GetClass()->ImplementsInterface(UDMAnimInterface::StaticClass()))
 		{
-			ICharacterPreviewAnimInstance::Execute_UpdateWeaponAnimID(AnimInstance, ShootWeapon->AnimID);
+			IDMAnimInterface::Execute_SetOverlayDetailState(AnimInstance, ShootWeapon->AnimID);
 		}
 	}
 

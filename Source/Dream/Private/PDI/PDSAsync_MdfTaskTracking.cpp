@@ -13,7 +13,7 @@ UPDSAsync_MdfTaskTracking* UPDSAsync_MdfTaskTracking::PDI_ModifyTaskTracking(UOb
 
 void UPDSAsync_MdfTaskTracking::OnCompleted(bool bSuccess)
 {
-	FPDIStatic::Get()->RemoveOnModifyTaskTracking(Handle);
+	GDataInterface->RemoveOnModifyTaskTracking(Handle);
 	
 	if (bSuccess)
 	{
@@ -27,8 +27,8 @@ void UPDSAsync_MdfTaskTracking::OnCompleted(bool bSuccess)
 
 void UPDSAsync_MdfTaskTracking::Activate()
 {
-	Handle = FPDIStatic::Get()->AddOnModifyTaskTracking(
+	Handle = GDataInterface->AddOnModifyTaskTracking(
 		FOnCompleted::FDelegate::CreateUObject(this, &UPDSAsync_MdfTaskTracking::OnCompleted));
 	
-	FPDIStatic::Get()->ModifyTrackingState(FModifyTrackingParam(T_TaskId, T_TrackingState));
+	GDataInterface->ModifyTrackingState(FModifyTrackingParam(T_TaskId, T_TrackingState));
 }

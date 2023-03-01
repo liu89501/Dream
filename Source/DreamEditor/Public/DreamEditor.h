@@ -14,4 +14,8 @@ public:
 private:
 
 	TSharedPtr<class FWeaponMeshPreviewCustomizationMenu> WeaponMeshPreview;
+	
+	TSharedPtr<class FItemsTableMenu> ItemsTableMenu;
+
+	TSharedPtr<class FGearAttributesGraphPinFactory> GearAttributesGraphPinFactory;
 };

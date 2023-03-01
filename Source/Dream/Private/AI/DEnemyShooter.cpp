@@ -3,97 +3,118 @@
 
 #include "AI/DEnemyShooter.h"
 #include "AbilitySystemComponent.h"
-#include "AIController.h"
+#include "AbilitySystemGlobals.h"
 #include "DGameplayStatics.h"
+#include "DGameplayTags.h"
+#include "DMShooterWeaponComponent.h"
 #include "UnrealNetwork.h"
-#include "Kismet/GameplayStatics.h"
 #include "Perception/AIPerceptionComponent.h"
-#include "Sound/SoundCue.h"
 
-void ADEnemyShooter::NetMulticastOpenFire_Implementation(const FVector_NetQuantize& TargetLocation)
+void FOpenFireAction::UpdateOperation(FLatentResponse& Response)
 {
-	if (GetNetMode() == NM_DedicatedServer)
+	TickCount += Response.ElapsedTime();
+
+	if (TickCount >= Interval)
 	{
-		return;
+		TickCount = 0.f;
+		NumberOfFire--;
+
+		if (ADEnemyShooter* EnemyShooter = Shooter.Get())
+		{
+			EnemyShooter->HandleFiring(Hostile.Get());
+		}
 	}
-
-	if (FireAnim)
-	{
-		PlayAnimMontage(FireAnim);
-	}
-
-	FVector SocketLocation = WeaponMesh->GetSocketLocation(WeaponMuzzleSocketName);
-
-	if (MuzzleFlash)
-	{
-		UGameplayStatics::SpawnEmitterAttached(MuzzleFlash, WeaponMesh, WeaponMuzzleSocketName);
-	}
-
-	if (FireSound)
-	{
-		UGameplayStatics::SpawnSoundAtLocation(GetWorld(), FireSound, SocketLocation);
-	}
-
-	UDGameplayStatics::SpawnWeaponTrailParticles(GetWorld(), TrailVfx, SocketLocation, TargetLocation);
+	
+	Response.FinishAndTriggerIf(bStop || NumberOfFire == 0, ExecutionFunction, OutputLink, CallbackTarget);
 }
 
-void ADEnemyShooter::OpenFire(const FVector& TargetLocation)
+ADEnemyShooter::ADEnemyShooter()
+	: RandomFiringRange(FRangeRandomInt(5, 15))
+	, FirePerMinute(500)
 {
-	if (GetLocalRole() != ROLE_Authority)
+}
+
+void ADEnemyShooter::OpenFire(AActor* TargetActor, FLatentActionInfo LatentInfo, EOpenFireOption Option)
+{
+	FLatentActionManager& LatentActionManager = GetWorld()->GetLatentActionManager();
+
+	FOpenFireAction* ExistingAction = LatentActionManager.FindExistingAction<FOpenFireAction>(this, LatentInfo.UUID);
+
+	if (Option == EOpenFireOption::Fire)
 	{
-		return;
+		if (ExistingAction == nullptr)
+		{
+			float Interval = 1 / (FirePerMinute / 60.f);
+			int32 Num = RandomFiringRange.GetRandomInt();
+			FOpenFireAction* OpenFireAction = new FOpenFireAction(LatentInfo, Interval, Num, this, TargetActor);
+			LatentActionManager.AddNewAction(LatentInfo.CallbackTarget, LatentInfo.UUID, OpenFireAction);
+		}
 	}
+	else if (ExistingAction != nullptr)
+	{
+		ExistingAction->bStop = true;
+	}
+}
 
-	FVector ActorLocation = GetActorLocation();
+void ADEnemyShooter::HandleFiring(AActor* TargetActor)
+{
+	if (WeaponTypeComponent)
+	{
+		WeaponTypeComponent->OpenFire(TargetActor);
+	}
+}
 
-	FVector Dir = TargetLocation - ActorLocation;
-	Dir.Normalize();
+void ADEnemyShooter::SetDiscoverEnemy(bool bNewDiscoverEnemy)
+{
+	bDiscoverEnemy = bNewDiscoverEnemy;
+	MARK_PROPERTY_DIRTY_FROM_NAME(ADEnemyShooter, bDiscoverEnemy, this);
+}
 
-	FVector TraceEnd = TargetLocation + Dir * 200.f;
+FVector ADEnemyShooter::GetWeaponMuzzleLocation() const
+{
+	return GetWeaponMesh()->GetSocketLocation(WeaponMuzzleSocketName);
+}
 
-	FHitResult Hit;
-	bool bSuccess = UDGameplayStatics::LineTraceAndSendEvent(this, FireEventTag, ActorLocation, TraceEnd, ECC_Visibility, Hit);
-	NetMulticastOpenFire(bSuccess ? Hit.ImpactPoint : TraceEnd);
+void ADEnemyShooter::ApplyDamageEffect(const FHitResult& HitResult, const FVector& Origin)
+{
+	OnApplyProjectileDamage.Broadcast(HitResult, Origin);
+}
+
+void ADEnemyShooter::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	WeaponTypeComponent = FindComponentByClass<UDMShooterWeaponComponent>();
+}
+
+void ADEnemyShooter::BeginPlay()
+{
+	Super::BeginPlay();
+
+	ensureMsgf(WeaponTypeComponent, TEXT("WeaponTypeComponent Require not null"));
 }
 
 void ADEnemyShooter::HealthChanged(const FOnAttributeChangeData& AttrData)
 {
 	Super::HealthChanged(AttrData);
-
-	if (IsDeath())
-	{
-		WeaponMesh->SetCollisionEnabled(ECollisionEnabled::PhysicsOnly);
-		WeaponMesh->SetSimulatePhysics(true);
-	}
 }
 
 void ADEnemyShooter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
 	Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-	DOREPLIFETIME(ADEnemyShooter, bDiscoverEnemy);
+
+	FDoRepLifetimeParams Params_DiscoverEnemy;
+	Params_DiscoverEnemy.bIsPushBased = true;
+	
+	DOREPLIFETIME_WITH_PARAMS_FAST(ADEnemyShooter, bDiscoverEnemy, Params_DiscoverEnemy);
 }
 
-void ADEnemyShooter::OnTargetPerceptionUpdated(ADCharacterBase* StimulusPawn, FAIStimulus Stimulus)
+void ADEnemyShooter::OnTargetPerceptionUpdated(AActor* StimulusActor, FAIStimulus Stimulus)
 {
-	Super::OnTargetPerceptionUpdated(StimulusPawn, Stimulus);
-    
-	/*UBlackboardComponent* Blackboard = AIController->GetBlackboardComponent();
-
-	if (AIPerception->HasActiveStimulus(*StimulusPawn, UAISense::GetSenseID<UAISense_Sight>()))
-	{
-		bDiscoverEnemy = true;
-		Blackboard->SetValueAsBool(BlackboardName_CanOpenFire, true);
-	}
-	else
-	{
-		Blackboard->ClearValue(BlackboardName_CanOpenFire);
-	}*/
+	Super::OnTargetPerceptionUpdated(StimulusActor, Stimulus);
 }
 
 void ADEnemyShooter::LostAllHostileTarget()
 {
 	Super::LostAllHostileTarget();
-
-	/*bDiscoverEnemy = false;
-	AIController->GetBlackboardComponent()->ClearValue(BlackboardName_CanOpenFire);*/
 }

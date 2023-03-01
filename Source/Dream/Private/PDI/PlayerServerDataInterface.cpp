@@ -30,6 +30,26 @@
 	if (bSuccess) { Reader << ParamName; } \
 	DelegateFunc(ParamName, bSuccess); }
 
+#define TRIGGER_RESULT(DelegateFunc, KeyType) \
+	{ \
+		bool bSuccess; \
+		KeyType KeyVal; \
+		Reader << bSuccess; \
+		Reader << KeyVal; \
+		DelegateFunc(KeyVal, bSuccess); \
+	}
+
+#define TRIGGER_RESULT_PARAM(DelegateFunc, KeyVal) \
+	{ \
+		bool bSuccess; \
+		KeyType KeyVal; \
+		Reader << bSuccess; \
+		Reader << KeyVal; \
+		Param P1; \
+		if (bSuccess) { Reader << P1; } \
+		DelegateFunc(KeyVal, P1, bSuccess); \
+	}
+
 FPlayerServerDataInterface::FPlayerServerDataInterface()
 {
 	CALLBACK_BINDING_RAW(TService_PlayerInfo, this, &FPlayerServerDataInterface::OnReceivePlayerInformation);
@@ -47,7 +67,8 @@ FPlayerServerDataInterface::FPlayerServerDataInterface()
 	CALLBACK_BINDING_RAW(TService_UpdatedTrackingTask, this, &FPlayerServerDataInterface::OnReceiveUpdatedTrackingTaskState);
 	CALLBACK_BINDING_RAW(TService_ModifyTrackingState, this, &FPlayerServerDataInterface::OnReceiveModifyTrackingState);
 	CALLBACK_BINDING_RAW(TService_Decompose, this, &FPlayerServerDataInterface::OnReceiveDecomposeItem);
-
+	
+	CALLBACK_BINDING_RAW(TService_UpgradeWeapon, this, &FPlayerServerDataInterface::OnReceiveUpgradeGears);
 	
 	CALLBACK_BINDING_RAW(TReceive_PropertiesChange, this, &FPlayerServerDataInterface::OnReceivePropertiesChange);
 	CALLBACK_BINDING_RAW(TReceive_Rewards, this, &FPlayerServerDataInterface::OnReceiveReceiveRewards);
@@ -68,7 +89,7 @@ const FPlayerProperties& FPlayerServerDataInterface::GetCachedProperties() const
 	return CachedProperties;
 }
 
-const FMaterialsHandle& FPlayerServerDataInterface::GetMaterialsHandle() const
+FMaterialsHandle& FPlayerServerDataInterface::GetMaterialsHandle()
 {
 	return MaterialsHandle;
 }
@@ -80,12 +101,12 @@ void FPlayerServerDataInterface::OnReceivePlayerInformation(FPacketArchiveReader
 
 void FPlayerServerDataInterface::OnReceiveEquipWeapon(FPacketArchiveReader& Reader)
 {
-	BROADCAST_RESULT(BroadcastOnEquipWeapon);
+	BROADCAST_RESULT_PARAM(BroadcastOnEquipWeapon, FPlayerWeapon);
 }
 
 void FPlayerServerDataInterface::OnReceiveEquipModule(FPacketArchiveReader& Reader)
 {
-	BROADCAST_RESULT(BroadcastOnEquipModule);
+	BROADCAST_RESULT_PARAM(BroadcastOnEquipModule, FPlayerModule);
 }
 
 void FPlayerServerDataInterface::OnReceiveLearningTalents(FPacketArchiveReader& Reader)
@@ -100,7 +121,15 @@ void FPlayerServerDataInterface::OnReceiveGetStoreItems(FPacketArchiveReader& Re
 
 void FPlayerServerDataInterface::OnReceivePayItem(FPacketArchiveReader& Reader)
 {
-	BROADCAST_RESULT(BroadcastOnBuyItem);
+	bool bSuccess = false;
+	Reader << bSuccess;
+	
+	if (bSuccess)
+	{
+		OnReceiveMaterialsChange(Reader);
+	}
+
+	BroadcastOnBuyItem(bSuccess);
 }
 
 void FPlayerServerDataInterface::OnReceiveReceiveRewards(FPacketArchiveReader& Reader)
@@ -137,7 +166,6 @@ void FPlayerServerDataInterface::OnReceiveUpdatedTrackingTaskState(FPacketArchiv
 	TArray<FTaskInProgressInfo> UpdateInfo;
 	Reader << UpdateInfo;
 
-	//UE_LOG(LogDream, Verbose, TEXT("OnReceiveUpdatedTrackingTaskState: %d"), Tasks.Num());
 	BroadcastOnUpdateTaskCond(UpdateInfo);
 }
 
@@ -149,7 +177,7 @@ void FPlayerServerDataInterface::OnReceiveModifyTrackingState(FPacketArchiveRead
 void FPlayerServerDataInterface::OnReceivePropertiesChange(FPacketArchiveReader& Reader)
 {
 	Reader << CachedProperties;
-	GetPlayerDataDelegate().OnPropertiesChange.Broadcast(CachedProperties);
+	PlayerDataDelegate.OnPropertiesChange.Broadcast(CachedProperties);
 }
 
 void FPlayerServerDataInterface::OnReceiveDecomposeItem(FPacketArchiveReader& Reader)
@@ -157,12 +185,39 @@ void FPlayerServerDataInterface::OnReceiveDecomposeItem(FPacketArchiveReader& Re
 	BROADCAST_RESULT(BroadcastOnDecomposeItem);
 }
 
+void FPlayerServerDataInterface::OnReceiveUpgradeGears(FPacketArchiveReader& Reader)
+{
+	bool bSuccess = false;
+	bool bUpgradeResult = false;
+
+	Reader << bSuccess;
+	
+	if (bSuccess)
+	{
+		TArray<FPlayerMaterial> ConsumeMaterials;
+		
+		Reader << bUpgradeResult;
+		Reader << ConsumeMaterials;
+
+		UpdateCacheMaterials(ConsumeMaterials);
+	}
+
+	BroadcastOnUpgradeGear(bUpgradeResult, bSuccess);
+}
+
 void FPlayerServerDataInterface::OnReceiveMaterialsChange(FPacketArchiveReader& Reader)
 {
+	// correct materials
+	
 	TArray<FPlayerMaterial> ChangedMaterials;
 	Reader << ChangedMaterials;
 
-	for (const FPlayerMaterial& Material : ChangedMaterials)
+	UpdateCacheMaterials(ChangedMaterials);
+}
+
+void FPlayerServerDataInterface::UpdateCacheMaterials(const TArray<FPlayerMaterial>& ChangeMaterials)
+{
+	for (const FPlayerMaterial& Material : ChangeMaterials)
 	{
 		int& MaterialNum = MaterialsHandle->FindOrAdd(Material.ItemGuid);
 		MaterialNum = Material.Num;

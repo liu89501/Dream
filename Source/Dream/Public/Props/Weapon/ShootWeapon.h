@@ -6,21 +6,22 @@
 #include "GameFramework/Actor.h"
 #include "Components/TimelineComponent.h"
 #include "GameplayTagContainer.h"
-#include "PreviewInterface.h"
+#include "GearInterface.h"
+#include "ProjectileDamageInterface.h"
 #include "ShootWeapon.generated.h"
 
-USTRUCT()
-struct FBulletHitInfo
+#define ENABLE_WEAPON_DEBUG !(UE_BUILD_TEST || UE_BUILD_SHIPPING)
+
+#if ENABLE_WEAPON_DEBUG
+
+struct DebugWeaponCVar
 {
-	GENERATED_BODY()
-
-public:
-	virtual ~FBulletHitInfo() = default;
-
-	virtual uint8 GetStructID() const;
-
-	virtual bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess);
+	static TAutoConsoleVariable<int32> DebugCVar;
 };
+
+#endif
+
+class UDMUpgradeGearInfluence;
 
 UENUM()
 enum class EWeaponState : uint8
@@ -31,28 +32,38 @@ enum class EWeaponState : uint8
     Equipping
 };
 
-template<>
-struct TStructOpsTypeTraits<FBulletHitInfo> : public TStructOpsTypeTraitsBase2<FBulletHitInfo>
+USTRUCT()
+struct FHitInfo
 {
-	enum
+	GENERATED_BODY()
+
+public:
+	virtual ~FHitInfo() = default;
+
+	virtual bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess);
+
+	virtual TSharedPtr<FHitInfo> Clone() const;
+
+	virtual UScriptStruct* GetScriptStruct() const
 	{
-		WithNetSerializer = true
-    };
+		return FHitInfo::StaticStruct();
+	}
 };
 
+
 USTRUCT()
-struct FBulletHitInfo_SingleBullet : public FBulletHitInfo
+struct FHitInfo_SingleBullet : public FHitInfo
 {
 	GENERATED_BODY()
 
 public:
 
-	FBulletHitInfo_SingleBullet() : HitResult()
+	FHitInfo_SingleBullet() : HitResult()
 	{
 	}
 
-	FBulletHitInfo_SingleBullet(const FHitResult& InHitResult)
-		: HitResult(MakeShared<FHitResult>(InHitResult))
+	FHitInfo_SingleBullet(const FHitResult& InHitResult)
+		: HitResult(TSharedPtr<FHitResult>(new FHitResult(InHitResult)))
 	{
 	}
 
@@ -60,11 +71,13 @@ public:
 	{
 		return HitResult.Get();
 	}
-	
-	virtual uint8 GetStructID() const override
+
+	virtual UScriptStruct* GetScriptStruct() const
 	{
-		return 1;
+		return FHitInfo_SingleBullet::StaticStruct();
 	}
+
+	virtual TSharedPtr<FHitInfo> Clone() const override;
 	
 	virtual bool NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess) override;
 
@@ -75,7 +88,7 @@ private:
 
 
 template<>
-struct TStructOpsTypeTraits<FBulletHitInfo_SingleBullet> : public TStructOpsTypeTraitsBase2<FBulletHitInfo_SingleBullet>
+struct TStructOpsTypeTraits<FHitInfo_SingleBullet> : public TStructOpsTypeTraitsBase2<FHitInfo_SingleBullet>
 {
 	enum
 	{
@@ -84,25 +97,20 @@ struct TStructOpsTypeTraits<FBulletHitInfo_SingleBullet> : public TStructOpsType
 };
 
 USTRUCT()
-struct FBulletHitInfo_MultiBullet : public FBulletHitInfo
+struct FHitInfo_MultiBullet : public FHitInfo
 {
 	GENERATED_BODY()
 
 public:
 
-	FBulletHitInfo_MultiBullet()
+	FHitInfo_MultiBullet()
 	{
 	}
 
-	FBulletHitInfo_MultiBullet(const TArray<FHitResult>& InHits) : Hits(InHits)
+	FHitInfo_MultiBullet(const TArray<FHitResult>& InHits) : Hits(InHits)
 	{
 	}
-	
-	virtual uint8 GetStructID() const override
-	{
-		return 2;
-	}
-	
+
 	virtual bool NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess) override;
 
 	const TArray<FHitResult>& GetHits() const
@@ -110,14 +118,22 @@ public:
 		return Hits;
 	}
 
+	virtual UScriptStruct* GetScriptStruct() const
+	{
+		return FHitInfo_MultiBullet::StaticStruct();
+	}
+
+	virtual TSharedPtr<FHitInfo> Clone() const override;
+
 private:
 
 	UPROPERTY()
 	TArray<FHitResult> Hits;
 };
 
+
 template<>
-struct TStructOpsTypeTraits<FBulletHitInfo_MultiBullet> : public TStructOpsTypeTraitsBase2<FBulletHitInfo_MultiBullet>
+struct TStructOpsTypeTraits<FHitInfo_MultiBullet> : public TStructOpsTypeTraitsBase2<FHitInfo_MultiBullet>
 {
 	enum
 	{
@@ -126,35 +142,52 @@ struct TStructOpsTypeTraits<FBulletHitInfo_MultiBullet> : public TStructOpsTypeT
 };
 
 USTRUCT()
-struct FBulletHitInfoHandle
+struct FHitInfoHandle
 {
 	GENERATED_BODY()
 
 public:
-	FBulletHitInfoHandle()
+	FHitInfoHandle()
 	{
 	}
 
-	FBulletHitInfoHandle(const TSharedPtr<FBulletHitInfo>& InData) : Data(InData)
+	explicit FHitInfoHandle(FHitInfo* InHitInfo)
 	{
+		Data = TSharedPtr<FHitInfo>(InHitInfo);
 	}
 
 	template<typename Type>
     Type* Get() const;
 
+	void Set(const TSharedPtr<FHitInfo>& HitInfo)
+	{
+		Data = HitInfo;
+	}
+
+	bool IsValid() const
+	{
+		return Data.IsValid();
+	}
+
 	bool NetSerialize(FArchive& Ar, class UPackageMap* Map, bool& bOutSuccess);
+
+	bool operator==(const FHitInfoHandle& Other) const;
+	
+	bool operator!=(const FHitInfoHandle& Other) const;
 
 private:
 
-	TSharedPtr<FBulletHitInfo> Data;
+	TSharedPtr<FHitInfo> Data;
 };
 
 template<>
-struct TStructOpsTypeTraits<FBulletHitInfoHandle> : public TStructOpsTypeTraitsBase2<FBulletHitInfoHandle>
+struct TStructOpsTypeTraits<FHitInfoHandle> : public TStructOpsTypeTraitsBase2<FHitInfoHandle>
 {
 	enum
 	{
-		WithNetSerializer = true
+		WithCopy = true,
+		WithNetSerializer = true,
+		WithIdenticalViaEquality = true
     };
 };
 
@@ -242,37 +275,6 @@ public:
 	}
 };
 
-USTRUCT()
-struct FRadialDamageProjectileInfo
-{
-	GENERATED_USTRUCT_BODY()
-
-public:
-
-	FRadialDamageProjectileInfo() :
-        Origin(FVector::ZeroVector),
-        DamageRadius(0.f)
-	{
-	}
-
-
-	FRadialDamageProjectileInfo(
-        const FVector& InOrigin,
-        float InDamageRadius)
-
-        : Origin(InOrigin),
-          DamageRadius(InDamageRadius)
-	{
-	}
-
-public:
-
-	UPROPERTY()
-	FVector_NetQuantize Origin;
-	UPROPERTY()
-	float DamageRadius;
-};
-
 
 USTRUCT(BlueprintType)
 struct DREAM_API FCharacterMontage
@@ -291,7 +293,7 @@ public:
 };
 
 UCLASS(Abstract)
-class DREAM_API AShootWeapon : public AActor, public IPreviewInterface
+class DREAM_API AShootWeapon : public AActor, public IGearInterface, public IProjectileDamageInterface
 {
 	GENERATED_BODY()
 
@@ -336,9 +338,9 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Weapon)
 	EAmmoType AmmoType;
 
-	/** 武器属性 */
-	UPROPERTY(BlueprintReadOnly, Category = Weapon)
-	FEquipmentAttributes WeaponAttribute;
+	UPROPERTY(EditAnywhere, Category = Weapon)
+	UDMUpgradeGearInfluence* UpgradeInfluenceAttributes;
+	
 	
 	/** 瞄准时的摄像机FOV */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = Weapon)
@@ -369,6 +371,9 @@ public:
 	 */
 	UPROPERTY(EditDefaultsOnly, Category = Weapon)
 	float TraceCenterOffset;
+
+	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category="Weapon")
+	UCurveFloat* AimCurve;
 	
 	/** 开始衰减的距离 */
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = Weapon)
@@ -391,11 +396,8 @@ public:
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Weapon|Recoil")
 	UCurveFloat* RecoveryCurve;
 	
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category="Weapon")
-	UCurveFloat* AimCurve;
-	
 	/**
-	 * 	对相机应用后坐力的抖动时XY方向的强度
+	 * 	对相机应用后坐力的抖动时XY方向的Scale
 	 */
 	UPROPERTY(BlueprintReadWrite, EditAnywhere, Category = "Weapon|Recoil")
 	FVector2D CameraOffsetScale;
@@ -450,11 +452,6 @@ public:
 	UFUNCTION(BlueprintCallable, Category = Weapon)
 	float GetRemainAmmoPercent() const;
 
-	UFUNCTION(BlueprintCallable, meta = (ScriptName = "GetMuzzlePoint", DisplayName = "GetMuzzlePoint"), Category = Weapon)
-	void BP_GetMuzzlePoint(FVector& Point, FRotator& Direction) const;
-	UFUNCTION(BlueprintCallable, meta = (ScriptName = "GetLineTracePoint", DisplayName = "GetLineTracePoint"), Category = Weapon)
-	void BP_GetLineTracePoint(FVector& Point, FRotator& Direction) const;
-
 	UFUNCTION(BlueprintCallable, Category = Weapon)
 	bool IsLocalWeapon() const;
 
@@ -470,14 +467,18 @@ public:
 	
 	UFUNCTION(BlueprintImplementableEvent, meta = (ScriptName = "OnWeaponEnable", DisplayName = "OnWeaponEnable"), Category = "Weapon|Event")
 	void BP_OnWeaponEnable(bool bEnable);
+	
+	UFUNCTION(BlueprintCallable, Category = Weapon)
+	virtual void GetMuzzlePoint(FVector& Point, FRotator& Direction) const;
+
+	UFUNCTION(BlueprintCallable, Category = Weapon)
+	void GetOwningPlayerCameraViewPoint(FVector& Location, FRotator& Rotation);
 
 public:
 
 	virtual FTransform GetPreviewRelativeTransform() const override;
 
-	// ServerOnly
-	virtual void ApplyPointDamage(const FHitResult& HitInfo);
-	virtual void ApplyRadialDamage(const FRadialDamageProjectileInfo& RadialDamage);
+	virtual UDMUpgradeGearInfluence* GetUpgradeAttributesInfluence() const override;
 
 	const FSlateBrush& GetDynamicCrosshairBrush();
 
@@ -501,19 +502,28 @@ public:
 	void AttachToCharacter(bool bActiveSocket, USkeletalMeshComponent* Mesh);
 
 	void HandleFire();
-	void HandleLineTrace(const FVector& ViewLoc, const FRotator& ViewRot, FHitResult& OutHit) const;
-
-	void SpawnAmmoAndFX(const FBulletHitInfoHandle& HitInfo);
+	void HandleFireStop();
 	
+	void HandleLineTrace(FHitResult& OutHit) const;
+
+	virtual void GetActualProjectileHitResult(const FHitResult& ViewHitResult, FHitResult& ActualHitResult) const;
+
+	virtual void MakeHitInfoHandle(FHitInfoHandle& HitInfo) PURE_VIRTUAL(AShootWeapon::MakeHitInfoHandle, );
+
 	UFUNCTION(Reliable, Server)
-	void ServerSpawnAmmo(const FBulletHitInfoHandle& HitInfo);
+	void ServerSpawnProjectile(const FHitInfoHandle& HitInfo);
+	void SpawnProjectile();
+
+	virtual void HandleSpawnProjectile(const FHitResult& HitResult) PURE_VIRTUAL(AShootWeapon::HandleSpawnProjectile, );
+
+	virtual void ApplyDamageEffect(const FHitResult& HitResult, const FVector& Origin) override;
+
+	// ServerOnly
 
 	void InitializeAmmunition();
 
-	virtual void HandleSpawnAmmo(const FHitResult& HitResult) {};
-
-	UFUNCTION(Server, Reliable)
-    void ServerSetWeaponState(EWeaponState NewState);
+	UFUNCTION(Unreliable, Server)
+	void ServerSetWeaponState(EWeaponState NewState);
 	void SetWeaponState(EWeaponState NewState);
 
 	void PlayWeaponShootingAnim();
@@ -521,9 +531,7 @@ public:
 	
 	void OnReloadFinished();
 
-	void DoApplyDamageEffect(const FHitResult& Hit, const FVector& Origin) const;
-	//void DoApplyDamageEffectMulti(const TArray<FHitResult>& Hits);
-
+	
 	virtual void PostInitializeComponents() override;
 	virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
 
@@ -533,9 +541,16 @@ public:
 	virtual void Tick(float DeltaTime) override;
 
 	virtual void SpreadRecovery();
-	virtual void GetLineTracePoint(FVector& Point, FRotator& Direction) const;
 
-	virtual void GetMuzzlePoint(FVector& Point, FRotator& Direction) const;
+	int32 GetInitAmmoNum() const;
+	int32 GetInitReserveAmmoNum() const;
+
+	/**
+	 * 初始化武器属性
+	 */
+	void InitializeWeaponAttributes(const FEquipmentAttributes& InAttributes, float AdditionMagnitude);
+
+	const FEquipmentAttributes& GetAttributes() const;
 
 protected:
 	
@@ -547,24 +562,34 @@ protected:
 	virtual void CameraOffsetTimelineTick(float Value) const;
 	virtual void AimTimelineTick(float Value) const;
 
-	void OnPlayerAmmunitionChanged(float NewAmmunition);
+	void OnPlayerAmmunitionChanged(EAmmoType ChangedAmmoType, float NewAmmunition);
 
 	UFUNCTION()	
-    void OnRep_WeaponState(EWeaponState LastState);
+    void OnRep_WeaponState();
 
 	UFUNCTION()
-    virtual void OnRep_HitInfoHandle();
+    void OnRep_HitInfoHandle();
+
+	virtual void OnRep_AttachmentReplication() override;
 
 protected:
+
+	UPROPERTY()
+	ADCharacterPlayer* OwningShooter;
+
+	/** 武器属性 */
+	UPROPERTY()
+	FEquipmentAttributes WeaponAttribute;
 
 	UPROPERTY(BlueprintReadWrite, Category = Weapon)
 	bool bAimed;
 
 	UPROPERTY(ReplicatedUsing = OnRep_HitInfoHandle)
-	FBulletHitInfoHandle HitInfoHandle;
+	FHitInfoHandle HitInfoHandle;
 
 	UPROPERTY(ReplicatedUsing = OnRep_WeaponState)
 	EWeaponState WeaponState;
+	EWeaponState LastWeaponState;
 
 	float CurrentSpread;
 
@@ -579,9 +604,6 @@ protected:
 
 private:
 
-	friend class ADCharacterPlayer;
-	friend class ADProjectile;
-
 	/** 最后一次开火时间点 */
 	float LastFireTime;
 
@@ -595,9 +617,6 @@ private:
 	UMaterialInstanceDynamic* CrosshairDynamic;
 	UPROPERTY()
 	UMaterialInstanceDynamic* MagazineDynamic;
-
-	UPROPERTY()
-	ADCharacterPlayer* OwningShooter;
 	
 };
 

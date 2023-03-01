@@ -63,12 +63,26 @@ public:
 };
 
 USTRUCT()
-struct FTemporaryGearInfo
+struct FGearDesc
 {
 	GENERATED_BODY()
 
+	FGearDesc()
+		: EquippedIdx(0),
+		  GearLevel(0),
+		  GearQuality(EPropsQuality::Normal),
+		  GearClass(nullptr)
+	{
+	}
+
 	UPROPERTY()
-	int32 EquippedIdx;
+	uint8 EquippedIdx;
+
+	UPROPERTY()
+	uint8 GearLevel;
+
+	UPROPERTY()
+	EPropsQuality GearQuality;
 	
 	UPROPERTY()
 	FEquipmentAttributes Attributes;
@@ -78,15 +92,15 @@ struct FTemporaryGearInfo
 };
 
 USTRUCT()
-struct FTemporaryPlayerInfo
+struct FPlayerDesc
 {
 	GENERATED_BODY()
 
 public:
 
-	FTemporaryPlayerInfo()
+	FPlayerDesc()
 		: Skin(nullptr)
-		, LearnedTalents(0)
+		, Talents(0)
 		, Level(0)
 	{
 	}
@@ -94,24 +108,24 @@ public:
 	void Initialize(const FPlayerInfo& PlayerInfo);
 
 	UPROPERTY()
-	TArray<FTemporaryGearInfo> Weapons;
+	TArray<FGearDesc> Weapons;
 	
 	UPROPERTY()
-	TArray<FTemporaryGearInfo> Modules;
+	TArray<FGearDesc> Modules;
 
 	UPROPERTY()
 	UCharacterMesh* Skin;
 
 	UPROPERTY()
-	int64 LearnedTalents;
+	int64 Talents;
 
 	UPROPERTY()
 	int32 Level;
 };
 
 
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnPlayerAmmunitionChange, float/* New Ammunition */)
-DECLARE_DELEGATE_TwoParams(FPlayerInfoSignature, bool bResult, const FTemporaryPlayerInfo&)
+DECLARE_MULTICAST_DELEGATE_TwoParams(FOnPlayerAmmunitionChange, EAmmoType, float/* New Ammunition */)
+DECLARE_DELEGATE_TwoParams(FPlayerInfoSignature, bool bResult, const FPlayerDesc&)
 
 /**
  *
@@ -198,6 +212,8 @@ public:
 
 	void GetPlayerInformation(FPlayerInfoSignature Delegate);
 
+	FPlayerDesc& GetCachedPlayerDesc();
+
 protected:
 
 	virtual void BeginPlay() override;
@@ -237,13 +253,14 @@ private:
 private:
 
 	UPROPERTY()
-	FTemporaryPlayerInfo TemporaryPlayerInfo;
-	bool bInitializeTemporaryPlayerInfo;
+	FPlayerDesc CachedPlayerDesc;
+	bool bInitializedCachedPlayerDesc;
 
 	FOnPlayerAmmunitionChange OnAmmunitionChange;
 
 	FDelegateHandle Handle_UpdateTask;
 	FDelegateHandle Handle_ReceiveRewards;
+	FDelegateHandle Handle_QueryPlayerData;
 
 	FTimerHandle Handle_RespawnPlayer;
 

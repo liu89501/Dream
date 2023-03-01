@@ -18,7 +18,7 @@
 
 #define LOCTEXT_NAMESPACE "Player.DMController"
 
-void FTemporaryPlayerInfo::Initialize(const FPlayerInfo& PlayerInfo)
+void FPlayerDesc::Initialize(const FPlayerInfo& PlayerInfo)
 {
     Weapons.SetNumZeroed(PlayerInfo.Weapons.Num());
     Modules.SetNumZeroed(PlayerInfo.Modules.Num());
@@ -30,11 +30,13 @@ void FTemporaryPlayerInfo::Initialize(const FPlayerInfo& PlayerInfo)
             continue;
         }
         
-        FTemporaryGearInfo& TemporaryGearInfo = Weapons[Weapon.Index];
+        FGearDesc& Gear = Weapons[Weapon.Index];
 
-        TemporaryGearInfo.Attributes = Weapon.Attributes;
-        TemporaryGearInfo.EquippedIdx = Weapon.Index;
-        TemporaryGearInfo.GearClass = GSProject->GetItemClassFromGuid(Weapon.ItemGuid);
+        Gear.Attributes = Weapon.Attributes;
+        Gear.EquippedIdx = Weapon.Index;
+        Gear.GearLevel = Weapon.WeaponLevel;
+        Gear.GearQuality = ItemUtils::GetItemQuality(Weapon.ItemGuid);
+        Gear.GearClass = GSProject->GetItemClassFromGuid(Weapon.ItemGuid);
     }
     
     for (const FPlayerModule& Module : PlayerInfo.Modules)
@@ -46,33 +48,35 @@ void FTemporaryPlayerInfo::Initialize(const FPlayerInfo& PlayerInfo)
 
         uint8 CategoryValue = static_cast<uint8>(Module.Category);
 
-        FTemporaryGearInfo& TemporaryGearInfo = Modules[CategoryValue];
+        FGearDesc& Gear = Modules[CategoryValue];
 
-        TemporaryGearInfo.Attributes = Module.Attributes;
-        TemporaryGearInfo.EquippedIdx = CategoryValue;
-        TemporaryGearInfo.GearClass = GSProject->GetItemClassFromGuid(Module.ItemGuid);
+        Gear.Attributes = Module.Attributes;
+        Gear.EquippedIdx = CategoryValue;
+        Gear.GearLevel = Module.ModuleLevel;
+        Gear.GearQuality = ItemUtils::GetItemQuality(Module.ItemGuid);
+        Gear.GearClass = GSProject->GetItemClassFromGuid(Module.ItemGuid);
     }
 
     Skin = Cast<UCharacterMesh>(PlayerInfo.CharacterMesh.TryLoad());
 
     Level = PlayerInfo.CharacterLevel;
-    LearnedTalents = PlayerInfo.LearnedTalents;
+    Talents = PlayerInfo.LearnedTalents;
 }
 
 ADMPlayerController::ADMPlayerController()
     : Ammunition_L1(1.f)
     , Ammunition_L2(1.f)
     , Ammunition_L3(1.f)
-    , bInitializeTemporaryPlayerInfo(false)
+    , bInitializedCachedPlayerDesc(false)
 {
     PlayerCameraManagerClass = ADPlayerCameraManager::StaticClass();
 }
 
 void ADMPlayerController::GetPlayerInformation(FPlayerInfoSignature Delegate)
 {
-    if (bInitializeTemporaryPlayerInfo)
+    if (bInitializedCachedPlayerDesc)
     {
-        Delegate.Execute(true, TemporaryPlayerInfo);
+        Delegate.Execute(true, CachedPlayerDesc);
     }
     else if (PlayerState)
     {
@@ -80,27 +84,35 @@ void ADMPlayerController::GetPlayerInformation(FPlayerInfoSignature Delegate)
         Param.PlayerId = PlayerState->GetPlayerId();
         Param.Condition = Query_Cond_Used;
 
-        FPlayerDataInterface* Interface = FPDIStatic::Get();
-        Interface->AddOnGetPlayerInfo(FOnGetPlayerInfo::FDelegate::CreateUObject(this, &ADMPlayerController::OnGetPlayerInfo, Delegate));
-        Interface->ServerGetPlayerInfo(Param);
+        Handle_QueryPlayerData = GDataInterface->AddOnGetPlayerInfo(
+            FOnGetPlayerInfo::FDelegate::CreateUObject(this, &ADMPlayerController::OnGetPlayerInfo, Delegate));
+        
+        GDataInterface->ServerGetPlayerInfo(Param);
     }
     else
     {
-        Delegate.Execute(false, TemporaryPlayerInfo);
+        Delegate.Execute(false, CachedPlayerDesc);
     }
+}
+
+FPlayerDesc& ADMPlayerController::GetCachedPlayerDesc()
+{
+    return CachedPlayerDesc;
 }
 
 void ADMPlayerController::OnGetPlayerInfo(const FPlayerInfo& PlayerInfo, bool bQueryResult, FPlayerInfoSignature Delegate)
 {
+    GDataInterface->RemoveOnGetPlayerInfo(Handle_QueryPlayerData);
+    
     if (bQueryResult)
     {
-        bInitializeTemporaryPlayerInfo = true;
-        TemporaryPlayerInfo.Initialize(PlayerInfo);
-        Delegate.Execute(true, TemporaryPlayerInfo);
+        bInitializedCachedPlayerDesc = true;
+        CachedPlayerDesc.Initialize(PlayerInfo);
+        Delegate.Execute(true, CachedPlayerDesc);
     }
     else
     {
-        Delegate.Execute(false, TemporaryPlayerInfo);
+        Delegate.Execute(false, CachedPlayerDesc);
     }
 }
 
@@ -110,9 +122,8 @@ void ADMPlayerController::BeginPlay()
 
     if (IsLocalController())
     {
-        FPlayerDataInterface* Interface = FPDIStatic::Get();
-        Handle_UpdateTask = Interface->AddOnUpdateTaskCond(FOnUpdatedTasks::FDelegate::CreateUObject(this, &ADMPlayerController::OnUpdatedTasks));
-        Handle_ReceiveRewards = Interface->AddOnReceiveRewards(FOnReceiveRewards::FDelegate::CreateUObject(this, &ADMPlayerController::OnReceiveRewardMessage));
+        Handle_UpdateTask = GDataInterface->AddOnUpdateTaskCond(FOnUpdatedTasks::FDelegate::CreateUObject(this, &ADMPlayerController::OnUpdatedTasks));
+        Handle_ReceiveRewards = GDataInterface->AddOnReceiveRewards(FOnReceiveRewards::FDelegate::CreateUObject(this, &ADMPlayerController::OnReceiveRewardMessage));
 
 #if !WITH_EDITOR
         if (GetNetMode() == NM_Client)
@@ -264,8 +275,8 @@ void ADMPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 
     if (IsLocalController())
     {
-        FPDIStatic::Get()->RemoveOnUpdateTaskCond(Handle_UpdateTask);
-        FPDIStatic::Get()->RemoveOnReceiveRewards(Handle_ReceiveRewards);
+        GDataInterface->RemoveOnUpdateTaskCond(Handle_UpdateTask);
+        GDataInterface->RemoveOnReceiveRewards(Handle_ReceiveRewards);
     }
 }
 
@@ -283,7 +294,7 @@ void ADMPlayerController::ClientChangeConnectedServer_Implementation(uint32 Addr
         }
     });
     
-    FPDIStatic::Get()->ReconnectToSpecifiedServer(Address, Port, Delegate);
+    GDataInterface->ReconnectToSpecifiedServer(Address, Port, Delegate);
 }
 
 void ADMPlayerController::OnUpdatedTasks(const TArray<FTaskInProgressInfo>& UpdatedTasks)
@@ -321,7 +332,7 @@ void ADMPlayerController::OnReceiveRewardMessage(const FItemListHandle& ItemList
         int32 ItemGuid = ItemData->GetItemGuid();
         const FItemDef& ItemDef = GSProject->GetItemDefinition(ItemGuid);
 
-        EItemType::Type ItemType = GetItemType(ItemGuid);
+        EItemType::Type ItemType = ItemUtils::GetItemType(ItemGuid);
 
         ERewardNotifyMode NotifyMode = ERewardNotifyMode::Primary;
 
@@ -394,7 +405,7 @@ bool ADMPlayerController::AddWeaponAmmunition(EAmmoType AmmoType, float Recovery
     
     Ammunition = FMath::Clamp(Ammunition + RecoveryAmount, 0.f, 1.f);
 
-    OnAmmunitionChange.Broadcast(Ammunition);
+    OnAmmunitionChange.Broadcast(AmmoType, Ammunition);
     
     return true;
 }
@@ -404,7 +415,7 @@ void ADMPlayerController::SetWeaponAmmunition(EAmmoType AmmoType, float NewAmmun
     float& Ammunition = GetWeaponAmmunition(AmmoType);
     Ammunition = FMath::Clamp(NewAmmunition, 0.f, 1.f);
 
-    OnAmmunitionChange.Broadcast(Ammunition);
+    OnAmmunitionChange.Broadcast(AmmoType, Ammunition);
 }
 
 float& ADMPlayerController::GetWeaponAmmunition(EAmmoType AmmoType)

@@ -20,4 +20,7 @@ MyCustomizeTags::MyCustomizeTags()
 	
 	Exec_Temporary_PercentageDmgInc = FGameplayTag::RequestGameplayTag(TEXT("Exec.Temporary.PercentageDmgInc"));
 	Exec_Temporary_FixedDamage = FGameplayTag::RequestGameplayTag(TEXT("Exec.Temporary.FixedDamage"));
+	
+	Ability_Firing = FGameplayTag::RequestGameplayTag(TEXT("Ability.Initiative.WeaponFire"));
+	Event_Firing = FGameplayTag::RequestGameplayTag(TEXT("Event.WeaponFire"));
 }

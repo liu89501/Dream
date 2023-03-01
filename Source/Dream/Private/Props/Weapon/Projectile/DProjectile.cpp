@@ -2,18 +2,30 @@
 
 #include "DProjectile.h"
 #include "DCharacterPlayer.h"
-#include "DMPlayerController.h"
 #include "DProjectileComponent.h"
 #include "DMProjectSettings.h"
+#include "PushModel.h"
 #include "ShootWeapon.h"
 #include "UnrealNetwork.h"
 #include "Components/SphereComponent.h"
 #include "GameFramework/ProjectileMovementComponent.h"
 #include "Kismet/GameplayStatics.h"
 #include "Particles/ParticleSystemComponent.h"
-#include "Sound/SoundCue.h"
+
+#if DM_PROJECTILE_DEBUG
+
+TAutoConsoleVariable<int32> DMProjectileCVar::CVarDebugProjectileTrace(
+    TEXT("p.DMProjectileDebug"),
+    0,
+    TEXT("Whether to draw debug information.\n")
+    TEXT("0: Disable, 1: Enable"),
+    ECVF_Cheat);
+
+#endif
 
 ADProjectile::ADProjectile()
+    : ParticlesSize(FVector::OneVector)
+    , DecalSize(20,5,5)
 {
     SphereCollision = CreateDefaultSubobject<USphereComponent>(TEXT("SphereCollision"));
 
@@ -47,138 +59,61 @@ ADProjectile::ADProjectile()
 void ADProjectile::PostInitializeComponents()
 {
     Super::PostInitializeComponents();
-    SphereCollision->MoveIgnoreActors.Add(GetInstigator());
+    SphereCollision->MoveIgnoreActors.Add(GetOwner());
+
+    if (GetOwner() != GetInstigator())
+    {
+        SphereCollision->MoveIgnoreActors.Add(GetInstigator());
+    }
+
+    if (IsReplicatingMovement() && GetLocalRole() != ROLE_Authority)
+    {
+        SphereCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    }
 }
 
 void ADProjectile::OnRep_Impact()
 {
-    if (bRadialDamage)
-    {
-        if (HitParticles)
-        {
-            FRotator Rotation = GetActorRotation();
-            FRotator ParticleRot(Rotation.Pitch - 90, Rotation.Yaw, Rotation.Roll);
-            UGameplayStatics::SpawnEmitterAtLocation(this, HitParticles, GetActorLocation(), ParticleRot, ParticlesSize);
-        }
-
-        if (HitSound)
-        {
-            UGameplayStatics::SpawnSoundAtLocation(this, HitSound, GetActorLocation());
-        }
-
-        if (AShootWeapon* Weapon = GetWeapon())
-        {
-            if (ADCharacterPlayer* PlayerShooter = Weapon->GetOwningShooter())
-            {
-                if (PlayerShooter->IsLocallyControlled())
-                {
-                    float Distance = FVector::Distance(PlayerShooter->GetActorLocation(), GetActorLocation());
-                    if (Distance < OuterCameraShakeRadius)
-                    {
-                        float Scale = FMath::Min((OuterCameraShakeRadius - Distance) / InnerCameraShakeRadius, 1.f);
-                        PlayerShooter->GetPlayerController()->ClientStartCameraShake(ExplodedCameraShake, Scale);
-                    }
-                }
-            }
-        }
-    }
-    else
-    {
-        FHitResult HitInfo;
-
-        FVector Location = GetActorLocation();
-
-        FCollisionQueryParams CollisionQuery;
-        CollisionQuery.bReturnPhysicalMaterial = true;
-        CollisionQuery.AddIgnoredActor(this);
-
-        UWorld* World = GetWorld();
-
-        bool bHit = World->SweepSingleByChannel(HitInfo, Location, Location,
-                                                FQuat::Identity, ECC_Visibility,
-                                                FCollisionShape::MakeSphere(SphereCollision->GetScaledSphereRadius() + 8.f), CollisionQuery);
-
-        EPhysicalSurface SurfaceType = bHit ? SurfaceType = HitInfo.PhysMaterial->SurfaceType : EPhysicalSurface::SurfaceType_Default;
-
-        const FSurfaceImpactEffect& SurfaceEffect = GSProject->GetSurfaceImpactEffect(SurfaceType);
-
-        FRotator Rotation = GetActorRotation();
-        if (SurfaceEffect.ImpactParticles)
-        {
-            FRotator ParticleRot(Rotation.Pitch - 90.f, Rotation.Yaw, Rotation.Roll);
-            UGameplayStatics::SpawnEmitterAtLocation(this, SurfaceEffect.ImpactParticles, Location, ParticleRot, ParticlesSize);
-        }
-
-        if (SurfaceEffect.ImpactDecal)
-        {
-            FRotator DecalRot(Rotation.Pitch, Rotation.Yaw, FMath::FRandRange(-180.f, 180.f));
-            UGameplayStatics::SpawnDecalAtLocation(this, SurfaceEffect.ImpactDecal, DecalSize, Location, DecalRot, 10.f);
-        }
-
-        if (SurfaceEffect.ImpactSound)
-        {
-            UGameplayStatics::SpawnSoundAtLocation(this, SurfaceEffect.ImpactSound, Location);
-        }
-    }
-}
-
-AShootWeapon* ADProjectile::GetWeapon() const
-{
-    return Cast<AShootWeapon>(GetOwner());
-}
-
-void ADProjectile::BeginPlay()
-{
-    Super::BeginPlay();
-
-    if (GetLocalRole() != ROLE_Authority)
-    {
-        SphereCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    }
 }
 
 void ADProjectile::OnProjectileComponentHit(UPrimitiveComponent* HitComponent, AActor* OtherActor,
                                             UPrimitiveComponent* OtherComp, FVector NormalImpulse,
                                             const FHitResult& Hit)
 {
-    // Authority Only
-    
     if (bImpact)
     {
         return;
     }
-    
-    bImpact = true;
 
-#if WITH_EDITOR
+    SphereCollision->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 
-    if (GetNetMode() == NM_Standalone)
+    Projectile->Deactivate();
+
+    if (GetLocalRole() == ROLE_Authority)
+    {
+        if (IsReplicatingMovement())
+        {
+            bImpact = true;
+            MARK_PROPERTY_DIRTY_FROM_NAME(ADProjectile, bImpact, this);
+        }
+        
+        ApplyProjectileDamage(Hit);
+
+        SetActorHiddenInGame(true);
+        SetLifeSpan(3.f);
+    }
+    else if (!IsReplicatingMovement())
     {
         OnRep_Impact();
     }
-
-#endif
-    
-    Projectile->StopSimulating(Hit);
-
-    if (AShootWeapon* Weapon = GetWeapon())
-    {
-        if (bRadialDamage)
-        {
-            FRadialDamageProjectileInfo RadialDamage(GetActorLocation(), DamageRadius);
-            Weapon->ApplyRadialDamage(RadialDamage);
-        }
-        else
-        {
-            Weapon->ApplyPointDamage(Hit);
-        }
-    }
-    
-    SetLifeSpan(2.f);
 }
 
 void ADProjectile::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
-    DOREPLIFETIME(ADProjectile, bImpact);
+
+    FDoRepLifetimeParams Params;
+    Params.bIsPushBased = true;
+    
+    DOREPLIFETIME_WITH_PARAMS_FAST(ADProjectile, bImpact, Params);
 }

@@ -45,9 +45,5 @@ protected:
 
 private:
 
-	void UpdateActivePlayers() const;
-
-	uint16 CurrentPlayers;
-
 	FTimerHandle Handle_PlayerRespawn;
 };

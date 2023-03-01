@@ -79,10 +79,10 @@ template<int32 Mark> struct TService : TServiceBase<Mark> { };
 
 DEFINED_SERVICE_INFO(1, FString, TService_ServerLogin);
 DEFINED_SERVICE_INFO(2, FLoginParameter, TService_ClientLogin);
-DEFINED_SERVICE_INFO(3, FSearchServerParam, TService_SearchServer);
+DEFINED_SERVICE_INFO(3, FLaunchServerParam, TService_LaunchServer);
 DEFINED_SERVICE_INFO(4, FDedicatedServerInformation, TService_RegisterServer);
 DEFINED_SERVICE_INFO(5, FUpdateServerPlayerParam, TService_UpdateServer);
-DEFINED_SERVICE_INFO(6, FLaunchNotifyParam, TService_NotifyServer);
+DEFINED_SERVICE_INFO(6, FLaunchNotifyParam, TService_LaunchedNotify);
 
 //DEFINED_SERVICE_INFO(7, void, TService_ReceiveServerReady);
 
@@ -109,7 +109,7 @@ TSharedRef<TArray<uint8>, ESPMode::ThreadSafe> PDIBuildParam(const typename S::T
 /**
  * 实现了基本功能
  */
-class FPlayerDataInterfaceBase : public FPlayerDataInterface//, public FTickerObjectBase
+class FPlayerDataInterfaceBase : public FPlayerDataInterface
 {
 	
 public:
@@ -127,14 +127,8 @@ public:
 
 	virtual TSharedPtr<FInternetAddr> GetBackendServerAddr() override;
 	
-	// local
-	virtual void SearchDedicatedServer(const FSearchServerParam& Param) override;
+	virtual void LaunchDedicatedServer(const FLaunchServerParam& Param) override;
 
-	// server
-	virtual void RegisterServer(const FDedicatedServerInformation& Information) override;
-	virtual void UpdateActivePlayers(const FUpdateServerPlayerParam& Param) override;
-	virtual void NotifyBackendServer(const FLaunchNotifyParam& Param) override;
-	
 	virtual FPlayerDataDelegate& GetPlayerDataDelegate() override;
 	virtual FOnServerConnectionLose& OnServerConnectionLoseDelegate() override;
 
@@ -144,7 +138,7 @@ public:
 
 	virtual void OnReceiveClientLoginMessage(FPacketArchiveReader& Data);
 	virtual void OnReceiveServerLoginMessage(FPacketArchiveReader& Data);
-	virtual void OnReceiveSearchServerMessage(FPacketArchiveReader& Data);
+	virtual void OnReceiveLaunchServerMessage(FPacketArchiveReader& Data);
 	virtual void OnReceiveRegisterServerMessage(FPacketArchiveReader& Data);
 
 	FORCEINLINE FTCPSocketSender* GetSender() const

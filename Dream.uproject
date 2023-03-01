@@ -7,7 +7,11 @@
 		{
 			"Name": "Dream",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "Default",
+			"AdditionalDependencies": [
+				"Engine",
+				"OnlineSubsystemUtils"
+			]
 		},
 		{
 			"Name": "DreamEditor",
@@ -110,6 +114,11 @@
 				"Mac",
 				"Win64"
 			]
+		},
+		{
+			"Name": "BlockoutToolsPlugin",
+			"Enabled": true,
+			"MarketplaceURL": "com.epicgames.launcher://ue/marketplace/content/d337b97aca8947a893526964e179acfd"
 		}
 	]
 }

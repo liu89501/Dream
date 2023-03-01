@@ -9,6 +9,7 @@ DECLARE_LOG_CATEGORY_EXTERN(LogDream, Log, All);
 
 #define DREAM_NLOG(Verbosity, Format, ...) UE_LOG(LogDream, Verbosity, TEXT("%s"), *FString::Printf(Format, ##__VA_ARGS__));
 #define DREAM_RLOG(Verbosity, Format, ...) UE_LOG(LogDream, Verbosity, TEXT("%s <-> %s"), *UEnum::GetValueAsString(GetLocalRole()), *FString::Printf(Format, ##__VA_ARGS__));
+#define DREAM_CRLOG(Verbosity, Format, ...) UE_LOG(LogDream, Verbosity, TEXT("%s <-> %s"), *UEnum::GetValueAsString(GetOwnerRole()), *FString::Printf(Format, ##__VA_ARGS__));
 
 #define Collision_ObjectType_Projectile ECollisionChannel::ECC_GameTraceChannel1
 #define Collision_ObjectType_Weapon ECollisionChannel::ECC_GameTraceChannel2
@@ -17,13 +18,11 @@ DECLARE_LOG_CATEGORY_EXTERN(LogDream, Log, All);
 
 #define Collision_TraceType_Climbable ETraceTypeQuery::TraceTypeQuery3
 
-#define DOREPLIFETIME_WITH_PARAMS_FAST_PUSH_MODEL(c, v, COND) \
-	FDoRepLifetimeParams Params_##v; \
-	Params_##v.bIsPushBased = true; \
-	Params_##v.Condition = COND; \
-	DOREPLIFETIME_WITH_PARAMS_FAST(c, v, Params_##v)
+#define SOCKET_WeaponMuzzle TEXT("Muzzle")
 
-namespace DreamActorTagName
+#define MAX_WeaponSlot 2
+
+namespace DMActorTagName
 {
 	extern const FName Death;
 }
@@ -93,6 +92,32 @@ struct FRangeRandomFloat
 
 	UPROPERTY(EditAnywhere)
 	float Max;
+};
+
+USTRUCT(BlueprintType)
+struct FRangeRandomInt
+{
+	GENERATED_BODY()
+
+	FRangeRandomInt()
+        : Min(0),
+          Max(0)
+	{
+	}
+
+	FRangeRandomInt(int32 InMin, int32 InMax)
+        : Min(InMin),
+          Max(InMax)
+	{
+	}
+
+	int32 GetRandomInt() const;
+
+	UPROPERTY(EditAnywhere)
+	int32 Min;
+
+	UPROPERTY(EditAnywhere)
+	int32 Max;
 };
 
 namespace IPTools
@@ -361,7 +386,7 @@ struct FArrayDistinctIterator
 
 			Exist.Add(*Ptr, &bIsAlreadyInSet);
 		}
-		while (bIsAlreadyInSet && *this);
+		while (bIsAlreadyInSet && CurrentIndex < ArrayNum);
 	}
 
 	FORCEINLINE const ElementType& operator*() const

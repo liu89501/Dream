@@ -3,7 +3,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-
 #include "DreamGameplayType.h"
 #include "GameplayEffectTypes.h"
 #include "GameplayAbilityTypes.h"
@@ -44,7 +43,7 @@ public:
 	static bool ContainsActionKey(APlayerController* PlayerController, const FKey& Key, FName ActionName);
 
 	UFUNCTION(BlueprintPure, Category = DreamStatics)
-	static FName GetInputActionKeyName(APlayerController* PlayerController, FName ActionName);
+	static FText GetInputActionKeyName(APlayerController* PlayerController, FName ActionName);
 
 
 	/**
@@ -111,6 +110,14 @@ public:
         EDDamageType EffectDamageType);
 
 
+	UFUNCTION(BlueprintCallable, Category = "DreamStatics|Abilities")
+	static void ApplyGameplayEffect(UAbilitySystemComponent* SourceASC,
+									AActor* TargetActor,
+									UClass* GEClass,
+									float GELevel,
+									bool bIncludeHitResult,
+									EDDamageType DamageType);
+
 	/**
 	 *  创建伤害widget
 	 */
@@ -138,16 +145,6 @@ public:
 	 */
 	UFUNCTION(BlueprintPure, Category = DreamStatics)
 	static APlayerController* GetActorPlayerController(AActor* Actor);
-
-	/** 返回到主菜单界面 */
-	UFUNCTION(BlueprintCallable, Category = DreamStatics)
-	static void ReturnToMainMenuWithTextReason(APlayerController* PlayerCtrl, FText Reason);
-
-	/**
-	 * Orientation: 0 - Forward, 1 - Right, 2 - Backward, 3 - Left
-	 */
-	UFUNCTION(BlueprintPure, Category = DreamStatics)
-	static void CalculateOrientation(const FVector& Velocity, const FRotator& BaseRotation, float& Angle, int32& Orientation);
 
 	/** Copy From UAnimInstance */
 	static float CalculateDir(const FVector& Velocity, const FRotator& BaseRotation);

@@ -16,6 +16,7 @@
 #include "ShootWeapon.h"
 #include "Widgets/Input/SComboBox.h"
 #include "SUniformGridPanel.h"
+#include "DataTableEditorUtils.h"
 #include "Engine/SkeletalMeshSocket.h"
 
 #define LOCTEXT_NAMESPACE "CustomizationEditorTools"
@@ -443,7 +444,7 @@ void FWeaponMeshPreviewCustomizationMenu::AddContextMenuEntries(FMenuBuilder& Me
 	MenuBuilder.AddMenuEntry(
         LOCTEXT("MenuLabel1", "添加到预览网格体(Active)"),
         LOCTEXT("MenuLabel1Tooltips", "附加到手中"),
-        FSlateIcon(),
+        FSlateIcon(FCoreStyle::Get().GetStyleSetName(), "Wizard.NextIcon"),
         FUIAction(
             FExecuteAction::CreateSP(this, &FWeaponMeshPreviewCustomizationMenu::OnExecuteAction),
             FCanExecuteAction::CreateSP(this, &FWeaponMeshPreviewCustomizationMenu::OnCanExecuteAction)
@@ -453,9 +454,29 @@ void FWeaponMeshPreviewCustomizationMenu::AddContextMenuEntries(FMenuBuilder& Me
 	MenuBuilder.AddMenuEntry(
         LOCTEXT("MenuLabel2", "添加到预览网格体(Holster)"),
         LOCTEXT("MenuLabel2Tooltips", "附加到背后"),
-        FSlateIcon(),
+        FSlateIcon(FCoreStyle::Get().GetStyleSetName(), "Wizard.NextIcon"),
         FUIAction(
             FExecuteAction::CreateSP(this, &FWeaponMeshPreviewCustomizationMenu::OnExecuteAction2),
+            FCanExecuteAction::CreateSP(this, &FWeaponMeshPreviewCustomizationMenu::OnCanExecuteAction)
+        )
+    );
+	
+	MenuBuilder.AddMenuEntry(
+        LOCTEXT("MenuLabel3", "修改为预览的变换(Active)"),
+        LOCTEXT("MenuLabel3Tooltips", "修改为当前骨骼正在预览的插槽的变换"),
+        FSlateIcon(FCoreStyle::Get().GetStyleSetName(), "Wizard.BackIcon"),
+        FUIAction(
+            FExecuteAction::CreateSP(this, &FWeaponMeshPreviewCustomizationMenu::OnExecuteAction3),
+            FCanExecuteAction::CreateSP(this, &FWeaponMeshPreviewCustomizationMenu::OnCanExecuteAction)
+        )
+    );
+	
+	MenuBuilder.AddMenuEntry(
+        LOCTEXT("MenuLabel4", "修改为预览的变换(Holster)"),
+        LOCTEXT("MenuLabel4Tooltips", "修改为当前骨骼正在预览的插槽的变换"),
+        FSlateIcon(FCoreStyle::Get().GetStyleSetName(), "Wizard.BackIcon"),
+        FUIAction(
+            FExecuteAction::CreateSP(this, &FWeaponMeshPreviewCustomizationMenu::OnExecuteAction4),
             FCanExecuteAction::CreateSP(this, &FWeaponMeshPreviewCustomizationMenu::OnCanExecuteAction)
         )
     );
@@ -463,45 +484,91 @@ void FWeaponMeshPreviewCustomizationMenu::AddContextMenuEntries(FMenuBuilder& Me
 
 void FWeaponMeshPreviewCustomizationMenu::OnExecuteAction() const
 {
-	AShootWeapon* WeaponCDO = SelectedWeaponClass->GetDefaultObject<AShootWeapon>();
+	AShootWeapon* WeaponAsset = Weapon.Get();
 
 	if (USkeleton* Skeleton = UDMDevelopmentSettings::Get()->GetPreviewTargetSkeletal())
 	{
 		FName PreviewSocketName = UDMDevelopmentSettings::Get()->GetActivePreviewSocketName();
 		
-		USkeletalMeshSocket* PreviewSocket = Skeleton->FindSocket(PreviewSocketName);
-
-		PreviewSocket->RelativeLocation = WeaponCDO->WeaponSocketOffset.GetLocation();
-		PreviewSocket->RelativeRotation = WeaponCDO->WeaponSocketOffset.Rotator();
-		PreviewSocket->RelativeScale = WeaponCDO->WeaponSocketOffset.GetScale3D();
-		Skeleton->PreviewAttachedAssetContainer.ClearAllAttachedObjects();
-		Skeleton->PreviewAttachedAssetContainer.AddAttachedObject(WeaponCDO->WeaponMesh->SkeletalMesh, PreviewSocketName);
-		Skeleton->Modify();
+		if (USkeletalMeshSocket* PreviewSocket = Skeleton->FindSocket(PreviewSocketName))
+		{
+			PreviewSocket->RelativeLocation = WeaponAsset->WeaponSocketOffset.GetLocation();
+			PreviewSocket->RelativeRotation = WeaponAsset->WeaponSocketOffset.Rotator();
+			PreviewSocket->RelativeScale = WeaponAsset->WeaponSocketOffset.GetScale3D();
+			Skeleton->PreviewAttachedAssetContainer.ClearAllAttachedObjects();
+			Skeleton->PreviewAttachedAssetContainer.AddAttachedObject(WeaponAsset->WeaponMesh->SkeletalMesh, PreviewSocketName);
+			Skeleton->Modify();
+		}
+		else
+		{
+			FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("SocketNotFound", "插槽不存在"));
+		}
 	}
 }
 
 bool FWeaponMeshPreviewCustomizationMenu::OnCanExecuteAction() const
 {
-	return SelectedWeaponClass != nullptr;
+	return Weapon.IsValid();
 }
 
 void FWeaponMeshPreviewCustomizationMenu::OnExecuteAction2() const
 {
-	AShootWeapon* WeaponCDO = SelectedWeaponClass->GetDefaultObject<AShootWeapon>();
+	AShootWeapon* WeaponAsset = Weapon.Get();
 
 	if (USkeleton* Skeleton = UDMDevelopmentSettings::Get()->GetPreviewTargetSkeletal())
 	{
 		FName PreviewSocketName = UDMDevelopmentSettings::Get()->GetHolsterPreviewSocketName();
 		
-		USkeletalMeshSocket* PreviewSocket = Skeleton->FindSocket(PreviewSocketName);
-
-		PreviewSocket->RelativeLocation = WeaponCDO->WeaponHolsterSocketOffset.GetLocation();
-		PreviewSocket->RelativeRotation = WeaponCDO->WeaponHolsterSocketOffset.Rotator();
-		PreviewSocket->RelativeScale = WeaponCDO->WeaponHolsterSocketOffset.GetScale3D();
+		if (USkeletalMeshSocket* PreviewSocket = Skeleton->FindSocket(PreviewSocketName))
+		{
+			PreviewSocket->RelativeLocation = WeaponAsset->WeaponHolsterSocketOffset.GetLocation();
+			PreviewSocket->RelativeRotation = WeaponAsset->WeaponHolsterSocketOffset.Rotator();
+			PreviewSocket->RelativeScale = WeaponAsset->WeaponHolsterSocketOffset.GetScale3D();
 		
-		Skeleton->PreviewAttachedAssetContainer.ClearAllAttachedObjects();
-		Skeleton->PreviewAttachedAssetContainer.AddAttachedObject(WeaponCDO->WeaponMesh->SkeletalMesh, PreviewSocketName);
-		Skeleton->Modify();
+			Skeleton->PreviewAttachedAssetContainer.ClearAllAttachedObjects();
+			Skeleton->PreviewAttachedAssetContainer.AddAttachedObject(WeaponAsset->WeaponMesh->SkeletalMesh, PreviewSocketName);
+			Skeleton->Modify();
+		}
+		else
+		{
+			FMessageDialog::Open(EAppMsgType::Ok, LOCTEXT("SocketNotFound", "插槽不存在"));
+		}
+	}
+}
+
+void FWeaponMeshPreviewCustomizationMenu::OnExecuteAction3() const
+{
+	AShootWeapon* WeaponAsset = Weapon.Get();
+
+	if (USkeleton* Skeleton = UDMDevelopmentSettings::Get()->GetPreviewTargetSkeletal())
+	{
+		FName PreviewSocketName = UDMDevelopmentSettings::Get()->GetActivePreviewSocketName();
+		
+		if (USkeletalMeshSocket* PreviewSocket = Skeleton->FindSocket(PreviewSocketName))
+		{
+			WeaponAsset->WeaponSocketOffset = FTransform(PreviewSocket->RelativeRotation,
+							PreviewSocket->RelativeLocation, PreviewSocket->RelativeScale);
+
+			WeaponAsset->Modify();
+		}
+	}
+}
+
+void FWeaponMeshPreviewCustomizationMenu::OnExecuteAction4() const
+{
+	AShootWeapon* WeaponAsset = Weapon.Get();
+
+	if (USkeleton* Skeleton = UDMDevelopmentSettings::Get()->GetPreviewTargetSkeletal())
+	{
+		FName PreviewSocketName = UDMDevelopmentSettings::Get()->GetHolsterPreviewSocketName();
+		
+		if (USkeletalMeshSocket* PreviewSocket = Skeleton->FindSocket(PreviewSocketName))
+		{
+			WeaponAsset->WeaponHolsterSocketOffset = FTransform(PreviewSocket->RelativeRotation,
+                            PreviewSocket->RelativeLocation, PreviewSocket->RelativeScale);
+
+			WeaponAsset->Modify();
+		}
 	}
 }
 
@@ -509,34 +576,127 @@ TSharedRef<class FExtender> FWeaponMeshPreviewCustomizationMenu::ProcessMenuCont
 {
 	TSharedRef<FExtender> Extender(new FExtender());
 
-	bool bAnySupportedAssets = false;
-	for (const FAssetData& Asset : NewSelectedAssets)
+	if (NewSelectedAssets.Num() != 1)
 	{
-		if (Asset.GetClass() != UBlueprint::StaticClass())
-		{
-			continue;
-		}
-		//Asset.PrintAssetData();
-
-		FString ClassName = Asset.ObjectPath.ToString().Append("_C");
-		if (UClass* Class = LoadClass<AShootWeapon>(nullptr, *ClassName))
-		{
-			SelectedWeaponClass = Class;
-			bAnySupportedAssets = true;
-			break;
-		}
+		return Extender;
 	}
 
-	if (bAnySupportedAssets)
+	const FAssetData& NewSelectedAsset = NewSelectedAssets[0];
+
+	UObject* Asset = NewSelectedAsset.GetAsset();
+
+	if (Asset && Asset->IsA<UBlueprint>())
 	{
-		Extender->AddMenuExtension(
-            "GetAssetActions",
-            EExtensionHook::After,
-            nullptr,
-            FMenuExtensionDelegate::CreateSP(this, &FWeaponMeshPreviewCustomizationMenu::AddContextMenuEntries)
-        );
+		UBlueprint* Blueprint = Cast<UBlueprint>(Asset);
+
+		if (Blueprint->GeneratedClass->IsChildOf<AShootWeapon>())
+		{
+			AShootWeapon* ShootWeaponCDO = Blueprint->GeneratedClass->GetDefaultObject<AShootWeapon>();
+			
+			Weapon = ShootWeaponCDO;
+			
+			Extender->AddMenuExtension(
+                    "GetAssetActions",
+                    EExtensionHook::After,
+                    nullptr,
+                    FMenuExtensionDelegate::CreateSP(this, &FWeaponMeshPreviewCustomizationMenu::AddContextMenuEntries)
+                );
+		}
 	}
 
 	return Extender;
 }
+
+
+void FItemsTableMenu::LoadMenuContext()
+{
+	FContentBrowserModule& ContentBrowserModule = FModuleManager::LoadModuleChecked<FContentBrowserModule>("ContentBrowser");
+	TArray<FContentBrowserMenuExtender_SelectedAssets> & CBMenuExtenderDelegates = ContentBrowserModule.GetAllAssetViewContextMenuExtenders();
+	CBMenuExtenderDelegates.Add(FContentBrowserMenuExtender_SelectedAssets::CreateRaw(this, &FItemsTableMenu::ProcessMenuContext));
+}
+
+void FItemsTableMenu::AddContextMenuEntries(FMenuBuilder& MenuBuilder) const
+{
+	MenuBuilder.AddMenuEntry(
+        LOCTEXT("RepairLabel", "修复物品GUID"),
+        LOCTEXT("RepairTooltips", "更新表格中的物品GUID, 如果表格中的物品GUID有问题可以执行此操作"),
+        FSlateIcon(FCoreStyle::Get().GetStyleSetName(), "ToolBar.Icon"),
+        FUIAction(
+            FExecuteAction::CreateRaw(this, &FItemsTableMenu::OnExecuteRepair),
+            FCanExecuteAction::CreateRaw(this, &FItemsTableMenu::OnCanExecuteRepair)
+        )
+    );
+}
+
+TSharedRef<FExtender> FItemsTableMenu::ProcessMenuContext(const TArray<FAssetData>& NewSelectedAssets)
+{
+	TSharedRef<FExtender> Extender(new FExtender());
+
+	if (NewSelectedAssets.Num() != 1)
+	{
+		return Extender;
+	}
+
+	const FAssetData& NewSelectedAsset = NewSelectedAssets[0];
+	UObject* Asset = NewSelectedAsset.GetAsset();
+
+	if (Asset && Asset->IsA<UDataTable>())
+	{
+		UDataTable* DataTableAsset = Cast<UDataTable>(Asset);
+
+		if (DataTableAsset && DataTableAsset->GetRowStruct() == FItemDef::StaticStruct())
+		{
+			DataTable = DataTableAsset;
+			
+			Extender->AddMenuExtension(
+                "DataTable_ExportAsCSV",
+                EExtensionHook::After,
+                nullptr,
+                FMenuExtensionDelegate::CreateRaw(this, &FItemsTableMenu::AddContextMenuEntries)
+            );
+		}
+	}
+	
+	return Extender;
+}
+
+void FItemsTableMenu::OnExecuteRepair() const
+{
+	UDataTable* DataTableAsset = DataTable.Get();
+
+	const TMap<FName, uint8*> RowMap = DataTableAsset->GetRowMap();
+
+	for (const TTuple<FName, uint8*>& Pair : RowMap)
+	{
+		int32 OldGuid = FCString::Atoi(*Pair.Key.ToString());
+		int32 NewItemType = (OldGuid >> 20) & 0xFF;
+
+		if (NewItemType == 0) // 表示需要修复
+		{
+			FItemDef* ItemDef = reinterpret_cast<FItemDef*>(Pair.Value);
+
+			if (ItemDef)
+			{
+				int32 OldItemType = (OldGuid >> 16) & 0xFF;
+				int32 OldItemNumber = OldGuid & 0xFFFF;
+				
+				EPropsQuality PropsQuality = ItemDef->ItemBaseInfo.PropsQuality;
+				uint8 QualityValue = static_cast<uint8>(PropsQuality);
+
+				int32 NewGuid = (OldItemType << 20) | (QualityValue << 16) | OldItemNumber;
+
+				FName NewRowName(FString::FromInt(NewGuid));
+				FDataTableEditorUtils::RenameRow(DataTableAsset, Pair.Key, NewRowName);
+			}
+		}
+	}
+}
+
+
+bool FItemsTableMenu::OnCanExecuteRepair() const
+{
+	return DataTable.IsValid();
+}
+
+
 #undef LOCTEXT_NAMESPACE

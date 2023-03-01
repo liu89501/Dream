@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "DMAnimType.h"
+#include "DMCharacterType.h"
 #include "Animation/AnimInstance.h"
 #include "DMAnimInstance.generated.h"
 

@@ -5,20 +5,27 @@
 #include "CoreMinimal.h"
 #include "Components/TimelineComponent.h"
 #include "DCharacterBase.h"
-#include "DMAnimType.h"
 #include "DPropsType.h"
+#include "DMPlayerController.h"
 #include "GameplayAbilitySpec.h"
 #include "PlayerDataInterfaceType.h"
+#include "DMCharacterType.h"
 #include "GameFramework/Character.h"
 #include "DCharacterPlayer.generated.h"
 
 class AShootWeapon;
 class ADCharacterPlayer;
 class UDModuleBase;
+class SPlayerHUD;
 
 enum class EAmmoType : uint8;
 
 DECLARE_DYNAMIC_DELEGATE(FDynamicOnInteractiveCompleted);
+
+struct DebugDMCharacterCVar
+{
+	static TAutoConsoleVariable<int32> CVar;
+};
 
 
 USTRUCT()
@@ -80,66 +87,21 @@ struct TStructOpsTypeTraits< FMantleSpec > : TStructOpsTypeTraitsBase2< FMantleS
     };
 };
 
-/** 不适合用, 人麻了！！！！ 白调试半天 */
-USTRUCT()
-struct FRootMotionSource_Mantling : public FRootMotionSource
+USTRUCT(BlueprintType)
+struct FCameraViewLerp
 {
 	GENERATED_BODY()
 
-public:
+	UPROPERTY(EditAnywhere)
+	float ArmLength;
 
-	FRootMotionSource_Mantling();
+	UPROPERTY(EditAnywhere)
+	FVector ArmSocketOffset;
 
-	virtual FRootMotionSource* Clone() const override;
+	UPROPERTY(EditAnywhere)
+	FRotator CameraRotation;
 
-	virtual bool Matches(const FRootMotionSource* Other) const override;
-
-	virtual void PrepareRootMotion(
-        float SimulationTime, 
-        float MovementTickTime,
-        const ACharacter& Character, 
-        const UCharacterMovementComponent& MoveComponent
-        ) override;
-
-	virtual bool NetSerialize(FArchive& Ar, UPackageMap* Map, bool& bOutSuccess) override;
-
-	virtual UScriptStruct* GetScriptStruct() const override;
-
-	virtual FString ToSimpleString() const override;
-
-	virtual void AddReferencedObjects(class FReferenceCollector& Collector) override;
-
-public:
-
-	UPROPERTY()
-	float StartingPosition;
-
-	UPROPERTY()
-	UCurveVector* PositionCorrectionCurve;
-	
-	UPROPERTY()
-	UCurveVector* PathOffsetCurve;
-	
-	UPROPERTY()
-	FVector_NetQuantize100 MantlingTarget;
-	
-	UPROPERTY()
-	FVector_NetQuantizeNormal FaceRotation;
-
-	UPROPERTY()
-	FVector_NetQuantize100 MantlingActualStartOffset;
-
-	UPROPERTY()
-	FVector_NetQuantize100 MantlingAnimatedStartOffset;
-};
-
-template<>
-struct TStructOpsTypeTraits< FRootMotionSource_Mantling > : TStructOpsTypeTraitsBase2< FRootMotionSource_Mantling >
-{
-	enum 
-	{
-		WithNetSerializer = true
-    };
+	FCameraViewLerp LerpTo(const FCameraViewLerp& Target, float Alpha) const;
 };
 
 UCLASS(Blueprintable)
@@ -186,22 +148,18 @@ public:
 	float MaxRotateLimit;
 
 
-	/** begin ======================= 摄像机瞄准插值参数 ============================ */
+	/** begin ======================= 摄像机相关插值参数 ============================ */
+	FCameraViewLerp DefaultView;
 	
-	/* 瞄准时摄像机弹簧臂得偏移量 */
-	UPROPERTY(BlueprintReadOnly, Category = "CharacterPlayer|Camera")
-	FVector DefaultArmSocketOffset;
-	/** 瞄准时摄像机的位置 */
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "CharacterPlayer|Camera")
-	FVector AimedArmSocketOffset;
+	UPROPERTY(EditDefaultsOnly, Category = "CharacterPlayer")
+	FCameraViewLerp View_Aiming;
 
-	UPROPERTY(BlueprintReadOnly, Category = "CharacterPlayer|Camera")
-	FRotator DefaultCameraRotation;
-
-	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = "CharacterPlayer|Camera")
-	FRotator AimedCameraRotation;
-
-	/** end ======================= 摄像机瞄准插值参数 ============================ */
+	UPROPERTY(EditDefaultsOnly, Category = "CharacterPlayer")
+	FCameraViewLerp View_Rolling;
+	
+	UPROPERTY(EditDefaultsOnly, Category = "CharacterPlayer")
+	UCurveFloat* RollingCameraCurve;
+	/** end ======================= 摄像机相关插值参数 ============================ */
 
 	/** 冲刺速度 */
 	UPROPERTY(BlueprintReadOnly, EditAnywhere, Category = CharacterPlayer)
@@ -267,19 +225,10 @@ public:
 	bool CanAim() const;
 
 	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
-	void EquipWeapon(int32 Index, const FEquipmentAttributes& Attrs, TSubclassOf<AShootWeapon> WeaponClass);
-
-	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
-	void EquipModule(TSubclassOf<UDModuleBase> ModuleClass, const FEquipmentAttributes& Attrs);
-
-	UFUNCTION(BlueprintCallable, Category = CharacterPlayer)
 	void LearningTalents(int64 Talents);
 
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
     void ToggleCrosshairVisible(bool bVisible);
-
-	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category=CharacterPlayer)
-	void SwitchWeapon(int32 NewWeaponIndex);
 
 	/**
 	* 	添加一个永不消失的Sprite(除非手动删除)到小地图中
@@ -343,11 +292,15 @@ public:
 	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
 	bool IsNotServerCharacter() const;
 
-
-	UFUNCTION(BlueprintCallable, Category=CharacterPlayer)
-	FRotator GetRepControllerRotation() const;
+	FRotator GetReplicatedControlRotation() const;
 	
 public:
+
+	void EquipWeapon(const FGearDesc& GearDesc);
+
+	void EquipModule(const FGearDesc& GearDesc);
+
+	void GetCameraLocationAndRotation(FVector& CameraLocation, FRotator& CameraRotation);
 
 	float PlayMontage(UAnimMontage* PawnAnim);
 
@@ -358,15 +311,15 @@ public:
 
 	/** Camera 相关 */
 	void SetCameraFieldOfView(float NewFOV) const;
-	void CameraAimTransformLerp(float Alpha) const;
+	void CameraAimTransformLerp(float Alpha);
+
+	void SetCameraView(const FCameraViewLerp& NewView);
 
 	/** 血量是否有损失 */
 	bool IsUnhealthy() const;
 
-	FORCEINLINE UCharacterMesh* GetCharacterMesh() const
-	{
-		return CurrentCharacterMesh;
-	}
+	/** 更新 OverlayDetailID, 这个主要是用于不同武器的动画混合 */
+	void UpdateOverlayDetailID(int32 NewDetailID);
 
 protected:
 
@@ -389,7 +342,6 @@ protected:
 	void ConfirmFire();
 	void HandleFire();
 
-	void UpdateWeaponHUD() const;
 	void UpdateMagazineUI() const;
 
 	/** 换弹夹 */
@@ -398,20 +350,23 @@ protected:
 	void ReloadFinished();
 
 	/** 装备武器(切换武器) */
-	void SwitchWeapon();
-	void HandleSwitchWeapon(int32 WeaponIndex);
-	void SwitchFinished(int32 WeaponIndex);
+	void ToggleWeapon();
+	void HandleToggleWeapon(int32 WeaponIndex);
+	void ToggleWeaponFinished(int32 WeaponIndex);
 
-	void SwitchWeaponToFirst();
-	void SwitchWeaponToSecond();
+	UFUNCTION(Reliable, Server)
+	void ServerToggleWeapon(int32 NewWeaponIndex);
+
+	void ToggleWeaponToFirst();
+	void ToggleWeaponToSecond();
 
 	UFUNCTION(Server, Reliable)
-	void ServerEquipWeapon(int32 Index, const FEquipmentAttributes& Attrs, TSubclassOf<AShootWeapon> NewWeaponClass);
-	void DoServerEquipWeapon(int32 Index, const FEquipmentAttributes& Attrs, UClass* NewWeaponClass);
+	void ServerEquipWeapon(const FGearDesc& GearDesc);
+	void DoServerEquipWeapon(const FGearDesc& GearDesc);
 	
 	UFUNCTION(Server, Reliable)
-	void ServerEquipModule(TSubclassOf<UDModuleBase> ModuleClass, const FEquipmentAttributes& Attrs);
-	void DoServerEquipModule(UClass* ModuleClass, const FEquipmentAttributes& Attrs);
+	void ServerEquipModule(const FGearDesc& GearDesc);
+	void DoServerEquipModule(const FGearDesc& GearDesc);
 
 	UFUNCTION(Server, Reliable)
 	void ServerLearningTalent(int64 Talents);
@@ -440,7 +395,18 @@ protected:
 	void ServerSetMantlingSpec(const FMantleSpec& NewMantleSpec);
 	void SetMantlingSpec(const FMantleSpec& NewMantleSpec);
 
+	
+	UFUNCTION(Server, Reliable)
+	void Server_Rolling(ERollingDirection NewRollingDirection);
+	UFUNCTION(NetMulticast, UnReliable)
+	void Multicast_Rolling(ERollingDirection NewRollingDirection);
+
+	void OnRollingViewLerp(float Value);
+	void PlayRollingAnimation(ERollingDirection NewRollingDirection);
+	void HandleRolling(ERollingDirection NewRollingDirection);
 	void Rolling();
+	void OnRollingFinished();
+
 
 	/** 切换Overlay */
 	void ToggleOverlay();
@@ -474,6 +440,8 @@ protected:
 	virtual void BeginPlay() override;
 
 	void InitializePlayerHUD();
+
+	SPlayerHUD* GetOrCreatePlayerHUD();
 
 	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
@@ -514,7 +482,7 @@ protected:
 
 	// [server]
 	void InitializePlayerGears();
-    void OnInitializePlayerGears(bool bValidResult, const struct FTemporaryPlayerInfo& PlayerInfo);
+    void OnInitializePlayerGears(bool bValidResult, const struct FPlayerDesc& PlayerInfo);
 
 	void OnPlayerPropertiesChanged(const FPlayerProperties& Properties);
 
@@ -526,8 +494,6 @@ protected:
 	 */
 	void ApplyGearsAbilitiesToSelf(const TArray<int32>& GearPerks);
 	
-	void InitializeAttributes();
-
 	/** 属性相关 */
 	void RefreshAttributeBaseValue();
 	
@@ -545,7 +511,7 @@ protected:
 	UFUNCTION()
 	void OnRep_CharacterMesh();
 	void UpdateCharacterMesh();
-	
+
 	virtual void OnActiveGameplayEffectAdded(UAbilitySystemComponent* ASC, const FGameplayEffectSpec& Spec, FActiveGameplayEffectHandle Handle);
 	virtual void OnActiveGameplayEffectTimeChange(FActiveGameplayEffectHandle Handle, float NewStartTime, float NewDuration);
 	virtual void OnActiveGameplayEffectRemoved(const FActiveGameplayEffect& Effect);
@@ -564,6 +530,8 @@ protected:
 	void OnMantleFinished();
 
 	float GetMappedSpeed();
+
+	FVector GetInputVector() const;
 
 protected:
 
@@ -590,8 +558,10 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category = CharacterPlayer)
 	FVector Acceleration;
-	UPROPERTY(BlueprintReadOnly, Category = CharacterPlayer)
+	
 	FRotator LastVelocityRotation;
+
+	FRotator LastMovementInputRotation;
 	
 	UPROPERTY(BlueprintReadOnly, Category = CharacterPlayer)
 	float MovementInputAmount;
@@ -603,22 +573,34 @@ protected:
 	float AimYawRate;
 	float PrevAimYaw;
 
+	UPROPERTY(BlueprintReadOnly, Category = CharacterPlayer)
+	FRotator AimingRotation;
+
 	// [local] 默认的步态
 	EMovementGait DefaultGait;
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = "CharacterPlayer")
 	EMovementGait Gait;
 
-	UPROPERTY(BlueprintReadOnly, Category = CharacterPlayer)
+	UPROPERTY(BlueprintReadWrite, Category = CharacterPlayer)
 	EMovementState MovementState;
+
+	UPROPERTY(BlueprintReadWrite, Category = CharacterPlayer)
+	EMovementAction MovementAction;
 
 	UPROPERTY(BlueprintReadOnly, Replicated, Category = CharacterPlayer)
 	EOverlayState OverlayState;
+
+	UPROPERTY(BlueprintReadOnly, Category = CharacterPlayer)
+	int32 OverlayDetailID;
 
 	UPROPERTY(ReplicatedUsing = OnRep_MantlingSpec)
 	FMantleSpec MantlingSpec;
 
 	UPROPERTY()
-	FTimeline MantlingTimeline;
+	FTimeline Timeline_Mantling;
+	
+	UPROPERTY()
+	FTimeline Timeline_Rolling;
 
 	/** Mantling Temporary Vars */
 	UPROPERTY()
@@ -629,18 +611,14 @@ protected:
 	FVector TemporaryAnimatedStartOffset;
 
 	FRotator FaceRotation;
-	/** Mantling Temporary Vars */
-	
-
-	/** RootMotionSource 相关 */
-	/*uint16 MantleRootMotionID;
-	TSharedPtr<FRootMotionSource_Mantling> MantlingRMS;*/
 
 	UPROPERTY(BlueprintReadOnly, Category = CharacterPlayer)
 	bool bIsMoving;
 	
 	UPROPERTY(BlueprintReadOnly, Category = CharacterPlayer)
 	float Speed;
+
+	bool bDisableGroundedRotation;
 
 private:
 
@@ -659,11 +637,14 @@ private:
 	TArray<FGameplayAbilitySpecHandle> CacheWeaponPerkHandles;
 	
 
-	TSharedPtr<class SPlayerHUD> PlayerHUD;
+	TSharedPtr<SPlayerHUD> PlayerHUD;
 
 	/** 当前正在使用的武器 在 WeaponInventory 的索引 */
 	UPROPERTY(Replicated)
-	int32 ActiveWeaponIndex;
+	uint8 ActiveWeaponIndex;
+
+	/*UPROPERTY(Replicated)
+	uint8 WeaponOverlayDetailID;*/
 
 	/** 当前玩家已装备的武器 仅服务器有效 */
 	UPROPERTY()
@@ -686,6 +667,7 @@ private:
 	FTimerHandle Handle_Shoot;
 	FTimerHandle Handle_Reload;
 	FTimerHandle Handle_Equip;
+	FTimerHandle Handle_Rolling;
 
 	FDelegateHandle Handle_Properties;
 
@@ -694,6 +676,7 @@ private:
 	FIntervalGate HealthUpdateFrequency;
 
 
+	FTimeInterval RollingLimit;
 	FTimeInterval MantleLimit;
 	FTimeInterval ToggleOverlayLimit;
 };
